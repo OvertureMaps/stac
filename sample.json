@@ -4,27 +4,55 @@
     "themes": [
         {
             "name": "admins",
-            "path": "overturemaps-us-west-2/release/2024-06-13-beta.1/theme=admins"
+            "path": "overturemaps-us-west-2/release/2024-06-13-beta.1/theme=admins",
+            "types": [
+                "administrative_boundary",
+                "locality",
+                "locality_area"
+            ]
         },
         {
             "name": "base",
-            "path": "overturemaps-us-west-2/release/2024-06-13-beta.1/theme=base"
+            "path": "overturemaps-us-west-2/release/2024-06-13-beta.1/theme=base",
+            "types": [
+                "infrastructure",
+                "land",
+                "land_cover",
+                "land_use",
+                "water"
+            ]
         },
         {
             "name": "buildings",
-            "path": "overturemaps-us-west-2/release/2024-06-13-beta.1/theme=buildings"
+            "path": "overturemaps-us-west-2/release/2024-06-13-beta.1/theme=buildings",
+            "types": [
+                "building",
+                "building_part"
+            ]
         },
         {
             "name": "divisions",
-            "path": "overturemaps-us-west-2/release/2024-06-13-beta.1/theme=divisions"
+            "path": "overturemaps-us-west-2/release/2024-06-13-beta.1/theme=divisions",
+            "types": [
+                "boundary",
+                "division",
+                "division_area"
+            ]
         },
         {
             "name": "places",
-            "path": "overturemaps-us-west-2/release/2024-06-13-beta.1/theme=places"
+            "path": "overturemaps-us-west-2/release/2024-06-13-beta.1/theme=places",
+            "types": [
+                "place"
+            ]
         },
         {
             "name": "transportation",
-            "path": "overturemaps-us-west-2/release/2024-06-13-beta.1/theme=transportation"
+            "path": "overturemaps-us-west-2/release/2024-06-13-beta.1/theme=transportation",
+            "types": [
+                "connector",
+                "segment"
+            ]
         }
     ]
 }

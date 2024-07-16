@@ -7,13 +7,16 @@ import json
 
 release_version = "2024-06-13-beta.1"
 
+#The object that we'll eventually serialize into the release-level manifest
 json_dict = {}
 
 json_dict['version'] = release_version
 
+# Get the name of a fully-qualified s3 blob storage path assuming our 'thing=stuff' format spec
 def parse_name(s3_file_path): 
     return os.path.split(s3_file_path)[1].split('=')[1]
 
+# Generate the theme-specific blocks that go in the top-line manifest
 def process_theme(s3fs, theme_info, theme_name):
     theme_dict = {}
     theme_dict['name'] = theme_name;
@@ -21,9 +24,11 @@ def process_theme(s3fs, theme_info, theme_name):
     theme_path_selector = fs.FileSelector(theme_info.path)
     theme_dict['path'] = theme_info.path
     theme_info = s3fs.get_file_info(theme_path_selector)
-
+    theme_dict['types'] = []
+    
     for type in theme_info: 
         type_name = parse_name(type.path)
+        theme_dict['types'].append(type_name)
         print ("\tProcessing Type " + type_name)
 
     return theme_dict
