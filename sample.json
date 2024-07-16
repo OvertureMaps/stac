@@ -2,11 +2,29 @@
     "version": "2024-06-13-beta.1",
     "s3_location": "overturemaps-us-west-2/release/2024-06-13-beta.1/",
     "themes": [
-        "admins",
-        "base",
-        "buildings",
-        "divisions",
-        "places",
-        "transportation"
+        {
+            "name": "admins",
+            "path": "overturemaps-us-west-2/release/2024-06-13-beta.1/theme=admins"
+        },
+        {
+            "name": "base",
+            "path": "overturemaps-us-west-2/release/2024-06-13-beta.1/theme=base"
+        },
+        {
+            "name": "buildings",
+            "path": "overturemaps-us-west-2/release/2024-06-13-beta.1/theme=buildings"
+        },
+        {
+            "name": "divisions",
+            "path": "overturemaps-us-west-2/release/2024-06-13-beta.1/theme=divisions"
+        },
+        {
+            "name": "places",
+            "path": "overturemaps-us-west-2/release/2024-06-13-beta.1/theme=places"
+        },
+        {
+            "name": "transportation",
+            "path": "overturemaps-us-west-2/release/2024-06-13-beta.1/theme=transportation"
+        }
     ]
 }
