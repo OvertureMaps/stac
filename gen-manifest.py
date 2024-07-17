@@ -16,25 +16,50 @@ json_dict['version'] = release_version
 def parse_name(s3_file_path): 
     return os.path.split(s3_file_path)[1].split('=')[1]
 
+# Generate the type-specific blocks that go in the theme-level of the manifest
+def process_type(s3fs, type_info, type_name):
+    type_dict = {}
+    type_dict['name'] = type_name;
+    print ("Processing " + type_name + " type")
+    theme_path_selector = fs.FileSelector(type_info.path)
+    type_dict['relative_path'] = '/' + os.path.split(type_info.path)[1] 
+    type_info = s3fs.get_file_info(theme_path_selector)
+
+    filenames = []
+    for type in type_info: 
+        if (not type.is_file):
+            type_name = parse_name(type.path)
+            print ("\tProcessing type " + type_name)
+        else: 
+            type_name = os.path.split(type.path)[1]
+
+        filenames.append(type_name)
+
+    type_dict['files'] = filenames
+    return type_dict
+
 # Generate the theme-specific blocks that go in the top-line manifest
 def process_theme(s3fs, theme_info, theme_name):
     theme_dict = {}
     theme_dict['name'] = theme_name;
     print ("Processing " + theme_name + " theme")
     theme_path_selector = fs.FileSelector(theme_info.path)
-    theme_dict['path'] = theme_info.path
+    theme_dict['relative_path'] = '/' + os.path.split(theme_info.path)[1] 
+    theme_dict['status'] = '{alpha/beta/release}'
     theme_info = s3fs.get_file_info(theme_path_selector)
-    theme_dict['types'] = []
-    
-    for type in theme_info: 
-        type_name = parse_name(type.path)
-        theme_dict['types'].append(type_name)
-        print ("\tProcessing Type " + type_name)
+    type_info = []
 
+    for type in theme_info:
+        if (not type.is_file):
+            type_name = parse_name(type.path)
+            print ("\tProcessing Type " + type_name)
+            type_info.append(process_type(filesystem, type, type_name))
+    
+    theme_dict['types'] = type_info
     return theme_dict
 
 print ('Generating release manifest for release ' + release_version)
-release_path = "overturemaps-us-west-2/release/" + release_version +"/"
+release_path = "overturemaps-us-west-2/release/" + release_version
 json_dict['s3_location'] = release_path
 
 ### Look in a specific release to obtain the themes themselves
