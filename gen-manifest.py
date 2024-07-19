@@ -39,9 +39,9 @@ def get_type_parquet_bbox(s3fs, filepath):
     meta_str = metadata.decode('utf-8');
     metadata_obj = json.loads(meta_str)
 
-    bbox_string = json.dumps(metadata_obj['columns']['geometry']['bbox'])
+    bbox = metadata_obj['columns']['geometry']['bbox']
 
-    return bbox_string    
+    return bbox    
 
 # Get the name of a fully-qualified s3 blob storage path assuming our 'thing=stuff' format spec
 def parse_name(s3_file_path): 
@@ -62,7 +62,7 @@ def process_type(s3fs, type_info, type_name, theme_relative_path):
         type_info_obj = {}
         if (not type.is_file):
             type_filename = parse_name(type.path)
-            print ("\tProcessing type " + type_name)
+            print ("\t\tProcessing type " + type_name)
         else: 
             # 'type=building'
             type_filename = os.path.split(type.path)[1]
@@ -73,6 +73,7 @@ def process_type(s3fs, type_info, type_name, theme_relative_path):
 
             files.append(type_info_obj)
 
+        get_type_schema_info(s3fs, release_path + theme_relative_path + rel_path)
     type_dict['files'] = files
     return type_dict
 
@@ -80,6 +81,8 @@ def process_type(s3fs, type_info, type_name, theme_relative_path):
 def process_theme(s3fs, theme_info, theme_name):
     theme_dict = {}
     theme_dict['name'] = theme_name;
+    print ("\tProcessing theme " + theme_name)
+
     print ("Processing " + theme_name + " theme")
     theme_path_selector = fs.FileSelector(theme_info.path)
     rel_path = '/' + os.path.split(theme_info.path)[1]
@@ -91,7 +94,6 @@ def process_theme(s3fs, theme_info, theme_name):
     for type in theme_info:
         if (not type.is_file):
             type_name = parse_name(type.path)
-            print ("\tProcessing Type " + type_name)
             type_info.append(process_type(filesystem, type, type_name, rel_path))
     
     theme_dict['types'] = type_info
