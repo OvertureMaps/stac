@@ -12,30 +12,68 @@ json_dict = {}
 
 json_dict['version'] = release_version
 
+
+
+def get_type_schema_info(s3fs, filepath):
+    dataset = ds.dataset(
+        filepath,  filesystem=s3fs
+    )
+
+    metadata = dataset.schema.metadata[b'geo']
+    meta_str = metadata.decode('utf-8');
+    metadata_obj = json.loads(meta_str)
+    ret_obj = {}
+
+    ret_obj['schema_version'] = metadata_obj['version'];
+    ret_obj['column_names'] = dataset.schema.names
+    # Do we need to include/serialize the column formats? 
+    # col_formats = dataset.schema.types
+    return ret_obj
+
+def get_type_parquet_bbox(s3fs, filepath):
+    dataset = ds.dataset(
+        filepath, filesystem=s3fs
+    )
+
+    metadata = dataset.schema.metadata[b'geo']
+    meta_str = metadata.decode('utf-8');
+    metadata_obj = json.loads(meta_str)
+
+    bbox_string = json.dumps(metadata_obj['columns']['geometry']['bbox'])
+
+    return bbox_string    
+
 # Get the name of a fully-qualified s3 blob storage path assuming our 'thing=stuff' format spec
 def parse_name(s3_file_path): 
     return os.path.split(s3_file_path)[1].split('=')[1]
 
 # Generate the type-specific blocks that go in the theme-level of the manifest
-def process_type(s3fs, type_info, type_name):
+def process_type(s3fs, type_info, type_name, theme_relative_path):
     type_dict = {}
     type_dict['name'] = type_name;
     print ("Processing " + type_name + " type")
     theme_path_selector = fs.FileSelector(type_info.path)
-    type_dict['relative_path'] = '/' + os.path.split(type_info.path)[1] 
+    rel_path = '/' + os.path.split(type_info.path)[1]
+    type_dict['relative_path'] = rel_path
     type_info = s3fs.get_file_info(theme_path_selector)
 
-    filenames = []
+    files = []
     for type in type_info: 
+        type_info_obj = {}
         if (not type.is_file):
-            type_name = parse_name(type.path)
+            type_filename = parse_name(type.path)
             print ("\tProcessing type " + type_name)
         else: 
-            type_name = os.path.split(type.path)[1]
+            # 'type=building'
+            type_filename = os.path.split(type.path)[1]
+            type_info_obj['name'] = type_filename
 
-        filenames.append(type_name)
+            # extract the bbox that covers this particular file's worth of data
+            type_info_obj['bbox'] = get_type_parquet_bbox(s3fs, release_path + theme_relative_path + rel_path + "/" + type_filename)
 
-    type_dict['files'] = filenames
+            files.append(type_info_obj)
+
+    type_dict['files'] = files
     return type_dict
 
 # Generate the theme-specific blocks that go in the top-line manifest
@@ -44,7 +82,8 @@ def process_theme(s3fs, theme_info, theme_name):
     theme_dict['name'] = theme_name;
     print ("Processing " + theme_name + " theme")
     theme_path_selector = fs.FileSelector(theme_info.path)
-    theme_dict['relative_path'] = '/' + os.path.split(theme_info.path)[1] 
+    rel_path = '/' + os.path.split(theme_info.path)[1]
+    theme_dict['relative_path'] = rel_path
     theme_dict['status'] = '{alpha/beta/release}'
     theme_info = s3fs.get_file_info(theme_path_selector)
     type_info = []
@@ -53,7 +92,7 @@ def process_theme(s3fs, theme_info, theme_name):
         if (not type.is_file):
             type_name = parse_name(type.path)
             print ("\tProcessing Type " + type_name)
-            type_info.append(process_type(filesystem, type, type_name))
+            type_info.append(process_type(filesystem, type, type_name, rel_path))
     
     theme_dict['types'] = type_info
     return theme_dict
