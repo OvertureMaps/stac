@@ -4,14 +4,38 @@ import pyarrow.dataset as ds
 import pyarrow.fs as fs
 import os
 import json
+import yaml
+import requests
 
-release_version = "2024-06-13-beta.1"
+#release_version = "2024-06-13-beta.1"
+release_version = "2024-07-22.0"
+
+
+# Parse the schema-to-release mapping yaml available on the Overture Maps github org, and cross-reference it with the 
+def get_schema_version(versionstr): 
+    schema_info_url = 'https://raw.githubusercontent.com/OvertureMaps/data/manual-release-metadata/overture_releases.yaml'
+
+    resp = requests.get(schema_info_url)
+
+    if (resp.status_code != 200):
+        print("Problem downloading schema-release map, HTTP response code " + resp.status_code)
+        exit (1)
+
+    schema_yaml = resp.text
+    yaml_content = yaml.safe_load(resp.content)
+    for schemaitem in yaml_content: 
+        if (schemaitem['release'] == versionstr):
+            return schemaitem['schema']
+
+    print ("No schema entry found for this release number, bailing out.")
+    exit(2)
 
 #The object that we'll eventually serialize into the release-level manifest
 json_dict = {}
 
+json_dict['schema_version'] = get_schema_version(release_version)
+json_dict['schema_tag'] = 'https://github.com/OvertureMaps/schema/releases/tag/v' + json_dict['schema_version']
 json_dict['version'] = release_version
-
 
 
 def get_type_schema_info(s3fs, filepath):
