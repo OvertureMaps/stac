@@ -1,7 +1,7 @@
 {
     "schema_version": "1.0.0",
     "schema_tag": "https://github.com/OvertureMaps/schema/releases/tag/v1.0.0",
-    "version": "2024-07-22.0",
+    "release_version": "2024-07-22.0",
     "s3_location": "overturemaps-us-west-2/release/2024-07-22.0",
     "themes": [
         {

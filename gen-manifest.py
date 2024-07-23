@@ -35,7 +35,7 @@ json_dict = {}
 
 json_dict['schema_version'] = get_schema_version(release_version)
 json_dict['schema_tag'] = 'https://github.com/OvertureMaps/schema/releases/tag/v' + json_dict['schema_version']
-json_dict['version'] = release_version
+json_dict['release_version'] = release_version
 
 
 def get_type_schema_info(s3fs, filepath):
