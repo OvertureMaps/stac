@@ -10,6 +10,7 @@ import pystac
 from datetime import datetime
 
 #release_version = "2024-06-13-beta.1"
+release_root = "s3://overturemaps-us-west-2/release/"
 release_version = "2024-09-18.0"
 
 license_dict = {
@@ -123,7 +124,14 @@ def process_type(theme_catalog, s3fs, type_info, type_name, theme_relative_path)
             type_info_obj['bbox'] = get_type_parquet_bbox(s3fs, file_path)
 
             files.append(type_info_obj)
-            stac_item = pystac.Item(id=type_filename,geometry=None, bbox=type_info_obj['bbox'], properties={}, datetime=get_release_date_time())
+            stac_item = pystac.Item(
+                id=type_filename,
+                geometry=None, 
+                bbox=type_info_obj['bbox'],
+                properties={}, 
+                datetime=get_release_date_time(),
+                href=file_path
+            )
             stac_item.add_asset(
                 key='parquet-'+type_filename,
                 asset=pystac.Asset(href=file_path,
@@ -153,7 +161,7 @@ def process_theme(release_catalog, s3fs, theme_info, theme_name):
     theme_dict['status'] = '{alpha/beta/release}'
     theme_info = s3fs.get_file_info(theme_path_selector)
     type_info = []
-    theme_catalog = pystac.Catalog(id=theme_name, description='Theme information');
+    theme_catalog = pystac.Catalog(id=theme_name, description='Theme information', href=rel_path)
 
     for type in theme_info:
         if (not type.is_file):
@@ -179,7 +187,11 @@ themes_info = filesystem.get_file_info(release_path_selector);
 
 theme_info = []
 
-release_catalog = pystac.Catalog(id='release', description='This catalog is for the geoparquet data released as version ' + release_version);
+release_catalog = pystac.Catalog(
+    id='release', 
+    href=release_root + release_version,
+    description='This catalog is for the geoparquet data released as version ' + release_version
+);
 
 for theme in themes_info:
     theme_name = parse_name(theme.path) 
@@ -187,12 +199,14 @@ for theme in themes_info:
     if theme_name == 'addresses':
         theme_info.append(process_theme(release_catalog, filesystem, theme, theme_name))
 
-#print("Type Collection: " + json.dumps(release_catalog.to_dict(), indent=4))
 
-print("Release Catalog description:")
-release_catalog.describe()
+# print("Release Catalog description:")
+# release_catalog.describe()
 
-release_catalog.normalize_and_save(
-    root_href='./sample-stac.json', 
-    catalog_type=pystac.CatalogType.SELF_CONTAINED
-)
+# release_catalog.normalize_and_save(
+#     root_href=release_root + release_version, 
+#     catalog_type=pystac.CatalogType.RELATIVE_PUBLISHED
+# )
+
+release_catalog.normalize_and_save(root_href = './sample-stac.json', catalog_type=pystac.CatalogType.RELATIVE_PUBLISHED);
+print("Release Catalog: " + json.dumps(release_catalog.to_dict(), indent=4))
