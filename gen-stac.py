@@ -96,12 +96,9 @@ def parse_name(s3_file_path):
 
 # Generate the type-specific blocks that go in the theme-level of the manifest
 def process_type(theme_catalog, s3fs, type_info, type_name, theme_relative_path):
-    type_dict = {}
-    type_dict['name'] = type_name;
     print ("Processing " + type_name + " type")
     theme_path_selector = fs.FileSelector(type_info.path)
     rel_path = '/' + os.path.split(type_info.path)[1]
-    type_dict['relative_path'] = rel_path
     type_info = s3fs.get_file_info(theme_path_selector)
     ## To do: do we need to be more precise with our extent here? 
     extent = pystac.SpatialExtent(bboxes=[[[-180.0, -90.0, 180.0, 90.0]]])
@@ -112,57 +109,47 @@ def process_type(theme_catalog, s3fs, type_info, type_name, theme_relative_path)
         license = 'ODbL'
     )
 
-    files = []
     for type in type_info: 
-        type_info_obj = {}
         if (not type.is_file):
             type_filename = parse_name(type.path)
             print ("\t\tProcessing type " + type_name)
         else: 
             # 'type=building'
             type_filename = os.path.split(type.path)[1]
-            type_info_obj['name'] = type_filename
 
             # extract the bbox that covers this particular file's worth of data
             file_path = release_path + theme_relative_path + rel_path + "/" + type_filename
-            type_info_obj['bbox'] = get_type_parquet_bbox(s3fs, file_path)
+            bbox = get_type_parquet_bbox(s3fs, file_path)
 
-            files.append(type_info_obj)
             stac_item = pystac.Item(
                 id=part_number_from_file(type_filename),
                 geometry=None, 
-                bbox=type_info_obj['bbox'],
+                bbox=bbox,
                 properties={}, 
                 datetime=get_release_date_time(),
                 href='s3://' + file_path
             )
             stac_item.add_asset(
                 key='parquet-'+type_filename,
-                asset=pystac.Asset(href=file_path,
+                asset=pystac.Asset(href='s3://' + file_path,
                 media_type = 'application/vnd.apache.parquet')
             )
             type_collection.add_item(stac_item)
+            print ("Asset href: " + file_path)
+
         get_type_schema_info(s3fs, release_path + theme_relative_path + rel_path)
-    type_dict['files'] = files
+   
     theme_catalog.add_child(type_collection)
-    print ('Type Collection description: ')
-    type_collection.describe()
-    #print("Type Collection: " + json.dumps(type_collection.to_dict(), indent=4))
-
-
-    return type_dict
+#    print ('Type Collection description: ')
+#    type_collection.describe()
 
 # Generate the theme-specific blocks that go in the top-line manifest
 def process_theme(release_catalog, s3fs, theme_info, theme_name):
-    theme_dict = {}
-    theme_dict['name'] = theme_name;
     print ("\tProcessing theme " + theme_name)
 
     print ("Processing " + theme_name + " theme")
     theme_path_selector = fs.FileSelector(theme_info.path)
     rel_path = '/' + os.path.split(theme_info.path)[1]
-    theme_dict['relative_path'] = rel_path
-    theme_dict['status'] = '{alpha/beta/release}'
     theme_info = s3fs.get_file_info(theme_path_selector)
     type_info = []
     theme_catalog = pystac.Catalog(id=theme_name, description='Theme information', href=rel_path)
@@ -171,12 +158,10 @@ def process_theme(release_catalog, s3fs, theme_info, theme_name):
         if (not type.is_file):
             type_name = parse_name(type.path)
             type_info.append(process_type(theme_catalog, filesystem, type, type_name, rel_path))
-    theme_dict['types'] = type_info
     release_catalog.add_child(theme_catalog)
 
 #    print("Theme Catalog: " + json.dumps(theme_catalog.to_dict(), indent=4))
 
-    return theme_dict
 
 print ('Generating release manifest for release ' + release_version)
 release_path = "overturemaps-us-west-2/release/" + release_version
@@ -196,7 +181,7 @@ release_catalog = pystac.Catalog(
     href=release_root + release_version,
     description='This catalog is for the geoparquet data released as version ' + release_version
 );
-
+print ("Catalog href: " + release_root + release_version)
 for theme in themes_info:
     theme_name = parse_name(theme.path) 
     #for now just short-circuit the process to work on addresses
@@ -213,4 +198,3 @@ for theme in themes_info:
 # )
 
 release_catalog.normalize_and_save(root_href = './build', catalog_type=pystac.CatalogType.RELATIVE_PUBLISHED);
-print("Release Catalog: " + json.dumps(release_catalog.to_dict(), indent=4))
