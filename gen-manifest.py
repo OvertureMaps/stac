@@ -146,9 +146,3 @@ json_object = json.dumps(json_dict, indent=4)
 
 with open("sample.json", "w") as outfile:
     outfile.write(json_object)
-
-# dataset = ds.dataset(
-#     path, filesystem=fs.S3FileSystem(anonymous=True, region="us-west-2")
-# )
-
-

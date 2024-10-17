@@ -22,6 +22,10 @@ license_dict = {
     "addresses": 'Multiple permissive open licenses'
 }
 
+# accepts a filename formatted such as 'part-00000-ab657a87-ddf4-44f2-a96c-d573fcab4818-c000.zstd.parquet'
+# and just returns the part number string
+def part_number_from_file(filename):
+    return filename.split('-')[1]
 
 def get_release_date_time():
     release_date_str = release_version.split('.')[0]
@@ -125,12 +129,12 @@ def process_type(theme_catalog, s3fs, type_info, type_name, theme_relative_path)
 
             files.append(type_info_obj)
             stac_item = pystac.Item(
-                id=type_filename,
+                id=part_number_from_file(type_filename),
                 geometry=None, 
                 bbox=type_info_obj['bbox'],
                 properties={}, 
                 datetime=get_release_date_time(),
-                href=file_path
+                href='s3://' + file_path
             )
             stac_item.add_asset(
                 key='parquet-'+type_filename,
@@ -208,5 +212,5 @@ for theme in themes_info:
 #     catalog_type=pystac.CatalogType.RELATIVE_PUBLISHED
 # )
 
-release_catalog.normalize_and_save(root_href = './sample-stac.json', catalog_type=pystac.CatalogType.RELATIVE_PUBLISHED);
+release_catalog.normalize_and_save(root_href = './build', catalog_type=pystac.CatalogType.RELATIVE_PUBLISHED);
 print("Release Catalog: " + json.dumps(release_catalog.to_dict(), indent=4))
