@@ -106,9 +106,9 @@ def process_type(theme_catalog, s3fs, type_info, type_name, theme_relative_path)
         id=type_name, 
         description='Type information', 
         extent = extent,
-        license = 'ODbL'
+        license = 'ODbL',
     )
-
+    type_collection.DEFAULT_FILE_NAME = type_name + '.json'
     for type in type_info: 
         if (not type.is_file):
             type_filename = parse_name(type.path)
@@ -137,8 +137,12 @@ def process_type(theme_catalog, s3fs, type_info, type_name, theme_relative_path)
             type_collection.add_item(stac_item)
             print ("Asset href: " + file_path)
 
-        get_type_schema_info(s3fs, release_path + theme_relative_path + rel_path)
-   
+    schema_info = get_type_schema_info(s3fs, release_path + theme_relative_path + rel_path)
+    type_collection.summaries = pystac.Summaries({'schema': schema_info['schema_version'], 'columns' : schema_info['column_names']})
+
+    type_collection.extra_fields
+
+
     theme_catalog.add_child(type_collection)
 #    print ('Type Collection description: ')
 #    type_collection.describe()
@@ -181,6 +185,7 @@ release_catalog = pystac.Catalog(
     href=release_root + release_version,
     description='This catalog is for the geoparquet data released as version ' + release_version
 );
+release_catalog.DEFAULT_FILE_NAME = 'overture_data_release_' + release_version + '.json'
 print ("Catalog href: " + release_root + release_version)
 for theme in themes_info:
     theme_name = parse_name(theme.path) 
