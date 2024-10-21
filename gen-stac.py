@@ -108,7 +108,6 @@ def process_type(theme_catalog, s3fs, type_info, type_name, theme_relative_path)
         extent = extent,
         license = 'ODbL',
     )
-    type_collection.DEFAULT_FILE_NAME = type_name + '.json'
     for type in type_info: 
         if (not type.is_file):
             type_filename = parse_name(type.path)
@@ -131,7 +130,7 @@ def process_type(theme_catalog, s3fs, type_info, type_name, theme_relative_path)
             )
             stac_item.add_asset(
                 key='parquet-'+type_filename,
-                asset=pystac.Asset(href='s3://' + file_path,
+                asset=pystac.Asset(href= theme_relative_path + rel_path + "/" + type_filename,
                 media_type = 'application/vnd.apache.parquet')
             )
             type_collection.add_item(stac_item)
@@ -157,7 +156,6 @@ def process_theme(release_catalog, s3fs, theme_info, theme_name):
     theme_info = s3fs.get_file_info(theme_path_selector)
     type_info = []
     theme_catalog = pystac.Catalog(id=theme_name, description='Theme information', href=rel_path)
-    theme_catalog.DEFAULT_FILE_NAME = theme_name + '.json'
     for type in theme_info:
         if (not type.is_file):
             type_name = parse_name(type.path)
@@ -182,16 +180,38 @@ theme_info = []
 
 release_catalog = pystac.Catalog(
     id='release', 
-    href=release_root + release_version,
-    description='This catalog is for the geoparquet data released as version ' + release_version
+    href='./build',
+    description='This catalog is for the geoparquet data released as version ' + release_version,
+    stac_extensions=['https://stac-extensions.github.io/storage/v2.0.0/schema.json']
 );
-release_catalog.DEFAULT_FILE_NAME = 'overture_data_release_' + release_version + '.json'
+
+release_catalog.extra_fields = {
+    'storage:schemes' : {
+        'aws': {
+            "type": "aws-s3",
+            "platform": "https://{bucket}-{region}.s3.amazonaws.com/release/{release_version}",
+            "release_version": release_version,
+            "bucket": "overturemaps",
+            "region": "us-west-2",
+            "requester_pays": 'false'
+        },
+        'azure': {
+            "type": "ms-azure",
+            "platform": "https://{bucket}-{westus2}.blob.core.windows.net/release/{release_version}",
+            "release_version": release_version,
+            "bucket": "overturemaps",
+            "region": "westus2",
+            "requester_pays": 'false'
+        },
+    }
+}
+
 print ("Catalog href: " + release_root + release_version)
 for theme in themes_info:
     theme_name = parse_name(theme.path) 
     #for now just short-circuit the process to work on addresses
-    #if theme_name == 'addresses':
-    theme_info.append(process_theme(release_catalog, filesystem, theme, theme_name))
+    if theme_name == 'addresses':
+        theme_info.append(process_theme(release_catalog, filesystem, theme, theme_name))
 
 
 # print("Release Catalog description:")
@@ -202,4 +222,4 @@ for theme in themes_info:
 #     catalog_type=pystac.CatalogType.RELATIVE_PUBLISHED
 # )
 
-release_catalog.normalize_and_save(root_href = './build', catalog_type=pystac.CatalogType.RELATIVE_PUBLISHED);
+release_catalog.normalize_and_save(root_href = './build', catalog_type=pystac.CatalogType.SELF_CONTAINED);
