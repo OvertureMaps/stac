@@ -197,7 +197,7 @@ release_catalog.extra_fields = {
         },
         'azure': {
             "type": "ms-azure",
-            "platform": "https://{bucket}-{westus2}.blob.core.windows.net/release/{release_version}",
+            "platform": "https://{bucket}-{region}.blob.core.windows.net/release/{release_version}",
             "release_version": release_version,
             "bucket": "overturemaps",
             "region": "westus2",
@@ -210,8 +210,8 @@ print ("Catalog href: " + release_root + release_version)
 for theme in themes_info:
     theme_name = parse_name(theme.path) 
     #for now just short-circuit the process to work on addresses
-    if theme_name == 'addresses':
-        theme_info.append(process_theme(release_catalog, filesystem, theme, theme_name))
+    #if theme_name == 'addresses':
+    theme_info.append(process_theme(release_catalog, filesystem, theme, theme_name))
 
 
 # print("Release Catalog description:")
