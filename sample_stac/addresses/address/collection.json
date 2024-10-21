@@ -1,12 +1,12 @@
 {
   "type": "Collection",
-  "id": "infrastructure",
+  "id": "address",
   "stac_version": "1.0.0",
   "description": "Type information",
   "links": [
     {
       "rel": "root",
-      "href": "../../overture_data_release_2024-09-18.0.json",
+      "href": "../../catalog.json",
       "type": "application/json"
     },
     {
@@ -46,7 +46,7 @@
     },
     {
       "rel": "parent",
-      "href": "../base.json",
+      "href": "../catalog.json",
       "type": "application/json"
     }
   ],
@@ -68,15 +68,14 @@
       "id",
       "geometry",
       "bbox",
+      "country",
+      "postcode",
+      "street",
+      "number",
+      "unit",
+      "address_levels",
       "version",
-      "sources",
-      "subtype",
-      "class",
-      "surface",
-      "names",
-      "level",
-      "source_tags",
-      "wikidata"
+      "sources"
     ],
     "schema": "1.1.0"
   }

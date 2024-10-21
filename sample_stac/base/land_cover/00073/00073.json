@@ -10,23 +10,23 @@
   "links": [
     {
       "rel": "root",
-      "href": "../../../overture_data_release_2024-09-18.0.json",
+      "href": "../../../catalog.json",
       "type": "application/json"
     },
     {
       "rel": "collection",
-      "href": "../land_cover.json",
+      "href": "../collection.json",
       "type": "application/json"
     },
     {
       "rel": "parent",
-      "href": "../land_cover.json",
+      "href": "../collection.json",
       "type": "application/json"
     }
   ],
   "assets": {
     "parquet-part-00073-ac68c0ca-548d-4fd5-8cd5-d8aee01d7a44-c000.zstd.parquet": {
-      "href": "s3://overturemaps-us-west-2/release/2024-09-18.0/theme=base/type=land_cover/part-00073-ac68c0ca-548d-4fd5-8cd5-d8aee01d7a44-c000.zstd.parquet",
+      "href": "/theme=base/type=land_cover/part-00073-ac68c0ca-548d-4fd5-8cd5-d8aee01d7a44-c000.zstd.parquet",
       "type": "application/vnd.apache.parquet"
     }
   },

@@ -6,7 +6,7 @@
   "links": [
     {
       "rel": "root",
-      "href": "../../overture_data_release_2024-09-18.0.json",
+      "href": "../../catalog.json",
       "type": "application/json"
     },
     {
@@ -431,7 +431,7 @@
     },
     {
       "rel": "parent",
-      "href": "../base.json",
+      "href": "../catalog.json",
       "type": "application/json"
     }
   ],

@@ -10,23 +10,23 @@
   "links": [
     {
       "rel": "root",
-      "href": "../../../overture_data_release_2024-09-18.0.json",
+      "href": "../../../catalog.json",
       "type": "application/json"
     },
     {
       "rel": "collection",
-      "href": "../building.json",
+      "href": "../collection.json",
       "type": "application/json"
     },
     {
       "rel": "parent",
-      "href": "../building.json",
+      "href": "../collection.json",
       "type": "application/json"
     }
   ],
   "assets": {
     "parquet-part-00037-d0628531-2fbd-47aa-8608-f61ff708b14c-c000.zstd.parquet": {
-      "href": "s3://overturemaps-us-west-2/release/2024-09-18.0/theme=buildings/type=building/part-00037-d0628531-2fbd-47aa-8608-f61ff708b14c-c000.zstd.parquet",
+      "href": "/theme=buildings/type=building/part-00037-d0628531-2fbd-47aa-8608-f61ff708b14c-c000.zstd.parquet",
       "type": "application/vnd.apache.parquet"
     }
   },

@@ -1,12 +1,12 @@
 {
   "type": "Collection",
-  "id": "address",
+  "id": "connector",
   "stac_version": "1.0.0",
   "description": "Type information",
   "links": [
     {
       "rel": "root",
-      "href": "../../overture_data_release_2024-09-18.0.json",
+      "href": "../../catalog.json",
       "type": "application/json"
     },
     {
@@ -45,8 +45,38 @@
       "type": "application/json"
     },
     {
+      "rel": "item",
+      "href": "./00007/00007.json",
+      "type": "application/json"
+    },
+    {
+      "rel": "item",
+      "href": "./00008/00008.json",
+      "type": "application/json"
+    },
+    {
+      "rel": "item",
+      "href": "./00009/00009.json",
+      "type": "application/json"
+    },
+    {
+      "rel": "item",
+      "href": "./00010/00010.json",
+      "type": "application/json"
+    },
+    {
+      "rel": "item",
+      "href": "./00011/00011.json",
+      "type": "application/json"
+    },
+    {
+      "rel": "item",
+      "href": "./00012/00012.json",
+      "type": "application/json"
+    },
+    {
       "rel": "parent",
-      "href": "../addresses.json",
+      "href": "../catalog.json",
       "type": "application/json"
     }
   ],
@@ -68,12 +98,6 @@
       "id",
       "geometry",
       "bbox",
-      "country",
-      "postcode",
-      "street",
-      "number",
-      "unit",
-      "address_levels",
       "version",
       "sources"
     ],

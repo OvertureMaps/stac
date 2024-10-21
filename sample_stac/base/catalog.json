@@ -6,37 +6,37 @@
   "links": [
     {
       "rel": "root",
-      "href": "../overture_data_release_2024-09-18.0.json",
+      "href": "../catalog.json",
       "type": "application/json"
     },
     {
       "rel": "child",
-      "href": "./infrastructure/infrastructure.json",
+      "href": "./infrastructure/collection.json",
       "type": "application/json"
     },
     {
       "rel": "child",
-      "href": "./land/land.json",
+      "href": "./land/collection.json",
       "type": "application/json"
     },
     {
       "rel": "child",
-      "href": "./land_cover/land_cover.json",
+      "href": "./land_cover/collection.json",
       "type": "application/json"
     },
     {
       "rel": "child",
-      "href": "./land_use/land_use.json",
+      "href": "./land_use/collection.json",
       "type": "application/json"
     },
     {
       "rel": "child",
-      "href": "./water/water.json",
+      "href": "./water/collection.json",
       "type": "application/json"
     },
     {
       "rel": "parent",
-      "href": "../overture_data_release_2024-09-18.0.json",
+      "href": "../catalog.json",
       "type": "application/json"
     }
   ]

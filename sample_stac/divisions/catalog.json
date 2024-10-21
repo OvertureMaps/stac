@@ -6,27 +6,27 @@
   "links": [
     {
       "rel": "root",
-      "href": "../overture_data_release_2024-09-18.0.json",
+      "href": "../catalog.json",
       "type": "application/json"
     },
     {
       "rel": "child",
-      "href": "./division/division.json",
+      "href": "./division/collection.json",
       "type": "application/json"
     },
     {
       "rel": "child",
-      "href": "./division_area/division_area.json",
+      "href": "./division_area/collection.json",
       "type": "application/json"
     },
     {
       "rel": "child",
-      "href": "./division_boundary/division_boundary.json",
+      "href": "./division_boundary/collection.json",
       "type": "application/json"
     },
     {
       "rel": "parent",
-      "href": "../overture_data_release_2024-09-18.0.json",
+      "href": "../catalog.json",
       "type": "application/json"
     }
   ]

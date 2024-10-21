@@ -6,22 +6,22 @@
   "links": [
     {
       "rel": "root",
-      "href": "../overture_data_release_2024-09-18.0.json",
+      "href": "../catalog.json",
       "type": "application/json"
     },
     {
       "rel": "child",
-      "href": "./connector/connector.json",
+      "href": "./connector/collection.json",
       "type": "application/json"
     },
     {
       "rel": "child",
-      "href": "./segment/segment.json",
+      "href": "./segment/collection.json",
       "type": "application/json"
     },
     {
       "rel": "parent",
-      "href": "../overture_data_release_2024-09-18.0.json",
+      "href": "../catalog.json",
       "type": "application/json"
     }
   ]
