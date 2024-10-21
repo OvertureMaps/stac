@@ -1,0 +1,33 @@
+{
+  "type": "Catalog",
+  "id": "divisions",
+  "stac_version": "1.0.0",
+  "description": "Theme information",
+  "links": [
+    {
+      "rel": "root",
+      "href": "../overture_data_release_2024-09-18.0.json",
+      "type": "application/json"
+    },
+    {
+      "rel": "child",
+      "href": "./division/division.json",
+      "type": "application/json"
+    },
+    {
+      "rel": "child",
+      "href": "./division_area/division_area.json",
+      "type": "application/json"
+    },
+    {
+      "rel": "child",
+      "href": "./division_boundary/division_boundary.json",
+      "type": "application/json"
+    },
+    {
+      "rel": "parent",
+      "href": "../overture_data_release_2024-09-18.0.json",
+      "type": "application/json"
+    }
+  ]
+}

@@ -1,0 +1,43 @@
+{
+  "type": "Catalog",
+  "id": "base",
+  "stac_version": "1.0.0",
+  "description": "Theme information",
+  "links": [
+    {
+      "rel": "root",
+      "href": "../overture_data_release_2024-09-18.0.json",
+      "type": "application/json"
+    },
+    {
+      "rel": "child",
+      "href": "./infrastructure/infrastructure.json",
+      "type": "application/json"
+    },
+    {
+      "rel": "child",
+      "href": "./land/land.json",
+      "type": "application/json"
+    },
+    {
+      "rel": "child",
+      "href": "./land_cover/land_cover.json",
+      "type": "application/json"
+    },
+    {
+      "rel": "child",
+      "href": "./land_use/land_use.json",
+      "type": "application/json"
+    },
+    {
+      "rel": "child",
+      "href": "./water/water.json",
+      "type": "application/json"
+    },
+    {
+      "rel": "parent",
+      "href": "../overture_data_release_2024-09-18.0.json",
+      "type": "application/json"
+    }
+  ]
+}
