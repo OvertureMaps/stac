@@ -157,7 +157,7 @@ def process_theme(release_catalog, s3fs, theme_info, theme_name):
     theme_info = s3fs.get_file_info(theme_path_selector)
     type_info = []
     theme_catalog = pystac.Catalog(id=theme_name, description='Theme information', href=rel_path)
-
+    theme_catalog.DEFAULT_FILE_NAME = theme_name + '.json'
     for type in theme_info:
         if (not type.is_file):
             type_name = parse_name(type.path)
@@ -190,8 +190,8 @@ print ("Catalog href: " + release_root + release_version)
 for theme in themes_info:
     theme_name = parse_name(theme.path) 
     #for now just short-circuit the process to work on addresses
-    if theme_name == 'addresses':
-        theme_info.append(process_theme(release_catalog, filesystem, theme, theme_name))
+    #if theme_name == 'addresses':
+    theme_info.append(process_theme(release_catalog, filesystem, theme, theme_name))
 
 
 # print("Release Catalog description:")
