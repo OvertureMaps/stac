@@ -86,7 +86,7 @@ def parse_name(s3_file_path):
 
 
 # Generate the type-specific blocks that go in the theme-level of the manifest
-def process_type(theme_catalog, s3fs, type_info, type_name, theme_relative_path):
+def process_type(theme_catalog, s3fs, type_info, type_name, theme_relative_path, license_str):
     print ("Processing " + type_name + " type")
     theme_path_selector = fs.FileSelector(type_info.path)
     rel_path = '/' + os.path.split(type_info.path)[1]
@@ -97,7 +97,7 @@ def process_type(theme_catalog, s3fs, type_info, type_name, theme_relative_path)
         id=type_name, 
         description='Type information', 
         extent = extent,
-        license = 'ODbL',
+        license = license_str,
     )
     for type in type_info: 
         if (not type.is_file):
@@ -121,7 +121,7 @@ def process_type(theme_catalog, s3fs, type_info, type_name, theme_relative_path)
             )
             stac_item.add_asset(
                 key='parquet-'+type_filename,
-                asset=pystac.Asset(href= theme_relative_path + rel_path + "/" + type_filename,
+                asset=pystac.Asset(href= "./" + theme_relative_path + rel_path + "/" + type_filename,
                 media_type = 'application/vnd.apache.parquet')
             )
             type_collection.add_item(stac_item)
@@ -150,7 +150,7 @@ def process_theme(release_catalog, s3fs, theme_info, theme_name):
     for type in theme_info:
         if (not type.is_file):
             type_name = parse_name(type.path)
-            type_info.append(process_type(theme_catalog, filesystem, type, type_name, rel_path))
+            type_info.append(process_type(theme_catalog, filesystem, type, type_name, rel_path, license_dict[theme_name]))
     release_catalog.add_child(theme_catalog)
 
 #    print("Theme Catalog: " + json.dumps(theme_catalog.to_dict(), indent=4))
@@ -206,7 +206,7 @@ print ("Catalog href: " + release_root + release_version)
 for theme in themes_info:
     theme_name = parse_name(theme.path) 
     #for now just short-circuit the process to work on addresses
-    if theme_name == 'addresses':
-        theme_info.append(process_theme(release_catalog, filesystem, theme, theme_name))
+    #if theme_name == 'addresses':
+    theme_info.append(process_theme(release_catalog, filesystem, theme, theme_name))
 
 release_catalog.normalize_and_save(root_href = './build', catalog_type=pystac.CatalogType.SELF_CONTAINED);

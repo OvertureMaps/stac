@@ -94,7 +94,7 @@ pmtiles_catalog.extra_fields = {
 }
 
 for item in pmtiles_filelist:
-    if (not item.is_file and 'beta' not in item.base_name and 'alpha' not in item.base_name):
+    if (not item.is_file and 'beta' not in item.base_name and 'alpha' not in item.base_name and not item.base_name is not 'stac'):
         process_pmtiles_folder(pmtiles_catalog, filesystem, item)
 
 pmtiles_catalog.normalize_and_save(root_href = './build_pmtiles', catalog_type=pystac.CatalogType.SELF_CONTAINED);
