@@ -8,7 +8,7 @@ import yaml
 import requests
 
 #release_version = "2024-06-13-beta.1"
-release_version = "2024-09-18.0"
+release_version = "2024-11-13.0"
 
 
 # Parse the schema-to-release mapping yaml available on the Overture Maps github org, and cross-reference it with the 
