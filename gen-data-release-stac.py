@@ -123,14 +123,26 @@ def process_type(
             )
             bbox = get_type_parquet_bbox(s3fs, file_path)
 
+            xmin, ymin, xmax, ymax = bbox
+            box_geometry = {
+                "type": "Polygon",
+                "coordinates": [[
+                    [xmin, ymin],
+                    [xmax, ymin],
+                    [xmax, ymax],
+                    [xmin, ymax],
+                    [xmin, ymin]
+                ]]
+            }
             stac_item = pystac.Item(
                 id=part_number_from_file(type_filename),
-                geometry=None,
+                geometry=box_geometry,
                 bbox=bbox,
                 properties={},
                 datetime=get_release_date_time(),
                 href="s3://" + file_path,
             )
+            type_collection.add_item(stac_item)
             stac_item.add_asset(
                 key="parquet-" + type_filename,
                 asset=pystac.Asset(
@@ -138,7 +150,6 @@ def process_type(
                     media_type="application/vnd.apache.parquet",
                 ),
             )
-            type_collection.add_item(stac_item)
             print("Asset href: " + file_path)
 
     schema_info = get_type_schema_info(
