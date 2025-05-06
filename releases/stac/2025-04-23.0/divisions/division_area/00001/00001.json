@@ -1,0 +1,66 @@
+{
+  "type": "Feature",
+  "stac_version": "1.0.0",
+  "stac_extensions": [],
+  "id": "00001",
+  "geometry": {
+    "type": "Polygon",
+    "coordinates": [
+      [
+        [
+          -180.0,
+          -4.8995204
+        ],
+        [
+          180.0,
+          -4.8995204
+        ],
+        [
+          180.0,
+          71.5889534
+        ],
+        [
+          -180.0,
+          71.5889534
+        ],
+        [
+          -180.0,
+          -4.8995204
+        ]
+      ]
+    ]
+  },
+  "bbox": [
+    -180.0,
+    -4.8995204,
+    180.0,
+    71.5889534
+  ],
+  "properties": {
+    "datetime": "2025-04-23T00:00:00Z"
+  },
+  "links": [
+    {
+      "rel": "root",
+      "href": "../../../catalog.json",
+      "type": "application/json"
+    },
+    {
+      "rel": "collection",
+      "href": "../collection.json",
+      "type": "application/json"
+    },
+    {
+      "rel": "parent",
+      "href": "../collection.json",
+      "type": "application/json"
+    }
+  ],
+  "assets": {
+    "parquet-part-00001-2ad2bca3-4720-4bcd-8d18-38652eeecb71-c000.zstd.parquet": {
+      "href": "s3://overturemaps-us-west-2/release/2025-04-23.0/theme=divisions/type=division_area/part-00001-2ad2bca3-4720-4bcd-8d18-38652eeecb71-c000.zstd.parquet",
+      "type": "application/vnd.apache.parquet"
+    }
+  },
+  "collection": "division_area"
+}
