@@ -1,0 +1,66 @@
+{
+  "type": "Feature",
+  "stac_version": "1.0.0",
+  "stac_extensions": [],
+  "id": "00024",
+  "geometry": {
+    "type": "Polygon",
+    "coordinates": [
+      [
+        [
+          44.0936923,
+          44.1286012
+        ],
+        [
+          91.3471971,
+          44.1286012
+        ],
+        [
+          91.3471971,
+          67.9140231
+        ],
+        [
+          44.0936923,
+          67.9140231
+        ],
+        [
+          44.0936923,
+          44.1286012
+        ]
+      ]
+    ]
+  },
+  "bbox": [
+    44.0936923,
+    44.1286012,
+    91.3471971,
+    67.9140231
+  ],
+  "properties": {
+    "datetime": "2025-01-22T00:00:00Z"
+  },
+  "links": [
+    {
+      "rel": "root",
+      "href": "../../../catalog.json",
+      "type": "application/json"
+    },
+    {
+      "rel": "collection",
+      "href": "../collection.json",
+      "type": "application/json"
+    },
+    {
+      "rel": "parent",
+      "href": "../collection.json",
+      "type": "application/json"
+    }
+  ],
+  "assets": {
+    "parquet-part-00024-50b2f361-c53f-4ddc-9842-742f9ac0472f-c000.zstd.parquet": {
+      "href": "s3://overturemaps-us-west-2/release/2025-01-22.0/theme=base/type=land/part-00024-50b2f361-c53f-4ddc-9842-742f9ac0472f-c000.zstd.parquet",
+      "type": "application/vnd.apache.parquet"
+    }
+  },
+  "collection": "land"
+}

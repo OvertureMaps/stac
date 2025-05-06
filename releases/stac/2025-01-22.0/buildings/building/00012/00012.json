@@ -1,0 +1,66 @@
+{
+  "type": "Feature",
+  "stac_version": "1.0.0",
+  "stac_extensions": [],
+  "id": "00012",
+  "geometry": {
+    "type": "Polygon",
+    "coordinates": [
+      [
+        [
+          -67.500034094367,
+          -16.87504649871532
+        ],
+        [
+          -44.9998671,
+          -16.87504649871532
+        ],
+        [
+          -44.9998671,
+          0.0000396211788295193
+        ],
+        [
+          -67.500034094367,
+          0.0000396211788295193
+        ],
+        [
+          -67.500034094367,
+          -16.87504649871532
+        ]
+      ]
+    ]
+  },
+  "bbox": [
+    -67.500034094367,
+    -16.87504649871532,
+    -44.9998671,
+    0.0000396211788295193
+  ],
+  "properties": {
+    "datetime": "2025-01-22T00:00:00Z"
+  },
+  "links": [
+    {
+      "rel": "root",
+      "href": "../../../catalog.json",
+      "type": "application/json"
+    },
+    {
+      "rel": "collection",
+      "href": "../collection.json",
+      "type": "application/json"
+    },
+    {
+      "rel": "parent",
+      "href": "../collection.json",
+      "type": "application/json"
+    }
+  ],
+  "assets": {
+    "parquet-part-00012-93562193-cc11-4218-90e1-0eb6f0c6dcfe-c000.zstd.parquet": {
+      "href": "s3://overturemaps-us-west-2/release/2025-01-22.0/theme=buildings/type=building/part-00012-93562193-cc11-4218-90e1-0eb6f0c6dcfe-c000.zstd.parquet",
+      "type": "application/vnd.apache.parquet"
+    }
+  },
+  "collection": "building"
+}

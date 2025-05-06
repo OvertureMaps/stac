@@ -1,0 +1,66 @@
+{
+  "type": "Feature",
+  "stac_version": "1.0.0",
+  "stac_extensions": [],
+  "id": "00004",
+  "geometry": {
+    "type": "Polygon",
+    "coordinates": [
+      [
+        [
+          -124.563238,
+          16.8357043
+        ],
+        [
+          -89.1519123,
+          16.8357043
+        ],
+        [
+          -89.1519123,
+          45.0072948
+        ],
+        [
+          -124.563238,
+          45.0072948
+        ],
+        [
+          -124.563238,
+          16.8357043
+        ]
+      ]
+    ]
+  },
+  "bbox": [
+    -124.563238,
+    16.8357043,
+    -89.1519123,
+    45.0072948
+  ],
+  "properties": {
+    "datetime": "2025-04-23T00:00:00Z"
+  },
+  "links": [
+    {
+      "rel": "root",
+      "href": "../../../catalog.json",
+      "type": "application/json"
+    },
+    {
+      "rel": "collection",
+      "href": "../collection.json",
+      "type": "application/json"
+    },
+    {
+      "rel": "parent",
+      "href": "../collection.json",
+      "type": "application/json"
+    }
+  ],
+  "assets": {
+    "parquet-part-00004-0d337c57-0948-48b1-af88-be51cfe16fe0-c000.zstd.parquet": {
+      "href": "s3://overturemaps-us-west-2/release/2025-04-23.0/theme=transportation/type=segment/part-00004-0d337c57-0948-48b1-af88-be51cfe16fe0-c000.zstd.parquet",
+      "type": "application/vnd.apache.parquet"
+    }
+  },
+  "collection": "segment"
+}
