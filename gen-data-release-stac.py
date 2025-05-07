@@ -11,11 +11,7 @@ from datetime import datetime
 
 # release_version = "2024-06-13-beta.1"
 release_root = "s3://overturemaps-us-west-2/release/"
-<<<<<<< HEAD
-release_version = "2024-09-18.0"
-=======
 release_version = "2025-04-23.0"
->>>>>>> fddc3e5 (Update latest manifest/stac generating scripts.)
 
 license_dict = {
     "base": "ODbL",
@@ -150,12 +146,7 @@ def process_type(
             stac_item.add_asset(
                 key="parquet-" + type_filename,
                 asset=pystac.Asset(
-<<<<<<< HEAD
-                    href="./" + theme_relative_path + rel_path + "/" + type_filename,
-=======
                     href="./" + type_filename,
-#                    href="./" + theme_relative_path + rel_path + "/" + type_filename,
->>>>>>> fddc3e5 (Update latest manifest/stac generating scripts.)
                     media_type="application/vnd.apache.parquet",
                 ),
             )
@@ -263,18 +254,12 @@ print("Catalog href: " + release_root + release_version)
 for theme in themes_info:
     theme_name = parse_name(theme.path)
     # for now just short-circuit the process to work on addresses
-<<<<<<< HEAD
-    # if theme_name == 'addresses':
-=======
 #    if theme_name == 'addresses' or theme_name == 'places':
->>>>>>> fddc3e5 (Update latest manifest/stac generating scripts.)
     theme_info.append(process_theme(release_catalog, filesystem, theme, theme_name))
 
 release_catalog.normalize_and_save(
     root_href="./build", catalog_type=pystac.CatalogType.SELF_CONTAINED
 )
-<<<<<<< HEAD
-=======
 
 
 # #Geoparquet-stac generation
@@ -292,4 +277,3 @@ release_catalog.normalize_and_save(
 #                 continue;
 #             item = item_link._target_object
 #             print (f"Item id: {item.id}")
->>>>>>> fddc3e5 (Update latest manifest/stac generating scripts.)
