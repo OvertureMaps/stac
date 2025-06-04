@@ -1,279 +1,247 @@
+import argparse
+import json
+import logging
+from datetime import datetime
+from pathlib import Path
+
+from typing import Optional
+
 import pyarrow as pa
 import pyarrow.compute as pc
 import pyarrow.dataset as ds
 import pyarrow.fs as fs
-import os
-import json
-import yaml
-import requests
+import pyarrow.parquet as pq
 import pystac
-from datetime import datetime
+import stac_geoparquet
 
-# release_version = "2024-06-13-beta.1"
-release_root = "s3://overturemaps-us-west-2/release/"
-release_version = "2025-04-23.0"
 
-license_dict = {
-    "base": "ODbL",
-    "buildings": "ODbL",
-    "divisions": "ODbL",
-    "transportation": "ODbL",
-    "places": "CDLA Permissive 2.0",
-    "addresses": "Multiple permissive open licenses",
+S3_RELEASE_PATH = "s3://overturemaps-us-west-2/release"
+S3_BUCKET = "overturemaps-us-west-2"
+S3_REGION = "us-west-2"
+
+TYPE_LICENSE_MAP = {
+    "bathymetry": "CC0-1.0",
+    "land_cover": "	CC-BY-4.0",
+    "infrastructure": "ODbL-1.0",
+    "land": "ODbL-1.0",
+    "land_use": "ODbL-1.0",
+    "water": "ODbL-1.0",
+    "building": "ODbL-1.0",
+    "division": "ODbL-1.0",
+    "division_area": "ODbL-1.0",
+    "division_bopundary": "ODbL-1.0",
+    "segment": "ODbL-1.0",
+    "connector": "ODbL-1.0",
+    "place": "CDLA-Permissive-2.0",
+    "address": "Multiple Open Licenses",
 }
 
 
-# accepts a filename formatted such as 'part-00000-ab657a87-ddf4-44f2-a96c-d573fcab4818-c000.zstd.parquet'
-# and just returns the part number string
-def part_number_from_file(filename):
-    return filename.split("-")[1]
+class OvertureRelease:
+    logging.basicConfig()
+    logger = logging.getLogger("pystac")
+    logger.setLevel(logging.DEBUG)
 
+    def __init__(
+        self, release: str, schema: str, parquet_output: Optional[str] = "parquet"
+    ):
+        self.release = release
+        self.schema = schema
+        self.release_path = (f"{S3_RELEASE_PATH}/{self.release}",)
+        self.parquet_output = parquet_output
+        self.filesystem = fs.S3FileSystem(anonymous=True, region=S3_REGION)
 
-def get_release_date_time():
-    release_date_str = release_version.split(".")[0]
-    fmt_str = "%Y-%m-%d"
-    return datetime.strptime(release_date_str, fmt_str)
-
-
-# Parse the schema-to-release mapping yaml available on the Overture Maps github org, and cross-reference it with the version string of the data release.
-def get_schema_version(versionstr):
-    schema_info_url = "https://raw.githubusercontent.com/OvertureMaps/data/manual-release-metadata/overture_releases.yaml"
-
-    resp = requests.get(schema_info_url)
-
-    if resp.status_code != 200:
-        print(
-            "Problem downloading schema-release map, HTTP response code "
-            + resp.status_code
+    def make_release_catalog(self):
+        self.release_catalog = pystac.Catalog(
+            id="release",
+            href="./build",
+            description=f"This catalog is for the geoparquet data released in version {self.release}",
+            stac_extensions=[
+                "https://stac-extensions.github.io/storage/v2.0.0/schema.json"
+            ],
         )
-        exit(1)
+        self.release_catalog.extra_fields = {
+            "release:version": self.release,
+            "schema:version": self.schema,
+            "schema:tag": f"https://github.com/OvertureMaps/schema/releases/tag/v{self.schema}",
+            "storage:schemes": {
+                "aws": {
+                    "type": "aws-s3",
+                    "platform": "https://{bucket}.s3.{region}.amazonaws.com/release/{release_version}",
+                    "release_version": self.release,
+                    "bucket": "overturemaps-us-west-2",
+                    "region": "us-west-2",
+                    "requester_pays": "false",
+                },
+                "azure": {
+                    "type": "ms-azure",
+                    "platform": "https://{account}.blob.core.windows.net/release/{release_version}",
+                    "account": "overturemapswestus2",
+                    "requester_pays": "false",
+                },
+            },
+        }
 
-    schema_yaml = resp.text
-    yaml_content = yaml.safe_load(resp.content)
-    for schemaitem in yaml_content:
-        if schemaitem["release"] == versionstr:
-            return schemaitem["schema"]
+    def fetch_geoparquet_metadata(self, filepath):
+        dataset = ds.dataset(filepath, filesystem=self.filesystem)
 
-    print(
-        "No schema entry found for this release number, Assuming that we're still using the latest version listed: "
-        + yaml_content[0]["schema"]
-    )
-    return yaml_content[0]["schema"]
+        geo_metadata = dataset.schema.metadata[b"geo"]
+        return {
+            "geo": json.loads(geo_metadata.decode("utf-8")),
+            "schema": dataset.schema,
+        }
 
+    def get_release_themes(self):
+        release_path_selector = fs.FileSelector(f"{S3_BUCKET}/release/{self.release}")
+        self.themes = self.filesystem.get_file_info(release_path_selector)
 
-def get_type_schema_info(s3fs, filepath):
-    dataset = ds.dataset(filepath, filesystem=s3fs)
+    def process_type(self, theme_type: fs.FileInfo):
+        type_name = theme_type.path.split("=")[-1]
+        self.logger.info(f"Processing Type: {type_name}")
+        theme_type_path_selector = fs.FileSelector(theme_type.path)
 
-    metadata = dataset.schema.metadata[b"geo"]
-    meta_str = metadata.decode("utf-8")
-    metadata_obj = json.loads(meta_str)
-    ret_obj = {}
+        type_files = self.filesystem.get_file_info(theme_type_path_selector)
 
-    ret_obj["schema_version"] = metadata_obj["version"]
-    ret_obj["column_names"] = dataset.schema.names
-    # Do we need to include/serialize the column formats?
-    # col_formats = dataset.schema.types
-    return ret_obj
+        parquet_metadata = {}
+        items = []
 
+        for type_file in type_files:
+            self.logger.info(f"Found file: {type_file.path}")
 
-def get_type_parquet_bbox(s3fs, filepath):
-    dataset = ds.dataset(filepath, filesystem=s3fs)
+            filename = type_file.path.split("/")[-1]
 
-    metadata = dataset.schema.metadata[b"geo"]
-    meta_str = metadata.decode("utf-8")
-    metadata_obj = json.loads(meta_str)
+            parquet_metadata = self.fetch_geoparquet_metadata(type_file.path)
 
-    bbox = metadata_obj["columns"]["geometry"]["bbox"]
-
-    return bbox
-
-
-# Get the name of a fully-qualified s3 blob storage path assuming our 'thing=stuff' format spec
-def parse_name(s3_file_path):
-    return os.path.split(s3_file_path)[1].split("=")[1]
-
-
-# Generate the type-specific blocks that go in the theme-level of the manifest
-def process_type(
-    theme_catalog, s3fs, type_info, type_name, theme_relative_path, license_str
-):
-    print("Processing " + type_name + " type")
-    theme_path_selector = fs.FileSelector(type_info.path)
-    rel_path = "/" + os.path.split(type_info.path)[1]
-    type_info = s3fs.get_file_info(theme_path_selector)
-    ## To do: do we need to be more precise with our extent here?
-    extent = pystac.SpatialExtent(bboxes=[[[-180.0, -90.0, 180.0, 90.0]]])
-    type_collection = pystac.Collection(
-        id=type_name,
-        description="Type information",
-        extent=extent,
-        license=license_str,
-    )
-    for type in type_info:
-        if not type.is_file:
-            type_filename = parse_name(type.path)
-            print("\t\tProcessing type " + type_name)
-        else:
-            # 'type=building'
-            type_filename = os.path.split(type.path)[1]
-
-            # extract the bbox that covers this particular file's worth of data
-            file_path = (
-                release_path + theme_relative_path + rel_path + "/" + type_filename
-            )
-            bbox = get_type_parquet_bbox(s3fs, file_path)
-
-            xmin, ymin, xmax, ymax = bbox
-            box_geometry = {
+            xmin, ymin, xmax, ymax = parquet_metadata["geo"]["columns"]["geometry"][
+                "bbox"
+            ]
+            geojson_box_geometry = {
                 "type": "Polygon",
-                "coordinates": [[
-                    [xmin, ymin],
-                    [xmax, ymin],
-                    [xmax, ymax],
-                    [xmin, ymax],
-                    [xmin, ymin]
-                ]]
+                "coordinates": [
+                    [
+                        [xmin, ymin],
+                        [xmax, ymin],
+                        [xmax, ymax],
+                        [xmin, ymax],
+                        [xmin, ymin],
+                    ]
+                ],
             }
+
             stac_item = pystac.Item(
-                id=part_number_from_file(type_filename),
-                geometry=box_geometry,
-                bbox=bbox,
+                id=filename.split("-")[1],
+                geometry=geojson_box_geometry,
+                bbox=[xmin, ymin, xmax, ymax],
                 properties={},
-                datetime=get_release_date_time(),
-                href="s3://" + file_path,
+                datetime=datetime.strptime(self.release.split(".")[0], "%Y-%m-%d"),
+                href="s3://" + type_file.path,
             )
-            type_collection.add_item(stac_item)
+
             stac_item.add_asset(
-                key="parquet-" + type_filename,
+                key="parquet-" + filename,
                 asset=pystac.Asset(
-                    href="./" + type_filename,
+                    href="./" + filename,
                     media_type="application/vnd.apache.parquet",
                 ),
             )
-            print("Asset href: " + file_path)
+            items.append(stac_item)
 
-    schema_info = get_type_schema_info(
-        s3fs, release_path + theme_relative_path + rel_path
-    )
-    type_collection.summaries = pystac.Summaries(
-        {
-            "schema": schema_info["schema_version"],
-            "columns": schema_info["column_names"],
-        }
-    )
+        type_collection = pystac.Collection(
+            id=type_name,
+            description=f"Overture's {type_name} collection",
+            extent=pystac.Extent(
+                spatial=pystac.SpatialExtent(bboxes=[i.bbox for i in items]),
+                temporal=pystac.TemporalExtent(intervals=[None, None]),
+            ),
+            license=TYPE_LICENSE_MAP.get(type_name),
+        )
 
-    type_collection.extra_fields
+        type_collection.add_items(items)
 
-    theme_catalog.add_child(type_collection)
+        if self.parquet_output is not None:
+            output_path = Path(self.parquet_output)
+            output_path.mkdir(parents=True, exist_ok=True)
 
-
-#    print ('Type Collection description: ')
-#    type_collection.describe()
-
-
-# Generate the theme-specific blocks that go in the top-line manifest
-def process_theme(release_catalog, s3fs, theme_info, theme_name):
-    print("\tProcessing theme " + theme_name)
-
-    print("Processing " + theme_name + " theme")
-    theme_path_selector = fs.FileSelector(theme_info.path)
-    rel_path = "/" + os.path.split(theme_info.path)[1]
-    theme_info = s3fs.get_file_info(theme_path_selector)
-    type_info = []
-    theme_catalog = pystac.Catalog(
-        id=theme_name, description="Theme information", href=rel_path
-    )
-    for type in theme_info:
-        if not type.is_file:
-            type_name = parse_name(type.path)
-            type_info.append(
-                process_type(
-                    theme_catalog,
-                    filesystem,
-                    type,
-                    type_name,
-                    rel_path,
-                    license_dict[theme_name],
-                )
+            stac_geoparquet.arrow.to_parquet(
+                table=stac_geoparquet.arrow.parse_stac_items_to_arrow(items),
+                output_path=f"{output_path}/{type_name}.parquet",
             )
-    release_catalog.add_child(theme_catalog)
+
+        type_collection.summaries = pystac.Summaries(
+            {
+                "schema": parquet_metadata["geo"]["version"],
+                "columns": parquet_metadata["schema"].names,
+            }
+        )
+
+        type_collection.extra_fields
+
+        return type_collection
+
+    def add_theme_to_catalog(self, theme: fs.FileSelector):
+        theme_name = theme.path.split("=")[-1]
+        self.logger.info(f"Processing Theme: {theme_name}")
+        theme_path_selector = fs.FileSelector(theme.path)
+        theme_types = self.filesystem.get_file_info(theme_path_selector)
+
+        theme_catalog = pystac.Catalog(
+            id=theme_name, description=f"Overture's {theme_name} theme"
+        )
+
+        for theme_type in theme_types:
+            type_name = theme_type.path.split("=")[-1]
+            self.logger.info(f"Found Type: {type_name}")
+
+            theme_catalog.add_child(self.process_type(theme_type))
+
+        self.release_catalog.add_child(theme_catalog)
 
 
-#    print("Theme Catalog: " + json.dumps(theme_catalog.to_dict(), indent=4))
+if __name__ == "__main__":
 
+    parser = argparse.ArgumentParser(
+        description="Generate a STAC Catalog for the latest Overture Maps Data."
+    )
 
-print("Generating release manifest for release " + release_version)
-release_path = "overturemaps-us-west-2/release/" + release_version
+    parser.add_argument(
+        "--release",
+        type=str,
+        required=True,
+        help="The release version of the data.",
+    )
 
+    parser.add_argument(
+        "--schema", type=str, required=True, help="The schema version to use."
+    )
 
-### Look in a specific release to obtain the themes themselves
-filesystem = fs.S3FileSystem(anonymous=True, region="us-west-2")
+    parser.add_argument(
+        "--output",
+        type=str,
+        required=False,
+        default="stac",
+        help="The schema version to use.",
+    )
 
-release_path_selector = fs.FileSelector(release_path)
+    parser.add_argument(
+        "--parquet",
+        type=str,
+        required=False,
+        help="The schema version to use.",
+    )
 
-themes_info = filesystem.get_file_info(release_path_selector)
+    args = parser.parse_args()
 
-theme_info = []
+    release = OvertureRelease(
+        release=args.release, schema=args.schema, parquet_output=args.parquet
+    )
 
-release_catalog = pystac.Catalog(
-    id="release",
-    href="./build",
-    description="This catalog is for the geoparquet data released as version "
-    + release_version,
-    stac_extensions=["https://stac-extensions.github.io/storage/v2.0.0/schema.json"],
-)
+    release.make_release_catalog()
 
-schema_version = get_schema_version(release_version)
+    release.get_release_themes()
 
-release_catalog.extra_fields = {
-    "release:version": release_version,
-    "schema:version": schema_version,
-    "schema:tag": "https://github.com/OvertureMaps/schema/releases/tag/v"
-    + schema_version,
-    "storage:schemes": {
-        "aws": {
-            "type": "aws-s3",
-            "platform": "https://{bucket}-{region}.s3.amazonaws.com/release/{release_version}",
-            "release_version": release_version,
-            "bucket": "overturemaps",
-            "region": "us-west-2",
-            "requester_pays": "false",
-        },
-        "azure": {
-            "type": "ms-azure",
-            "platform": "https://{bucket}-{region}.blob.core.windows.net/release/{release_version}",
-            "release_version": release_version,
-            "bucket": "overturemaps",
-            "region": "westus2",
-            "requester_pays": "false",
-        },
-    },
-}
+    for theme in release.themes:
+        release.add_theme_to_catalog(theme)
 
-print("Catalog href: " + release_root + release_version)
-for theme in themes_info:
-    theme_name = parse_name(theme.path)
-    # for now just short-circuit the process to work on addresses
-#    if theme_name == 'addresses' or theme_name == 'places':
-    theme_info.append(process_theme(release_catalog, filesystem, theme, theme_name))
-
-release_catalog.normalize_and_save(
-    root_href="./build", catalog_type=pystac.CatalogType.SELF_CONTAINED
-)
-
-
-# #Geoparquet-stac generation
-# # Drill down into the item collection (overture type) level, and iterate over each item 
-# # each item will get one row in the geoparquet. 
-# theme_catalogs = list(filter(lambda link: link.rel ==  'child', release_catalog.links)) 
-
-# for theme_catalog in theme_catalogs: 
-#     type_catalogs = list(filter(lambda link: link.rel == 'child', theme_catalog._target_object.links))
-
-#     for type_catalog in type_catalogs: 
-#         type = type_catalog._target_object
-#         for item_link in type.links :
-#             if item_link.rel != 'item':
-#                 continue;
-#             item = item_link._target_object
-#             print (f"Item id: {item.id}")
+    release.release_catalog.normalize_and_save(
+        root_href=args.output, catalog_type=pystac.CatalogType.SELF_CONTAINED
+    )
