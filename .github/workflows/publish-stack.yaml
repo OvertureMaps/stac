@@ -42,7 +42,7 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install requirements.txt
+          pip install -r requirements.txt
 
       - name: Run STAC Builder
         run: python3 gen-data-release-stac.py --release=${{ github.event.inputs.release }} --schema=${{ github.event.inputs.schema }} --parquet=parquet --output=release
