@@ -45,13 +45,11 @@ jobs:
           pip install requirements.txt
 
       - name: Run STAC Builder
-        run: python3 gen-data-release-stac.py --release=${{ github.event.inputs.release }} --schema=${{ github.event.inputs.schema }} --parquet=stac-parquet --output=stac
+        run: python3 gen-data-release-stac.py --release=${{ github.event.inputs.release }} --schema=${{ github.event.inputs.schema }} --parquet=parquet --output=release
 
       - name: Copy output to publish directory
         run: |
-          mkdir release
-          cp stac release/stac
-          cp stac-parquet release/stac-parquet
+          mv parquet release/parquet
 
       - name: Setup Pages
         uses: actions/configure-pages@v5
