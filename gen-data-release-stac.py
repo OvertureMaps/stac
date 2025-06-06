@@ -308,7 +308,7 @@ if __name__ == "__main__":
 
     release.get_release_themes()
 
-    for theme in release.themes[4:5]:
+    for theme in release.themes:
         release.add_theme_to_catalog(theme)
 
     release.release_catalog.normalize_and_save(
