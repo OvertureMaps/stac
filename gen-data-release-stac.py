@@ -43,13 +43,18 @@ class OvertureRelease:
     logger.setLevel(logging.DEBUG)
 
     def __init__(
-        self, release: str, schema: str, parquet_output: Optional[str] = "parquet"
+        self,
+        release: str,
+        schema: str,
+        parquet_output: Optional[str],
+        manifest: Optional[str],
     ):
         self.release = release
         self.schema = schema
         self.release_path = (f"{S3_RELEASE_PATH}/{self.release}",)
         self.parquet_output = parquet_output
         self.filesystem = fs.S3FileSystem(anonymous=True, region=S3_REGION)
+        self.manifest = f"{manifest}.geojson"
 
         self.release_datetime = datetime.strptime(release.split(".")[0], "%Y-%m-%d")
 
@@ -88,21 +93,24 @@ class OvertureRelease:
         release_path_selector = fs.FileSelector(f"{S3_BUCKET}/release/{self.release}")
         self.themes = self.filesystem.get_file_info(release_path_selector)
 
-    def create_stac_item_from_fragment(self, fragment, schema=None):
+        if self.manifest is not None:
+            self.manifest_items = []
+
+    def create_stac_item_from_fragment(self, fragment, schema=None, type_name=None):
 
         if schema is None:
             schema = fragment.metadata.schema.to_arrow_schema()
-        
+
         filename = fragment.path.split("/")[-1]
         rel_path = ("/").join(fragment.path.split("/")[1:])
-        
+
         self.logger.info(f"Creating STAC item from: {filename}")
 
-        # Build bbox from metadata: 
+        # Build bbox from metadata:
         geo = json.loads(schema.metadata[b"geo"].decode("utf-8"))
 
         xmin, ymin, xmax, ymax = geo.get("columns").get("geometry").get("bbox")
-            
+
         geojson_bbox_geometry = {
             "type": "Polygon",
             "coordinates": [
@@ -124,11 +132,25 @@ class OvertureRelease:
             geometry=geojson_bbox_geometry,
             bbox=[xmin, ymin, xmax, ymax],
             properties={
-                'num_rows': fragment.count_rows(),
-                'num_row_groups': fragment.num_row_groups,
+                "num_rows": fragment.count_rows(),
+                "num_row_groups": fragment.num_row_groups,
             },
             datetime=self.release_datetime,
         )
+
+        if self.manifest is not None:
+            self.manifest_items.append(
+                {
+                    "type": "Feature",
+                    "properties": {
+                        "ovt_type": type_name,
+                        "rel_path": rel_path,
+                        # "num_rows": fragment.count_rows(),
+                        # "num_row_groups": fragment.num_row_groups,
+                    },
+                    "geometry": geojson_bbox_geometry,
+                }
+            )
 
         # Add GeoParquet from s3
         stac_item.add_asset(
@@ -163,7 +185,9 @@ class OvertureRelease:
         type_name = theme_type.path.split("=")[-1]
         self.logger.info(f"Opening Type: {type_name}")
 
-        type_dataset = ds.dataset(theme_type.path, filesystem=self.filesystem, format="parquet")
+        type_dataset = ds.dataset(
+            theme_type.path, filesystem=self.filesystem, format="parquet"
+        )
 
         items = []
         schema = None
@@ -171,11 +195,11 @@ class OvertureRelease:
 
             schema = fragment.metadata.schema.to_arrow_schema()
 
-            item = self.create_stac_item_from_fragment(fragment, schema)
-
-            items.append(
-                item
+            item = self.create_stac_item_from_fragment(
+                fragment, schema, type_name=type_name
             )
+
+            items.append(item)
 
         type_collection = pystac.Collection(
             id=type_name,
@@ -200,14 +224,16 @@ class OvertureRelease:
 
         type_collection.summaries = pystac.Summaries(
             {
-                "schema": json.loads(schema.metadata[b"geo"]).get("version") if schema is not None else None,
+                "schema": (
+                    json.loads(schema.metadata[b"geo"]).get("version")
+                    if schema is not None
+                    else None
+                ),
                 "columns": schema.names if schema is not None else None,
             }
         )
 
-        type_collection.extra_fields = {
-            "features" : type_dataset.count_rows()
-        }
+        type_collection.extra_fields = {"features": type_dataset.count_rows()}
 
         return type_collection
 
@@ -228,6 +254,7 @@ class OvertureRelease:
             theme_catalog.add_child(self.process_type(theme_type))
 
         self.release_catalog.add_child(theme_catalog)
+
 
 if __name__ == "__main__":
 
@@ -261,19 +288,35 @@ if __name__ == "__main__":
         help="The schema version to use.",
     )
 
+    parser.add_argument(
+        "--manifest",
+        type=str,
+        required=False,
+        help="Name of GeoJSON manifest file for this release",
+    )
+
     args = parser.parse_args()
 
     release = OvertureRelease(
-        release=args.release, schema=args.schema, parquet_output=args.parquet
+        release=args.release,
+        schema=args.schema,
+        parquet_output=args.parquet,
+        manifest=args.manifest,
     )
 
     release.make_release_catalog()
 
     release.get_release_themes()
 
-    for theme in release.themes:
+    for theme in release.themes[4:5]:
         release.add_theme_to_catalog(theme)
 
     release.release_catalog.normalize_and_save(
         root_href=args.output, catalog_type=pystac.CatalogType.SELF_CONTAINED
     )
+
+    if release.manifest is not None:
+        with open(f"{release.manifest}", "w") as f:
+            json.dump(
+                {"type": "FeatureCollection", "features": release.manifest_items}, f
+            )

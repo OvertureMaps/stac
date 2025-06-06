@@ -45,11 +45,12 @@ jobs:
           pip install -r requirements.txt
 
       - name: Run STAC Builder
-        run: python3 gen-data-release-stac.py --release=${{ github.event.inputs.release }} --schema=${{ github.event.inputs.schema }} --parquet=parquet --output=release
+        run: python3 gen-data-release-stac.py --release=${{ github.event.inputs.release }} --schema=${{ github.event.inputs.schema }} --parquet=parquet --output=release --manifest=manifest
 
       - name: Copy output to publish directory
         run: |
           mv parquet release/parquet
+          mv manifest.geojson release/manifest.geojson
 
       - name: Setup Pages
         uses: actions/configure-pages@v5
