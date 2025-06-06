@@ -51,6 +51,8 @@ class OvertureRelease:
         self.parquet_output = parquet_output
         self.filesystem = fs.S3FileSystem(anonymous=True, region=S3_REGION)
 
+        self.release_datetime = datetime.strptime(release.split(".")[0], "%Y-%m-%d")
+
     def make_release_catalog(self):
         self.release_catalog = pystac.Catalog(
             id="release",
@@ -82,69 +84,98 @@ class OvertureRelease:
             },
         }
 
-    def fetch_geoparquet_metadata(self, filepath):
-        dataset = ds.dataset(filepath, filesystem=self.filesystem)
-
-        geo_metadata = dataset.schema.metadata[b"geo"]
-        return {
-            "geo": json.loads(geo_metadata.decode("utf-8")),
-            "schema": dataset.schema,
-        }
-
     def get_release_themes(self):
         release_path_selector = fs.FileSelector(f"{S3_BUCKET}/release/{self.release}")
         self.themes = self.filesystem.get_file_info(release_path_selector)
 
+    def create_stac_item_from_fragment(self, fragment, schema=None):
+
+        if schema is None:
+            schema = fragment.metadata.schema.to_arrow_schema()
+        
+        filename = fragment.path.split("/")[-1]
+        rel_path = ("/").join(fragment.path.split("/")[1:])
+        
+        self.logger.info(f"Creating STAC item from: {filename}")
+
+        # Build bbox from metadata: 
+        geo = json.loads(schema.metadata[b"geo"].decode("utf-8"))
+
+        xmin, ymin, xmax, ymax = geo.get("columns").get("geometry").get("bbox")
+            
+        geojson_bbox_geometry = {
+            "type": "Polygon",
+            "coordinates": [
+                [
+                    [xmin, ymin],
+                    [xmax, ymin],
+                    [xmax, ymax],
+                    [xmin, ymax],
+                    [xmin, ymin],
+                ]
+            ],
+        }
+
+        filename = fragment.path.split("/")[-1]
+        rel_path = ("/").join(fragment.path.split("/")[1:])
+
+        stac_item = pystac.Item(
+            id=filename.split("-")[1],
+            geometry=geojson_bbox_geometry,
+            bbox=[xmin, ymin, xmax, ymax],
+            properties={
+                'num_rows': fragment.count_rows(),
+                'num_row_groups': fragment.num_row_groups,
+            },
+            datetime=self.release_datetime,
+        )
+
+        # Add GeoParquet from s3
+        stac_item.add_asset(
+            key="aws-s3",
+            asset=pystac.Asset(
+                href=f"s3://{fragment.path}",
+                media_type="application/vnd.apache.parquet",  # application/x-parquet ?
+            ),
+        )
+
+        # Add s3 http link
+        stac_item.add_asset(
+            key="aws-https",
+            asset=pystac.Asset(
+                href=f"https://overturemaps-us-west-2.s3.us-west-2.amazonaws.com/{rel_path}",
+                media_type="application/vnd.apache.parquet",  # application/x-parquet ?
+            ),
+        )
+
+        # Add Azure https link
+        stac_item.add_asset(
+            key="azure-https",
+            asset=pystac.Asset(
+                href=f"https://overturemapswestus2.blob.core.windows.net/{rel_path}",
+                media_type="application/vnd.apache.parquet",  # application/x-parquet ?
+            ),
+        )
+
+        return stac_item
+
     def process_type(self, theme_type: fs.FileInfo):
         type_name = theme_type.path.split("=")[-1]
-        self.logger.info(f"Processing Type: {type_name}")
-        theme_type_path_selector = fs.FileSelector(theme_type.path)
+        self.logger.info(f"Opening Type: {type_name}")
 
-        type_files = self.filesystem.get_file_info(theme_type_path_selector)
+        type_dataset = ds.dataset(theme_type.path, filesystem=self.filesystem, format="parquet")
 
-        parquet_metadata = {}
         items = []
+        schema = None
+        for fragment in type_dataset.get_fragments():
 
-        for type_file in type_files:
-            self.logger.info(f"Found file: {type_file.path}")
+            schema = fragment.metadata.schema.to_arrow_schema()
 
-            filename = type_file.path.split("/")[-1]
+            item = self.create_stac_item_from_fragment(fragment, schema)
 
-            parquet_metadata = self.fetch_geoparquet_metadata(type_file.path)
-
-            xmin, ymin, xmax, ymax = parquet_metadata["geo"]["columns"]["geometry"][
-                "bbox"
-            ]
-            geojson_box_geometry = {
-                "type": "Polygon",
-                "coordinates": [
-                    [
-                        [xmin, ymin],
-                        [xmax, ymin],
-                        [xmax, ymax],
-                        [xmin, ymax],
-                        [xmin, ymin],
-                    ]
-                ],
-            }
-
-            stac_item = pystac.Item(
-                id=filename.split("-")[1],
-                geometry=geojson_box_geometry,
-                bbox=[xmin, ymin, xmax, ymax],
-                properties={},
-                datetime=datetime.strptime(self.release.split(".")[0], "%Y-%m-%d"),
-                href="s3://" + type_file.path,
+            items.append(
+                item
             )
-
-            stac_item.add_asset(
-                key="parquet-" + filename,
-                asset=pystac.Asset(
-                    href="./" + filename,
-                    media_type="application/vnd.apache.parquet",
-                ),
-            )
-            items.append(stac_item)
 
         type_collection = pystac.Collection(
             id=type_name,
@@ -169,12 +200,14 @@ class OvertureRelease:
 
         type_collection.summaries = pystac.Summaries(
             {
-                "schema": parquet_metadata["geo"]["version"],
-                "columns": parquet_metadata["schema"].names,
+                "schema": json.loads(schema.metadata[b"geo"]).get("version") if schema is not None else None,
+                "columns": schema.names if schema is not None else None,
             }
         )
 
-        type_collection.extra_fields
+        type_collection.extra_fields = {
+            "features" : type_dataset.count_rows()
+        }
 
         return type_collection
 
@@ -195,7 +228,6 @@ class OvertureRelease:
             theme_catalog.add_child(self.process_type(theme_type))
 
         self.release_catalog.add_child(theme_catalog)
-
 
 if __name__ == "__main__":
 
