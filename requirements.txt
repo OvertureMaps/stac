@@ -1,3 +1,4 @@
 pystac>=1.8.4
 pyarrow>=14.0.1
 stac-geoparquet>=0.7.0
+PyYAML>=6.0.2
