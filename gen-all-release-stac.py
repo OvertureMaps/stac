@@ -63,7 +63,7 @@ if __name__ == "__main__":
     public_releases = [r for r in public_releases if 'alpha' not in r.path and 'beta' not in r.path]
 
     # Only use the latest 5 releases
-    for idx, release_info in enumerate(list(reversed(sorted(public_releases, key=lambda p: p.path)))[:5]):
+    for idx, release_info in enumerate(list(reversed(sorted(public_releases, key=lambda p: p.path)))):
         release = release_info.path.split("/")[-1]
         print(release)
 
@@ -75,16 +75,13 @@ if __name__ == "__main__":
 
         this_release.build_release_catalog()
 
-        if idx==0:
-            overture_releases_catalog.add_child(
-                child=this_release.release_catalog,
-                title='latest'
-            )
-        
-        overture_releases_catalog.add_child(
+        child = overture_releases_catalog.add_child(
             child=this_release.release_catalog,
-            title=release
+            title='release'
         )
+
+        if idx==0:
+            child.extra_fields = {'latest':True}
 
     overture_releases_catalog.normalize_and_save(
         root_href=str(output),
