@@ -1,10 +1,8 @@
-import argparse
 import json
+
 import logging
 from datetime import datetime
 from pathlib import Path
-
-from typing import Optional
 
 import pyarrow as pa
 import pyarrow.compute as pc
@@ -13,11 +11,6 @@ import pyarrow.fs as fs
 import pyarrow.parquet as pq
 import pystac
 import stac_geoparquet
-
-
-S3_RELEASE_PATH = "s3://overturemaps-us-west-2/release"
-S3_BUCKET = "overturemaps-us-west-2"
-S3_REGION = "us-west-2"
 
 TYPE_LICENSE_MAP = {
     "bathymetry": "CC0-1.0",
@@ -36,32 +29,41 @@ TYPE_LICENSE_MAP = {
     "address": "Multiple Open Licenses",
 }
 
-
 class OvertureRelease:
     logging.basicConfig()
     logger = logging.getLogger("pystac")
-    logger.setLevel(logging.DEBUG)
+    logger.setLevel(logging.INFO)
 
     def __init__(
         self,
         release: str,
         schema: str,
-        parquet_output: Optional[str],
-        manifest: Optional[str],
+        output: Path,
+        s3_release_path: str = "s3://overturemaps-us-west-2/release",
+        s3_region: str = "us-west-2",
+        debug: bool = False
     ):
+        self.debug = debug
+        if self.debug:
+            self.logger.setLevel(logging.DEBUG)
+        
         self.release = release
         self.schema = schema
-        self.release_path = (f"{S3_RELEASE_PATH}/{self.release}",)
-        self.parquet_output = parquet_output
-        self.filesystem = fs.S3FileSystem(anonymous=True, region=S3_REGION)
-        self.manifest = f"{manifest}.geojson"
+        self.release_path = (f"{s3_release_path}/{self.release}")
+        self.filesystem = fs.S3FileSystem(anonymous=True, region=s3_region)
+
+        self.manifest_items = []
+        self.type_collections = {}
+
+        self.output = Path(output, self.release)
+        self.output.mkdir(parents=True, exist_ok=True)
+    
 
         self.release_datetime = datetime.strptime(release.split(".")[0], "%Y-%m-%d")
 
     def make_release_catalog(self):
         self.release_catalog = pystac.Catalog(
-            id="release",
-            href="./build",
+            id=self.release,
             description=f"This catalog is for the geoparquet data released in version {self.release}",
             stac_extensions=[
                 "https://stac-extensions.github.io/storage/v2.0.0/schema.json"
@@ -90,11 +92,8 @@ class OvertureRelease:
         }
 
     def get_release_themes(self):
-        release_path_selector = fs.FileSelector(f"{S3_BUCKET}/release/{self.release}")
+        release_path_selector = fs.FileSelector(self.release_path.replace("s3://", ""))
         self.themes = self.filesystem.get_file_info(release_path_selector)
-
-        if self.manifest is not None:
-            self.manifest_items = []
 
     def create_stac_item_from_fragment(self, fragment, schema=None, type_name=None):
 
@@ -138,19 +137,16 @@ class OvertureRelease:
             datetime=self.release_datetime,
         )
 
-        if self.manifest is not None:
-            self.manifest_items.append(
-                {
-                    "type": "Feature",
-                    "properties": {
-                        "ovt_type": type_name,
-                        "rel_path": rel_path,
-                        # "num_rows": fragment.count_rows(),
-                        # "num_row_groups": fragment.num_row_groups,
-                    },
-                    "geometry": geojson_bbox_geometry,
-                }
-            )
+        self.manifest_items.append(
+            {
+                "type": "Feature",
+                "properties": {
+                    "ovt_type": type_name,
+                    "rel_path": rel_path,
+                },
+                "geometry": geojson_bbox_geometry,
+            }
+        )
 
         # Add GeoParquet from s3
         stac_item.add_asset(
@@ -189,9 +185,10 @@ class OvertureRelease:
             theme_type.path, filesystem=self.filesystem, format="parquet"
         )
 
-        items = []
+        self.type_collections[type_name] = []
         schema = None
-        for fragment in type_dataset.get_fragments():
+        
+        for fragment in (list(type_dataset.get_fragments())[:1] if self.debug else type_dataset.get_fragments()):
 
             schema = fragment.metadata.schema.to_arrow_schema()
 
@@ -199,28 +196,19 @@ class OvertureRelease:
                 fragment, schema, type_name=type_name
             )
 
-            items.append(item)
+            self.type_collections[type_name].append(item)
 
         type_collection = pystac.Collection(
             id=type_name,
             description=f"Overture's {type_name} collection",
             extent=pystac.Extent(
-                spatial=pystac.SpatialExtent(bboxes=[i.bbox for i in items]),
+                spatial=pystac.SpatialExtent(bboxes=[i.bbox for i in self.type_collections[type_name]]),
                 temporal=pystac.TemporalExtent(intervals=[None, None]),
             ),
             license=TYPE_LICENSE_MAP.get(type_name),
         )
 
-        type_collection.add_items(items)
-
-        if self.parquet_output is not None:
-            output_path = Path(self.parquet_output)
-            output_path.mkdir(parents=True, exist_ok=True)
-
-            stac_geoparquet.arrow.to_parquet(
-                table=stac_geoparquet.arrow.parse_stac_items_to_arrow(items),
-                output_path=f"{output_path}/{type_name}.parquet",
-            )
+        type_collection.add_items(self.type_collections[type_name])
 
         type_collection.summaries = pystac.Summaries(
             {
@@ -233,7 +221,8 @@ class OvertureRelease:
             }
         )
 
-        type_collection.extra_fields = {"features": type_dataset.count_rows()}
+        if not self.debug:
+            type_collection.extra_fields = {"features": type_dataset.count_rows()}
 
         return type_collection
 
@@ -253,70 +242,31 @@ class OvertureRelease:
 
             theme_catalog.add_child(self.process_type(theme_type))
 
-        self.release_catalog.add_child(theme_catalog)
+            # Ensure 
+            theme_path = Path(self.output, theme_name)
+            theme_path.mkdir(parents=True, exist_ok=True)
 
+            # Write GeoParquet Collection
+            stac_geoparquet.arrow.to_parquet(
+                table=stac_geoparquet.arrow.parse_stac_items_to_arrow(self.type_collections[type_name]),
+                output_path=f"{theme_path}/{type_name}.parquet",
+            )
 
-if __name__ == "__main__":
+        self.release_catalog.add_child(
+            child=theme_catalog,
+            title=theme_name
+        )
+        
 
-    parser = argparse.ArgumentParser(
-        description="Generate a STAC Catalog for the latest Overture Maps Data."
-    )
+    def build_release_catalog(self):
+        self.make_release_catalog()
 
-    parser.add_argument(
-        "--release",
-        type=str,
-        required=True,
-        help="The release version of the data.",
-    )
+        self.get_release_themes()
 
-    parser.add_argument(
-        "--schema", type=str, required=True, help="The schema version to use."
-    )
+        for theme in self.themes:
+            self.add_theme_to_catalog(theme)
 
-    parser.add_argument(
-        "--output",
-        type=str,
-        required=False,
-        default="stac",
-        help="The schema version to use.",
-    )
-
-    parser.add_argument(
-        "--parquet",
-        type=str,
-        required=False,
-        help="The schema version to use.",
-    )
-
-    parser.add_argument(
-        "--manifest",
-        type=str,
-        required=False,
-        help="Name of GeoJSON manifest file for this release",
-    )
-
-    args = parser.parse_args()
-
-    release = OvertureRelease(
-        release=args.release,
-        schema=args.schema,
-        parquet_output=args.parquet,
-        manifest=args.manifest,
-    )
-
-    release.make_release_catalog()
-
-    release.get_release_themes()
-
-    for theme in release.themes:
-        release.add_theme_to_catalog(theme)
-
-    release.release_catalog.normalize_and_save(
-        root_href=args.output, catalog_type=pystac.CatalogType.SELF_CONTAINED
-    )
-
-    if release.manifest is not None:
-        with open(f"{release.manifest}", "w") as f:
+        with open(f"{self.output}/manifest.geojson", "w") as f:
             json.dump(
-                {"type": "FeatureCollection", "features": release.manifest_items}, f
+                {"type": "FeatureCollection", "features": self.manifest_items}, f
             )

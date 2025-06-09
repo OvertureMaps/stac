@@ -2,22 +2,16 @@
 
 This repo serves two functions:
 
-1) to generate STAC Catalogs for a single overture release.
+1) Generate STACs for all public Overture releases
 2) To generate download manifests for the explore site.
 
-## To generate a STAC Catalog:
+## To generate the STAC:
 
-The required arguments are `--release=<RELEASE>` and `--schema=<VERSION>` (without the leading v), for example:
-
-The script will trawl through the public release folder and emit the STAC catalog contents in the `stac` directory.
-
-Optionally, specify `--output=<PATH>` to write somewhere other than `stac`, and `--parquet=<PATH>` will write a per-type StacGeoParquet file at that path.
-
-Example:
 ```bash
-python3 gen-data-release-stac.py --release=2025-05-21.0 --schema=1.9.0 --output=stac --parquet=stac-parquet
+python3 gen-all-release-stac.py`
 ```
-Writes a complete STAC catalog to the `stac` directory, and a per-type StacGeoParquet file to the the `stac-parquet` directory.
+
+This will generate a complete catalog for the last 5 public releases (trial) at the `public_releases` directory.
 
 
 ## To generate the explore site manifest:
