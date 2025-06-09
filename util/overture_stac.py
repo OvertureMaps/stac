@@ -57,11 +57,13 @@ class OvertureRelease:
 
         self.output = Path(output, self.release)
         self.output.mkdir(parents=True, exist_ok=True)
-    
 
         self.release_datetime = datetime.strptime(release.split(".")[0], "%Y-%m-%d")
 
     def make_release_catalog(self):
+        
+        self.logger.info(f"Creating Release Catalog for {self.release} with schema {self.schema}")
+
         self.release_catalog = pystac.Catalog(
             id=self.release,
             description=f"This catalog is for the geoparquet data released in version {self.release}",
