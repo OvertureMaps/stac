@@ -4,6 +4,8 @@ import logging
 from datetime import datetime
 from pathlib import Path
 
+from typing import Optional
+
 import pyarrow as pa
 import pyarrow.compute as pc
 import pyarrow.dataset as ds
@@ -29,6 +31,7 @@ TYPE_LICENSE_MAP = {
     "address": "Multiple Open Licenses",
 }
 
+
 class OvertureRelease:
     logging.basicConfig()
     logger = logging.getLogger("pystac")
@@ -41,15 +44,15 @@ class OvertureRelease:
         output: Path,
         s3_release_path: str = "s3://overturemaps-us-west-2/release",
         s3_region: str = "us-west-2",
-        debug: bool = False
+        debug: bool = False,
     ):
         self.debug = debug
         if self.debug:
             self.logger.setLevel(logging.DEBUG)
-        
+
         self.release = release
         self.schema = schema
-        self.release_path = (f"{s3_release_path}/{self.release}")
+        self.release_path = f"{s3_release_path}/{self.release}"
         self.filesystem = fs.S3FileSystem(anonymous=True, region=s3_region)
 
         self.manifest_items = []
@@ -60,13 +63,16 @@ class OvertureRelease:
 
         self.release_datetime = datetime.strptime(release.split(".")[0], "%Y-%m-%d")
 
-    def make_release_catalog(self):
-        
-        self.logger.info(f"Creating Release Catalog for {self.release} with schema {self.schema}")
+    def make_release_catalog(self, title: Optional[str]):
+
+        self.logger.info(
+            f"Creating Release Catalog for {self.release} with schema {self.schema}"
+        )
 
         self.release_catalog = pystac.Catalog(
             id=self.release,
-            description=f"This catalog is for the geoparquet data released in version {self.release}",
+            title=title if title is not None else self.release,
+            description=f"Geoparquet data released in the Overture {self.release} release",
             stac_extensions=[
                 "https://stac-extensions.github.io/storage/v2.0.0/schema.json"
             ],
@@ -189,8 +195,12 @@ class OvertureRelease:
 
         self.type_collections[type_name] = []
         schema = None
-        
-        for fragment in (list(type_dataset.get_fragments())[:1] if self.debug else type_dataset.get_fragments()):
+
+        for fragment in (
+            list(type_dataset.get_fragments())[:1]
+            if self.debug
+            else type_dataset.get_fragments()
+        ):
 
             schema = fragment.metadata.schema.to_arrow_schema()
 
@@ -204,7 +214,9 @@ class OvertureRelease:
             id=type_name,
             description=f"Overture's {type_name} collection",
             extent=pystac.Extent(
-                spatial=pystac.SpatialExtent(bboxes=[i.bbox for i in self.type_collections[type_name]]),
+                spatial=pystac.SpatialExtent(
+                    bboxes=[i.bbox for i in self.type_collections[type_name]]
+                ),
                 temporal=pystac.TemporalExtent(intervals=[None, None]),
             ),
             license=TYPE_LICENSE_MAP.get(type_name),
@@ -244,24 +256,22 @@ class OvertureRelease:
 
             theme_catalog.add_child(self.process_type(theme_type))
 
-            # Ensure 
+            # Ensure
             theme_path = Path(self.output, theme_name)
             theme_path.mkdir(parents=True, exist_ok=True)
 
             # Write GeoParquet Collection
             stac_geoparquet.arrow.to_parquet(
-                table=stac_geoparquet.arrow.parse_stac_items_to_arrow(self.type_collections[type_name]),
+                table=stac_geoparquet.arrow.parse_stac_items_to_arrow(
+                    self.type_collections[type_name]
+                ),
                 output_path=f"{theme_path}/{type_name}.parquet",
             )
 
-        self.release_catalog.add_child(
-            child=theme_catalog,
-            title=theme_name
-        )
-        
+        self.release_catalog.add_child(child=theme_catalog, title=theme_name)
 
-    def build_release_catalog(self):
-        self.make_release_catalog()
+    def build_release_catalog(self, title):
+        self.make_release_catalog(title=title)
 
         self.get_release_themes()
 
@@ -269,6 +279,4 @@ class OvertureRelease:
             self.add_theme_to_catalog(theme)
 
         with open(f"{self.output}/manifest.geojson", "w") as f:
-            json.dump(
-                {"type": "FeatureCollection", "features": self.manifest_items}, f
-            )
+            json.dump({"type": "FeatureCollection", "features": self.manifest_items}, f)

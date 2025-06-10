@@ -82,6 +82,8 @@ if __name__ == "__main__":
         release = release_info.path.split("/")[-1]
         print(release)
 
+        title = f"{release} Overture Release" if idx > 0 else "Latest Overture Release"
+
         this_release = OvertureRelease(
             release=release,
             schema=schema_version_mapping.get(release),
@@ -89,10 +91,10 @@ if __name__ == "__main__":
             debug=args.debug,
         )
 
-        this_release.build_release_catalog()
+        this_release.build_release_catalog(title=title)
 
         child = overture_releases_catalog.add_child(
-            child=this_release.release_catalog, title=release
+            child=this_release.release_catalog, title=title
         )
 
         if idx == 0:
