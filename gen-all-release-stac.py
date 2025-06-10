@@ -1,8 +1,9 @@
 import argparse
-import pyarrow.fs as fs
-import yaml
-import pystac
 from pathlib import Path
+
+import pyarrow.fs as fs
+import pystac
+import yaml
 
 from util.overture_stac import OvertureRelease
 
@@ -37,9 +38,16 @@ if __name__ == "__main__":
         "--schema-versions",
         type=str,
         default="overture_releases.yaml",
-        help="Path to the Schema Version <> Release mapping yaml file."
+        help="Path to the Schema Version <> Release mapping yaml file.",
     )
-    
+
+    parser.add_argument(
+        "--debug",
+        action="store_true",
+        default=False,
+        help="Debug flag to only generate 1 item per collection",
+    )
+
     args = parser.parse_args()
 
     filesystem = fs.S3FileSystem(anonymous=True, region=args.s3_region)
@@ -48,8 +56,8 @@ if __name__ == "__main__":
 
     schema_version_mapping = dict()
 
-    for _ in yaml.safe_load(open(args.schema_versions, 'r')):
-        schema_version_mapping[_.get('release')] = _.get('schema')
+    for _ in yaml.safe_load(open(args.schema_versions, "r")):
+        schema_version_mapping[_.get("release")] = _.get("schema")
 
     overture_releases_catalog = pystac.Catalog(
         id="Overture Releases",
@@ -60,10 +68,17 @@ if __name__ == "__main__":
     output.mkdir(parents=True, exist_ok=True)
 
     # Just GA releases
-    public_releases = [r for r in public_releases if 'alpha' not in r.path and 'beta' not in r.path]
+    public_releases = [
+        r for r in public_releases if "alpha" not in r.path and "beta" not in r.path
+    ]
 
     # Only use the latest 5 releases
-    for idx, release_info in enumerate(list(reversed(sorted(public_releases, key=lambda p: p.path)))[:5]):
+
+    # How many releases to go back?
+    limit = 5 if not args.debug else 2
+    for idx, release_info in enumerate(
+        list(reversed(sorted(public_releases, key=lambda p: p.path)))[:limit]
+    ):
         release = release_info.path.split("/")[-1]
         print(release)
 
@@ -71,20 +86,20 @@ if __name__ == "__main__":
             release=release,
             schema=schema_version_mapping.get(release),
             output=output,
+            debug=args.debug,
         )
 
         this_release.build_release_catalog()
 
         child = overture_releases_catalog.add_child(
-            child=this_release.release_catalog,
-            title=release
+            child=this_release.release_catalog, title=release
         )
 
-        if idx==0:
-            child.extra_fields = {'latest':True}
-            this_release.release_catalog.extra_fields['latest'] = True
+        if idx == 0:
+            child.extra_fields = {"latest": True}
+            this_release.release_catalog.extra_fields["latest"] = True
+            overture_releases_catalog.extra_fields = {"latest": release}
 
     overture_releases_catalog.normalize_and_save(
-        root_href=str(output),
-        catalog_type=pystac.CatalogType.SELF_CONTAINED
+        root_href=str(output), catalog_type=pystac.CatalogType.SELF_CONTAINED
     )
