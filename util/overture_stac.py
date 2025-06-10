@@ -260,14 +260,6 @@ class OvertureRelease:
             theme_path = Path(self.output, theme_name)
             theme_path.mkdir(parents=True, exist_ok=True)
 
-            # Write GeoParquet Collection
-            stac_geoparquet.arrow.to_parquet(
-                table=stac_geoparquet.arrow.parse_stac_items_to_arrow(
-                    self.type_collections[type_name]
-                ),
-                output_path=f"{theme_path}/{type_name}.parquet",
-            )
-
         self.release_catalog.add_child(child=theme_catalog, title=theme_name)
 
     def build_release_catalog(self, title):
@@ -280,3 +272,13 @@ class OvertureRelease:
 
         with open(f"{self.output}/manifest.geojson", "w") as f:
             json.dump({"type": "FeatureCollection", "features": self.manifest_items}, f)
+
+        # Write GeoParquet Collections
+        all_items = []
+        for ovt_type, items in self.type_collections.items():
+            all_items += items
+
+        stac_geoparquet.arrow.to_parquet(
+            table=stac_geoparquet.arrow.parse_stac_items_to_arrow(all_items),
+            output_path=f"{self.output}/collections.parquet",
+        )
