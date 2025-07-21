@@ -79,7 +79,7 @@ if __name__ == "__main__":
 
     # In the future, the bucket will be pruned of old releases and we'll iterate over the entire bucket contents
     # How many releases to go back?
-    limit = 3 if args.debug else 2
+    limit = 4
 
     for idx, release_info in enumerate(
         list(reversed(sorted(public_releases, key=lambda p: p.path)))[:limit]
