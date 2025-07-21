@@ -6,11 +6,8 @@ from pathlib import Path
 
 from typing import Optional
 
-import pyarrow as pa
-import pyarrow.compute as pc
 import pyarrow.dataset as ds
 import pyarrow.fs as fs
-import pyarrow.parquet as pq
 import pystac
 import stac_geoparquet
 
@@ -153,6 +150,7 @@ class OvertureRelease:
                     "rel_path": rel_path,
                 },
                 "geometry": geojson_bbox_geometry,
+                "bbox": [xmin, ymin, xmax, ymax],
             }
         )
 
@@ -251,9 +249,6 @@ class OvertureRelease:
         )
 
         for theme_type in theme_types:
-            type_name = theme_type.path.split("=")[-1]
-            self.logger.info(f"Found Type: {type_name}")
-
             theme_catalog.add_child(self.process_type(theme_type))
 
             # Ensure
