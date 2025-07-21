@@ -10,21 +10,7 @@ from util.overture_stac import OvertureRelease
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(
-        description="Generate a STAC Catalog for Overture Maps Data from a Public S3 Bucket."
-    )
-
-    parser.add_argument(
-        "--releases_path",
-        type=str,
-        default="s3://overturemaps-us-west-2/release",
-        help="The release version of the data.",
-    )
-
-    parser.add_argument(
-        "--s3_region",
-        type=str,
-        default="us-west-2",
-        help="The release version of the data.",
+        description="Generate a STAC Index for Overture Maps Data from the public release bucket."
     )
 
     parser.add_argument(
@@ -50,13 +36,32 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    filesystem = fs.S3FileSystem(anonymous=True, region=args.s3_region)
-    public_releases_selector = fs.FileSelector(args.releases_path.replace("s3://", ""))
-    public_releases = filesystem.get_file_info(public_releases_selector)
+    filesystem = fs.S3FileSystem(anonymous=True, region="us-west-2")
+    public_releases = filesystem.get_file_info(
+        fs.FileSelector("overturemaps-us-west-2/release")
+    )
 
     schema_version_mapping = dict()
 
-    for _ in yaml.safe_load(open(args.schema_versions, "r")):
+    # From https://labs.overturemaps.org/data/overture_releases.yaml — TODO: Where should this live / is it a CDP variable?
+    for _ in yaml.safe_load(
+        """
+- schema: "1.10.0"
+  release: "2025-06-25.0"
+- schema: "1.9.0"
+  release: "2025-05-21.0"
+- schema: "1.8.0"
+  release: "2025-04-23.0"
+- schema: "1.7.0"
+  release: "2025-03-19.1"
+- schema: "1.7.0"
+  release: "2025-03-19.0"
+- schema: "1.6.0"
+  release: "2025-02-19.0"
+- schema: "1.5.0"
+  release: "2025-01-22.0" 
+"""
+    ):
         schema_version_mapping[_.get("release")] = _.get("schema")
 
     overture_releases_catalog = pystac.Catalog(
@@ -72,10 +77,10 @@ if __name__ == "__main__":
         r for r in public_releases if "alpha" not in r.path and "beta" not in r.path
     ]
 
-    # Only use the latest 5 releases
-
+    # In the future, the bucket will be pruned of old releases and we'll iterate over the entire bucket contents
     # How many releases to go back?
-    limit = 5 if not args.debug else 2
+    limit = 4
+
     for idx, release_info in enumerate(
         list(reversed(sorted(public_releases, key=lambda p: p.path)))[:limit]
     ):
