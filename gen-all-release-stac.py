@@ -5,7 +5,7 @@ import pyarrow.fs as fs
 import pystac
 import yaml
 
-from util.overture_stac import OvertureRelease
+from src.overture_stac import OvertureRelease
 
 if __name__ == "__main__":
 
@@ -18,13 +18,6 @@ if __name__ == "__main__":
         type=str,
         default="public_releases",
         help="Output path for Catalog",
-    )
-
-    parser.add_argument(
-        "--schema-versions",
-        type=str,
-        default="overture_releases.yaml",
-        help="Path to the Schema Version <> Release mapping yaml file.",
     )
 
     parser.add_argument(
@@ -43,9 +36,13 @@ if __name__ == "__main__":
 
     schema_version_mapping = dict()
 
-    # From https://labs.overturemaps.org/data/overture_releases.yaml — TODO: Where should this live / is it a CDP variable?
+    # TODO: Where should this live / is it a CDP variable?
     for _ in yaml.safe_load(
         """
+- schema: "1.12.0"
+  release: "2025-08-20.0"
+- schema: "1.11.0"
+  release: "2025-07-23.0"
 - schema: "1.10.0"
   release: "2025-06-25.0"
 - schema: "1.9.0"
