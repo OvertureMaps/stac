@@ -20,7 +20,32 @@ The structure looks like this:
               | - 00002.json
 ```
 
-The top-level `catalog.json` intends to be a catalog of all publicly available Overture release.  a catalog of all publicly available 
+The top-level `catalog.json` intends to be a catalog of all publicly available Overture releases. Briefly, it looks like this: 
+```json
+{
+  "type": "Catalog",
+  "id": "Overture Releases",
+  "stac_version": "1.1.0",
+  "description": "All Overture Releases",
+  "links": [
+    {
+      "rel": "child",
+      "href": "./2025-07-23.0/catalog.json",
+      "type": "application/json",
+      "title": "Latest Overture Release",
+      "latest": true
+    },
+    {
+      "rel": "child",
+      "href": "./2025-06-25.0/catalog.json",
+      "type": "application/json",
+      "title": "2025-06-25.0 Overture Release"
+    },
+  ],
+  "latest": "2025-07-23.0"
+}
+```
+The top level catalog points to the `latest` Overture release, and this release also has the tag `latest:true`. 
 
 ## Additional Files
 At the root of each release, there are two additional files: `manifest.geojson` and `collections.parquet`
