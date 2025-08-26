@@ -40,6 +40,8 @@ if __name__ == "__main__":
     for _ in yaml.safe_load(
         """
 - schema: "1.11.0"
+  release: "2025-08-20.1"
+- schema: "1.11.0"
   release: "2025-08-20.0"
 - schema: "1.11.0"
   release: "2025-07-23.0"
