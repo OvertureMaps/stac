@@ -39,6 +39,8 @@ if __name__ == "__main__":
     # TODO: Where should this live / is it a CDP variable?
     for _ in yaml.safe_load(
         """
+- schema: "1.13.0"
+  release: "2025-10-25.0"
 - schema: "1.12.0"
   release: "2025-09-24.0"
 - schema: "1.11.0"
