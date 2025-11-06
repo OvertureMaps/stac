@@ -4,7 +4,6 @@ from pathlib import Path
 import pyarrow.fs as fs
 import pystac
 import yaml
-
 from src.overture_stac import OvertureRelease
 
 if __name__ == "__main__":
@@ -62,7 +61,7 @@ if __name__ == "__main__":
 - schema: "1.6.0"
   release: "2025-02-19.0"
 - schema: "1.5.0"
-  release: "2025-01-22.0" 
+  release: "2025-01-22.0"
 """
     ):
         schema_version_mapping[_.get("release")] = _.get("schema")
@@ -109,6 +108,8 @@ if __name__ == "__main__":
             child.extra_fields = {"latest": True}
             this_release.release_catalog.extra_fields["latest"] = True
             overture_releases_catalog.extra_fields = {"latest": release}
+
+    overture_releases_catalog.extra_fields["registry"] = {}
 
     overture_releases_catalog.normalize_and_save(
         root_href=str(output), catalog_type=pystac.CatalogType.SELF_CONTAINED
