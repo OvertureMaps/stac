@@ -1,4 +1,4 @@
-name: Publish STAC Catalog
+name: Publish STAC
 
 on:
   # Run daily at 6 AM UTC
