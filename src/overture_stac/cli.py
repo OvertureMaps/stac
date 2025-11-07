@@ -1,14 +1,17 @@
+"""Command-line interface for generating STAC catalogs."""
+
 import argparse
 from pathlib import Path
 
 import pyarrow.fs as fs
 import pystac
 import yaml
-from src.overture_stac import OvertureRelease
-from src.registry_manifest import RegistryManifest
+from overture_stac.overture_stac import OvertureRelease
+from overture_stac.registry_manifest import RegistryManifest
 
-if __name__ == "__main__":
 
+def main():
+    """Main entry point for the CLI."""
     parser = argparse.ArgumentParser(
         description="Generate a STAC Index for Overture Maps Data from the public release bucket."
     )
@@ -69,7 +72,7 @@ if __name__ == "__main__":
 
     overture_releases_catalog = pystac.Catalog(
         id="Overture Releases",
-        description=f"All Overture Releases",
+        description="All Overture Releases",
     )
 
     output = Path(args.output)
@@ -80,7 +83,8 @@ if __name__ == "__main__":
         r for r in public_releases if "alpha" not in r.path and "beta" not in r.path
     ]
 
-    # In the future, the bucket will be pruned of old releases and we'll iterate over the entire bucket contents
+    # In the future, the bucket will be pruned of old releases and
+    # we'll iterate over the entire bucket contents
     # How many releases to go back?
     limit = 4
 
@@ -117,3 +121,7 @@ if __name__ == "__main__":
     overture_releases_catalog.normalize_and_save(
         root_href=str(output), catalog_type=pystac.CatalogType.SELF_CONTAINED
     )
+
+
+if __name__ == "__main__":
+    main()
