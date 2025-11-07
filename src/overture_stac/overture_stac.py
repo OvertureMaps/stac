@@ -12,7 +12,7 @@ import stac_geoparquet
 
 TYPE_LICENSE_MAP = {
     "bathymetry": "CC0-1.0",
-    "land_cover": "	CC-BY-4.0",
+    "land_cover": "CC-BY-4.0",
     "infrastructure": "ODbL-1.0",
     "land": "ODbL-1.0",
     "land_use": "ODbL-1.0",
@@ -20,7 +20,7 @@ TYPE_LICENSE_MAP = {
     "building": "ODbL-1.0",
     "division": "ODbL-1.0",
     "division_area": "ODbL-1.0",
-    "division_bopundary": "ODbL-1.0",
+    "division_boundary": "ODbL-1.0",
     "segment": "ODbL-1.0",
     "connector": "ODbL-1.0",
     "place": "CDLA-Permissive-2.0",
