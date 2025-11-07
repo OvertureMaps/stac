@@ -51,7 +51,6 @@ class RegistryManifest:
 
         # Process each parquet file
         for file_info in parquet_files:
-
             try:
                 # Create dataset for this single file
                 file_dataset = ds.dataset(

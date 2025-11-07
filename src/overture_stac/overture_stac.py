@@ -88,7 +88,7 @@ def process_theme_worker(theme_path, release_path, s3_region, debug, release_dat
             rel_path = ("/").join(fragment.path.split("/")[1:])
 
             logger.info(
-                f" [ {fragment.path.split('/')[-2]} : {'.'*len(local_manifest_items)} ]"
+                f" [ {fragment.path.split('/')[-2]} : {'.' * len(local_manifest_items)} ]"
             )
 
             # Build bbox from metadata

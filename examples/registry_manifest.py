@@ -3,7 +3,6 @@ Look up which registry file contains a given ID.
 """
 
 import bisect
-import json
 
 # ID you want to find
 search_id = "335f69e3-699d-44ac-98c4-f0e81bc66680"

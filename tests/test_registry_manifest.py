@@ -3,6 +3,7 @@
 import json
 
 import pytest
+
 from overture_stac.registry_manifest import RegistryManifest
 
 
