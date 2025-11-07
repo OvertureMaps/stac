@@ -5,7 +5,6 @@ from pathlib import Path
 
 import pyarrow.fs as fs
 import pystac
-
 from overture_stac.overture_stac import OvertureRelease
 from overture_stac.registry_manifest import RegistryManifest
 
@@ -28,6 +27,20 @@ def main():
         action="store_true",
         default=False,
         help="Debug flag to only generate 1 item per collection",
+    )
+
+    parser.add_argument(
+        "--no-parallel",
+        dest="parallel",
+        action="store_false",
+        help="Disable parallel processing (default: parallel enabled)",
+    )
+
+    parser.add_argument(
+        "--workers",
+        type=int,
+        default=4,
+        help="Number of parallel workers (default: 4)",
     )
 
     args = parser.parse_args()
@@ -65,7 +78,9 @@ def main():
             debug=args.debug,
         )
 
-        this_release.build_release_catalog(title=title)
+        this_release.build_release_catalog(
+            title=title, parallel=args.parallel, max_workers=args.workers
+        )
 
         child = overture_releases_catalog.add_child(
             child=this_release.release_catalog, title=title
@@ -77,8 +92,10 @@ def main():
             overture_releases_catalog.extra_fields = {"latest": release}
 
     registry_manifest = RegistryManifest()
-    registry_data = registry_manifest.create_manifest()
-    overture_releases_catalog.extra_fields["registry"] = registry_data
+    overture_releases_catalog.extra_fields["registry"] = {
+        "path": "s3://overturemaps-us-west-2/registry",
+        "manifest": registry_manifest.create_manifest(),
+    }
 
     overture_releases_catalog.normalize_and_save(
         root_href=str(output), catalog_type=pystac.CatalogType.SELF_CONTAINED

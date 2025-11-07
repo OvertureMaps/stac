@@ -3,7 +3,6 @@
 import json
 
 import pytest
-
 from overture_stac.registry_manifest import RegistryManifest
 
 
@@ -24,7 +23,7 @@ def test_init_custom_params():
 
 
 def test_manifest_sorting():
-    """Test that manifest entries are sorted by min_id."""
+    """Test that manifest entries are sorted by max_id."""
     entries = [
         ["file2.parquet", "id_200"],
         ["file1.parquet", "id_100"],
@@ -39,7 +38,7 @@ def test_manifest_sorting():
 
 
 def test_manifest_format():
-    """Test that manifest returns list of [filename, min_id] tuples."""
+    """Test that manifest returns list of [filename, max_id] tuples."""
     expected_entry = ["test.parquet", "test_id"]
     assert isinstance(expected_entry, list)
     assert len(expected_entry) == 2
@@ -74,8 +73,8 @@ def test_create_registry_manifest_integration():
         print("First 10 entries:")
         print("-" * 80)
         for i, entry in enumerate(manifest_data[:10], 1):
-            filename, min_id = entry
-            print(f"{i:2d}. {filename:50s} | min_id: {min_id}")
+            filename, max_id = entry
+            print(f"{i:2d}. {filename:50s} | max_id: {max_id}")
 
         if len(manifest_data) > 10:
             print(f"\n... and {len(manifest_data) - 10} more files")
@@ -84,8 +83,8 @@ def test_create_registry_manifest_integration():
         print("Last 5 entries:")
         print("-" * 80)
         for i, entry in enumerate(manifest_data[-5:], len(manifest_data) - 4):
-            filename, min_id = entry
-            print(f"{i:2d}. {filename:50s} | min_id: {min_id}")
+            filename, max_id = entry
+            print(f"{i:2d}. {filename:50s} | max_id: {max_id}")
 
     # Print as JSON
     print("\n" + "=" * 80)

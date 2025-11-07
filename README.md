@@ -69,11 +69,18 @@ uv pip install -e ".[dev]"
 ### Running the Application
 
 ```bash
-# Run the STAC generator
+# Run the STAC generator (parallel mode with 4 workers by default)
 gen-stac --output ./public_releases
 
 # Run in debug mode (generates only 1 item per collection)
 gen-stac --output ./public_releases --debug
+
+# Control parallelization
+gen-stac --output ./public_releases --workers 8  # Use 8 parallel workers
+gen-stac --output ./public_releases --no-parallel  # Disable parallelization
+
+# Recommended for production (balance speed and resource usage)
+gen-stac --output ./public_releases --workers 4
 ```
 
 ### Testing

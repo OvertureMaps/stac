@@ -7,8 +7,8 @@ import pyarrow.fs as fs
 class RegistryManifest:
     """
     Class to create a registry manifest by reading all parquet files
-    in s3://overturemaps-us-west-2/registry/ and extracting min IDs.
-    Returns a compact list of [filename, min_id] tuples sorted by min_id.
+    in s3://overturemaps-us-west-2/registry/ and extracting max IDs.
+    Returns a compact list of [filename, max_id] tuples sorted by max_id.
     """
 
     def __init__(
@@ -26,10 +26,10 @@ class RegistryManifest:
     def create_manifest(self):
         """
         Read all parquet files in the registry path and create a manifest
-        with min IDs and file paths.
+        with max IDs and file paths.
 
         Returns:
-            list: Sorted list of [filename, min_id] tuples
+            list: Sorted list of [filename, max_id] tuples
         """
         self.logger.info(f"Scanning registry path: {self.registry_path}")
 
@@ -51,7 +51,6 @@ class RegistryManifest:
 
         # Process each parquet file
         for file_info in parquet_files:
-            self.logger.info(f"Processing: {file_info.path}")
 
             try:
                 # Create dataset for this single file
@@ -79,29 +78,31 @@ class RegistryManifest:
                         i for i, field in enumerate(schema) if field.name == "id"
                     )
 
-                    # Get min from first row group of first fragment
+                    # Get max from last row group of first fragment
                     first_fragment = fragments[0]
                     first_metadata = first_fragment.metadata
 
                     if first_metadata.num_row_groups > 0:
-                        first_row_group = first_metadata.row_group(0)
-                        first_id_column = first_row_group.column(id_column_index)
+                        # Access the LAST row group to get max_id
+                        last_row_group_index = first_metadata.num_row_groups - 1
+                        last_row_group = first_metadata.row_group(last_row_group_index)
+                        last_id_column = last_row_group.column(id_column_index)
 
                         if (
-                            first_id_column.statistics
-                            and first_id_column.statistics.has_min_max
+                            last_id_column.statistics
+                            and last_id_column.statistics.has_min_max
                         ):
-                            min_id = first_id_column.statistics.min
-                            if isinstance(min_id, bytes):
-                                min_id = min_id.decode("utf-8")
+                            max_id = last_id_column.statistics.max
+                            if isinstance(max_id, bytes):
+                                max_id = max_id.decode("utf-8")
 
                             filename = file_info.path.replace(
                                 "overturemaps-us-west-2/registry/", ""
                             )
-                            manifest_entries.append([filename, min_id])
+                            manifest_entries.append([filename, max_id])
 
                             self.logger.info(
-                                f"Successfully processed {file_info.path}: {min_id}"
+                                f"{file_info.path.split('/')[-1]}: Max ID: {max_id}"
                             )
                 else:
                     self.logger.warning(f"No 'id' column found in {file_info.path}")
@@ -109,7 +110,7 @@ class RegistryManifest:
             except Exception as e:
                 self.logger.error(f"Error processing {file_info.path}: {e}")
 
-        # Sort by min_id for efficient lookup
+        # Sort by max_id for efficient lookup
         manifest_entries.sort(key=lambda x: x[1])
 
         self.logger.info(f"Total files processed: {len(manifest_entries)}")
