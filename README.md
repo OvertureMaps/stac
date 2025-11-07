@@ -1,70 +1,132 @@
 # Overture STAC
-Generate STACs for all public Overture releases
 
-See it in action here: 
-https://radiantearth.github.io/stac-browser/#/external/labs.overturemaps.org/stac/catalog.json?.language=en
+[![CI](https://github.com/OvertureMaps/stac/actions/workflows/ci.yaml/badge.svg)](https://github.com/OvertureMaps/stac/actions/workflows/ci.yaml)
+[![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-The structure looks like this: 
+Generate STAC (SpatioTemporal Asset Catalog) catalogs for all public Overture Maps releases.
 
-```
-- catalog.json
-- <RELEASE>/
-  | - catalog.json
-  | - <THEME>/
-      | - catalog.json
-      | - <TYPE>/
-          | - collection.json
-          | - 00001/
-              | - 00001.json
-          | - 00002/
-              | - 00002.json
-```
+See it in action here:
+<https://radiantearth.github.io/stac-browser/#/external/labs.overturemaps.org/stac/catalog.json?.language=en>
 
-The top-level `catalog.json` intends to be a catalog of all publicly available Overture releases. Briefly, it looks like this: 
-```json
-{
-  "type": "Catalog",
-  "id": "Overture Releases",
-  "stac_version": "1.1.0",
-  "description": "All Overture Releases",
-  "links": [
-    {
-      "rel": "child",
-      "href": "./2025-07-23.0/catalog.json",
-      "type": "application/json",
-      "title": "Latest Overture Release",
-      "latest": true
-    },
-    {
-      "rel": "child",
-      "href": "./2025-06-25.0/catalog.json",
-      "type": "application/json",
-      "title": "2025-06-25.0 Overture Release"
-    },
-  ],
-  "latest": "2025-07-23.0"
-}
-```
-The top level catalog points to the `latest` Overture release, and this release also has the tag `latest:true`. 
+## Quick Start for Development
 
-## Additional Files
-At the root of each release, there are two additional files: `manifest.geojson` and `collections.parquet`
-```
-- <RELEASE>/
-  | - manifest.geojson
-  | - collections.parquet
-```
-
-#### `manifest.geojson`:  Basic GeoJSON Manifest 
-To support the download functionality of `explore.overturemaps.org`, a basic `manifest.geojson` summary of the distribution is available at the root of a release.
-
-#### `collections.parquet`: STAC GeoParquet 
-An Overture release is composed of nearly 500 individual parquet files, and therefore the STAC index is composed of nearly 500 individual `json` files. This single `collections.parquet` is created by the [`stac-geoparquet`](https://github.com/stac-utils/stac-geoparquet) utility.
-
-
-## Running
+### 1. Install UV (if you don't have it)
 
 ```bash
-pip install -r requirements
-python3 gen-all-release-stac.py`
+curl -LsSf https://astral.sh/uv/install.sh | sh
+```
+
+### 2. Clone and Navigate to the Project
+
+```bash
+cd /Users/jenningsa/Overture/stac
+```
+
+### 3. Create a Virtual Environment and Install
+
+```bash
+# Create a virtual environment (uv will manage it)
+uv venv
+
+# Activate it
+source .venv/bin/activate  # On macOS/Linux
+# or
+.venv\Scripts\activate     # On Windows
+
+# Install the package in editable mode with dev dependencies
+uv pip install -e ".[dev]"
+```
+
+### 4. Verify Installation
+
+```bash
+# Test that the CLI works
+gen-stac --help
+
+# Test imports
+python -c "from overture_stac import OvertureRelease, RegistryManifest; print('✓ Package installed successfully')"
+```
+
+## Common Development Commands
+
+### Installing/Updating Dependencies
+
+```bash
+# Install package in editable mode with dev dependencies
+uv pip install -e ".[dev]"
+
+# Install just the package (no dev dependencies)
+uv pip install -e .
+
+# Update dependencies
+uv pip install --upgrade -e ".[dev]"
+
+# Add a new dependency (manually edit pyproject.toml, then):
+uv pip install -e ".[dev]"
+```
+
+### Running the Application
+
+```bash
+# Run the STAC generator (parallel mode with 4 workers by default)
+gen-stac --output ./public_releases
+
+# Run in debug mode (generates only 1 item per collection)
+gen-stac --output ./public_releases --debug
+
+# Control parallelization
+gen-stac --output ./public_releases --workers 8  # Use 8 parallel workers
+gen-stac --output ./public_releases --no-parallel  # Disable parallelization
+
+# Recommended for production (balance speed and resource usage)
+gen-stac --output ./public_releases --workers 4
+```
+
+### Testing
+
+```bash
+# Run all tests
+pytest
+
+# Run with verbose output
+pytest -v
+
+# Run specific test file
+pytest tests/test_registry_manifest.py
+
+# Run integration tests (connects to real S3 - may be slow)
+pytest -v -m integration
+
+# Run ONLY the integration test
+pytest -v -s tests/test_registry_manifest.py::test_create_registry_manifest_integration
+
+# Skip integration/slow tests
+pytest -v -m "not integration"
+```
+
+### Code Quality
+
+```bash
+# Format all code
+ruff format .
+
+# Check formatting (without changing files)
+ruff format --check .
+
+# Lint code
+ruff check .
+
+# Auto-fix linting issues
+ruff check --fix .
+
+# Run both format check and lint
+ruff format --check . && ruff check .
+```
+
+### Before Committing
+
+```bash
+# Run the full CI check locally
+ruff format . && ruff check . && pytest
 ```

@@ -1,0 +1,102 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+  workflow_dispatch:
+
+jobs:
+  lint:
+    name: Lint and Format Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install UV
+        uses: astral-sh/setup-uv@v3
+
+      - name: Install dependencies
+        run: |
+          uv pip install --system ruff
+
+      - name: Run ruff format check
+        run: ruff format --check .
+
+      - name: Run ruff linting
+        run: ruff check .
+
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install UV
+        uses: astral-sh/setup-uv@v3
+
+      - name: Install dependencies
+        run: |
+          uv pip install --system -e ".[dev]"
+
+      - name: Run tests
+        run: |
+          pytest
+
+  test-package-install:
+    name: Test Package Installation
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install UV
+        uses: astral-sh/setup-uv@v3
+
+      - name: Install package
+        run: |
+          uv pip install --system -e .
+
+      - name: Test CLI availability
+        run: |
+          which gen-stac || echo "CLI not found in PATH, checking if it's installed..."
+          python -c "from overture_stac import OvertureRelease, RegistryManifest; print('Package imports successfully')"
+
+      - name: Test imports
+        run: |
+          python -c "from overture_stac.overture_stac import OvertureRelease; print('OvertureRelease imported')"
+          python -c "from overture_stac.registry_manifest import RegistryManifest; print('RegistryManifest imported')"
+
+  all-checks-pass:
+    name: All Checks Pass
+    needs: [lint, test, test-package-install]
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: Check if all jobs passed
+        run: |
+          if [ "${{ needs.lint.result }}" != "success" ] || \
+             [ "${{ needs.test.result }}" != "success" ] || \
+             [ "${{ needs.test-package-install.result }}" != "success" ]; then
+            echo "One or more checks failed"
+            exit 1
+          fi
+          echo "All checks passed!"
