@@ -1,9 +1,7 @@
 import json
-
 import logging
 from datetime import datetime
 from pathlib import Path
-
 from typing import Optional
 
 import pyarrow.dataset as ds
@@ -61,7 +59,6 @@ class OvertureRelease:
         self.release_datetime = datetime.strptime(release.split(".")[0], "%Y-%m-%d")
 
     def make_release_catalog(self, title: Optional[str]):
-
         self.logger.info(
             f"Creating Release Catalog for {self.release} with schema {self.schema}"
         )
@@ -101,7 +98,6 @@ class OvertureRelease:
         self.themes = self.filesystem.get_file_info(release_path_selector)
 
     def create_stac_item_from_fragment(self, fragment, schema=None, type_name=None):
-
         if schema is None:
             schema = fragment.metadata.schema.to_arrow_schema()
 
@@ -199,7 +195,6 @@ class OvertureRelease:
             if self.debug
             else type_dataset.get_fragments()
         ):
-
             schema = fragment.metadata.schema.to_arrow_schema()
 
             item = self.create_stac_item_from_fragment(
@@ -270,7 +265,7 @@ class OvertureRelease:
 
         # Write GeoParquet Collections
         all_items = []
-        for ovt_type, items in self.type_collections.items():
+        for _ovt_type, items in self.type_collections.items():
             all_items += items
 
         stac_geoparquet.arrow.to_parquet(

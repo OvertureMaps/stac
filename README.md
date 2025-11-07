@@ -1,173 +1,125 @@
 # Overture STAC
 
+[![CI](https://github.com/OvertureMaps/stac/actions/workflows/ci.yaml/badge.svg)](https://github.com/OvertureMaps/stac/actions/workflows/ci.yaml)
+[![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
 Generate STAC (SpatioTemporal Asset Catalog) catalogs for all public Overture Maps releases.
 
 See it in action here:
 <https://radiantearth.github.io/stac-browser/#/external/labs.overturemaps.org/stac/catalog.json?.language=en>
 
-## Installation
+## Quick Start for Development
 
-This project uses [uv](https://github.com/astral-sh/uv) for dependency management. If you don't have it installed:
+### 1. Install UV (if you don't have it)
 
 ```bash
-# Install uv
 curl -LsSf https://astral.sh/uv/install.sh | sh
 ```
 
-### Install the package
+### 2. Clone and Navigate to the Project
 
 ```bash
-# Install in development mode with all dev dependencies
+cd /Users/jenningsa/Overture/stac
+```
+
+### 3. Create a Virtual Environment and Install
+
+```bash
+# Create a virtual environment (uv will manage it)
+uv venv
+
+# Activate it
+source .venv/bin/activate  # On macOS/Linux
+# or
+.venv\Scripts\activate     # On Windows
+
+# Install the package in editable mode with dev dependencies
+uv pip install -e ".[dev]"
+```
+
+### 4. Verify Installation
+
+```bash
+# Test that the CLI works
+gen-stac --help
+
+# Test imports
+python -c "from overture_stac import OvertureRelease, RegistryManifest; print('✓ Package installed successfully')"
+```
+
+## Common Development Commands
+
+### Installing/Updating Dependencies
+
+```bash
+# Install package in editable mode with dev dependencies
 uv pip install -e ".[dev]"
 
-# Or install just the package
+# Install just the package (no dev dependencies)
 uv pip install -e .
+
+# Update dependencies
+uv pip install --upgrade -e ".[dev]"
+
+# Add a new dependency (manually edit pyproject.toml, then):
+uv pip install -e ".[dev]"
 ```
 
-The structure looks like this:
-
-```
-- catalog.json
-- <RELEASE>/
-  | - catalog.json
-  | - <THEME>/
-      | - catalog.json
-      | - <TYPE>/
-          | - collection.json
-          | - 00001/
-              | - 00001.json
-          | - 00002/
-              | - 00002.json
-```
-
-The top-level `catalog.json` intends to be a catalog of all publicly available Overture releases. Briefly, it looks like this:
-
-```json
-{
-  "type": "Catalog",
-  "id": "Overture Releases",
-  "stac_version": "1.1.0",
-  "description": "All Overture Releases",
-  "links": [
-    {
-      "rel": "child",
-      "href": "./2025-07-23.0/catalog.json",
-      "type": "application/json",
-      "title": "Latest Overture Release",
-      "latest": true
-    },
-    {
-      "rel": "child",
-      "href": "./2025-06-25.0/catalog.json",
-      "type": "application/json",
-      "title": "2025-06-25.0 Overture Release"
-    }
-  ],
-  "latest": "2025-07-23.0"
-}
-```
-
-The top level catalog points to the `latest` Overture release, and this release also has the tag `latest:true`.
-
-## Additional Files
-
-At the root of each release, there are two additional files: `manifest.geojson` and `collections.parquet`
-
-```
-- <RELEASE>/
-  | - manifest.geojson
-  | - collections.parquet
-```
-
-#### `manifest.geojson`: Basic GeoJSON Manifest
-
-To support the download functionality of `explore.overturemaps.org`, a basic `manifest.geojson` summary of the distribution is available at the root of a release.
-
-#### `collections.parquet`: STAC GeoParquet
-
-An Overture release is composed of nearly 500 individual parquet files, and therefore the STAC index is composed of nearly 500 individual `json` files. This single `collections.parquet` is created by the [`stac-geoparquet`](https://github.com/stac-utils/stac-geoparquet) utility.
-To support the download functionality of `explore.overturemaps.org`, a basic `manifest.geojson` summary of the distribution is available at the root of a release.
-
-#### `collections.parquet`: STAC GeoParquet
-
-An Overture release is composed of nearly 500 individual parquet files, and therefore the STAC index is composed of nearly 500 individual `json` files. This single `collections.parquet` is created by the [`stac-geoparquet`](https://github.com/stac-utils/stac-geoparquet) utility.
-
-## Usage
-
-### Command Line
-
-After installation, you can use the `gen-stac` command:
+### Running the Application
 
 ```bash
-# Generate STAC catalogs for all releases
+# Run the STAC generator
 gen-stac --output ./public_releases
 
 # Run in debug mode (generates only 1 item per collection)
 gen-stac --output ./public_releases --debug
 ```
 
-### Python API
-
-You can also use the package programmatically:
-
-```python
-from pathlib import Path
-from overture_stac import OvertureRelease, RegistryManifest
-
-# Generate STAC catalog for a specific release
-release = OvertureRelease(
-    release="2025-07-23.0",
-    schema="1.11.0",
-    output=Path("./output"),
-)
-release.build_release_catalog(title="My Release")
-
-# Create registry manifest
-registry = RegistryManifest()
-manifest_data = registry.create_manifest()
-print(f"Found {len(manifest_data)} files in registry")
-```
-
-## Development
-
-### Running Tests
+### Testing
 
 ```bash
 # Run all tests
 pytest
 
-# Run with coverage
-pytest --cov=overture_stac --cov-report=html
+# Run with verbose output
+pytest -v
 
 # Run specific test file
 pytest tests/test_registry_manifest.py
+
+# Run integration tests (connects to real S3 - may be slow)
+pytest -v -m integration
+
+# Run ONLY the integration test
+pytest -v -s tests/test_registry_manifest.py::test_create_registry_manifest_integration
+
+# Skip integration/slow tests
+pytest -v -m "not integration"
 ```
 
 ### Code Quality
 
 ```bash
-# Format code with ruff
+# Format all code
 ruff format .
+
+# Check formatting (without changing files)
+ruff format --check .
 
 # Lint code
 ruff check .
 
-# Fix linting issues automatically
+# Auto-fix linting issues
 ruff check --fix .
+
+# Run both format check and lint
+ruff format --check . && ruff check .
 ```
 
-## Project Structure
+### Before Committing
 
-```
-stac/
-├── src/overture_stac/       # Main package
-│   ├── __init__.py          # Package initialization
-│   ├── cli.py               # Command-line interface
-│   ├── overture_stac.py     # Main STAC generation logic
-│   └── registry_manifest.py # Registry manifest generation
-├── tests/                   # Test suite
-│   ├── test_overture_stac.py
-│   └── test_registry_manifest.py
-├── pyproject.toml           # Project configuration
-└── README.md
+```bash
+# Run the full CI check locally
+ruff format . && ruff check . && pytest
 ```

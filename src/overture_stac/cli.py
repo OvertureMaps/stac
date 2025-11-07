@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pyarrow.fs as fs
 import pystac
-import yaml
+
 from overture_stac.overture_stac import OvertureRelease
 from overture_stac.registry_manifest import RegistryManifest
 
@@ -37,38 +37,11 @@ def main():
         fs.FileSelector("overturemaps-us-west-2/release")
     )
 
-    schema_version_mapping = dict()
-
-    # TODO: Where should this live / is it a CDP variable?
-    for _ in yaml.safe_load(
-        """
-- schema: "1.13.0"
-  release: "2025-10-22.0"
-- schema: "1.12.0"
-  release: "2025-09-24.0"
-- schema: "1.11.0"
-  release: "2025-08-20.1"
-- schema: "1.11.0"
-  release: "2025-08-20.0"
-- schema: "1.11.0"
-  release: "2025-07-23.0"
-- schema: "1.10.0"
-  release: "2025-06-25.0"
-- schema: "1.9.0"
-  release: "2025-05-21.0"
-- schema: "1.8.0"
-  release: "2025-04-23.0"
-- schema: "1.7.0"
-  release: "2025-03-19.1"
-- schema: "1.7.0"
-  release: "2025-03-19.0"
-- schema: "1.6.0"
-  release: "2025-02-19.0"
-- schema: "1.5.0"
-  release: "2025-01-22.0"
-"""
-    ):
-        schema_version_mapping[_.get("release")] = _.get("schema")
+    # TODO: These should be stored elsewhere
+    schema_version_mapping = {
+        "2025-10-22.0": "1.13.0",
+        "2025-09-24.0": "1.12.0",
+    }
 
     overture_releases_catalog = pystac.Catalog(
         id="Overture Releases",
@@ -78,21 +51,10 @@ def main():
     output = Path(args.output)
     output.mkdir(parents=True, exist_ok=True)
 
-    # Just GA releases
-    public_releases = [
-        r for r in public_releases if "alpha" not in r.path and "beta" not in r.path
-    ]
-
-    # In the future, the bucket will be pruned of old releases and
-    # we'll iterate over the entire bucket contents
-    # How many releases to go back?
-    limit = 4
-
     for idx, release_info in enumerate(
-        list(reversed(sorted(public_releases, key=lambda p: p.path)))[:limit]
+        sorted(public_releases, key=lambda p: p.path, reverse=True)
     ):
         release = release_info.path.split("/")[-1]
-        print(release)
 
         title = f"{release} Overture Release" if idx > 0 else "Latest Overture Release"
 

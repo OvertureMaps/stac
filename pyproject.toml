@@ -18,7 +18,6 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
     "pytest>=7.4.0",
-    "pytest-cov>=4.1.0",
     "ruff>=0.1.0",
 ]
 
@@ -37,13 +36,10 @@ testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
-addopts = [
-    "--verbose",
-    "--strict-markers",
-    "--strict-config",
-    "--cov=overture_stac",
-    "--cov-report=term-missing",
-    "--cov-report=html",
+addopts = ["--verbose"]
+markers = [
+    "integration: marks tests as integration tests (connects to real services)",
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
 ]
 
 [tool.ruff]
@@ -66,20 +62,3 @@ ignore = [
 [tool.ruff.lint.per-file-ignores]
 "__init__.py" = ["F401"]
 "tests/*" = ["B008"]
-
-[tool.coverage.run]
-source = ["src/overture_stac"]
-omit = [
-    "*/tests/*",
-    "*/__init__.py",
-]
-
-[tool.coverage.report]
-exclude_lines = [
-    "pragma: no cover",
-    "def __repr__",
-    "raise AssertionError",
-    "raise NotImplementedError",
-    "if __name__ == .__main__.:",
-    "if TYPE_CHECKING:",
-]
