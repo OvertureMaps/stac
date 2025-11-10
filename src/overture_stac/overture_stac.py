@@ -23,7 +23,7 @@ TYPE_LICENSE_MAP = {
     "division_boundary": "ODbL-1.0",
     "segment": "ODbL-1.0",
     "connector": "ODbL-1.0",
-    "place": "CDLA-Permissive-2.0",
+    "place": ["CDLA-Permissive-2.0", "Apache-2.0"],
     "address": "Multiple Open Licenses",
 }
 
@@ -159,6 +159,11 @@ def process_theme_worker(theme_path, release_path, s3_region, debug, release_dat
             local_type_collections[type_name].append(stac_item)
 
         # Create type collection
+        license_value = TYPE_LICENSE_MAP.get(type_name)
+        primary_license = (
+            license_value[0] if isinstance(license_value, list) else license_value
+        )
+
         type_collection = pystac.Collection(
             id=type_name,
             description=f"Overture's {type_name} collection",
@@ -168,8 +173,11 @@ def process_theme_worker(theme_path, release_path, s3_region, debug, release_dat
                 ),
                 temporal=pystac.TemporalExtent(intervals=[None, None]),
             ),
-            license=TYPE_LICENSE_MAP.get(type_name),
+            license=primary_license,
         )
+
+        if isinstance(license_value, list):
+            type_collection.extra_fields["licenses"] = license_value
 
         type_collection.add_items(local_type_collections[type_name])
 
