@@ -53,8 +53,8 @@ def main():
 
     # TODO: These should be stored elsewhere
     schema_version_mapping = {
+        "2025-11-19.0": "1.14.0",
         "2025-10-22.0": "1.13.0",
-        "2025-09-24.0": "1.12.0",
     }
 
     overture_releases_catalog = pystac.Catalog(
