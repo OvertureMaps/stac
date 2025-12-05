@@ -51,7 +51,7 @@ def main():
         fs.FileSelector("overturemaps-us-west-2/release")
     )
 
-    # TODO: These should be stored elsewhere
+    # TODO: These should be stored elsewhere, but for now we'll hardcode them here
     schema_version_mapping = {
         "2025-11-19.0": "1.14.0",
         "2025-10-22.0": "1.13.0",
