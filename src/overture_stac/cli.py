@@ -5,7 +5,6 @@ from pathlib import Path
 
 import pyarrow.fs as fs
 import pystac
-
 from overture_stac.overture_stac import OvertureRelease
 from overture_stac.registry_manifest import RegistryManifest
 
@@ -53,6 +52,7 @@ def main():
 
     # TODO: These should be stored elsewhere, but for now we'll hardcode them here
     schema_version_mapping = {
+        "2026-01-21.0": "1.15.0",
         "2025-12-17.0": "1.15.0",
         "2025-11-19.0": "1.14.0",
         "2025-10-22.0": "1.13.0",
