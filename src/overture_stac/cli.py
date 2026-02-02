@@ -5,7 +5,6 @@ from pathlib import Path
 
 import pyarrow.fs as fs
 import pystac
-
 from overture_stac.overture_stac import OvertureRelease
 from overture_stac.registry_manifest import RegistryManifest
 

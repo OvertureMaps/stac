@@ -1,0 +1,60 @@
+name: Staging
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  build:
+    name: Build STAC Catalog
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install UV
+        uses: astral-sh/setup-uv@v3
+
+      - name: Install dependencies
+        run: |
+          uv pip install --system -e .
+
+      - name: Build STAC Catalog
+        run: |
+          gen-stac --output public_releases
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: stac-catalog
+          path: public_releases
+
+  deploy:
+    name: Deploy to Staging
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: stac-catalog
+          path: public_releases
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::763944545891:role/pages-staging-oidc-overturemaps
+          aws-region: us-west-2
+
+      - name: Upload to S3
+        run: |
+          aws s3 sync public_releases s3://overturemaps-managed-staging-usw2/gh-pages/stac/pr/${{ github.event.pull_request.number }}/
