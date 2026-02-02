@@ -35,8 +35,8 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: stac-catalog
-          path: build-artifact
+          name: build-artifact
+          path: public_releases
 
   deploy:
     name: Deploy
@@ -44,7 +44,7 @@ jobs:
     needs: build
     environment:
       name: staging
-      url: https://staging.overturemaps.org/${{github.repository}}/pr/${{ github.event.number }}/index.html
+      url: https://staging.overturemaps.org/${{github.repository}}/pr/${{ github.event.number }}/catalog.json
 
     steps:
       - name: Configure AWS credentials 🔐
