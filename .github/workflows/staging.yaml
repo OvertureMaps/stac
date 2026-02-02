@@ -36,25 +36,31 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: stac-catalog
-          path: public_releases
+          path: build-artifact
 
   deploy:
-    name: Deploy to Staging
-    needs: build
+    name: Deploy
     runs-on: ubuntu-latest
-    steps:
-      - name: Download artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: stac-catalog
-          path: public_releases
+    needs: build
+    environment:
+      name: staging
+      url: https://staging.overturemaps.org/${{github.repository}}/pr/${{ github.event.number }}/index.html
 
-      - name: Configure AWS credentials
+    steps:
+      - name: Configure AWS credentials 🔐
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: arn:aws:iam::763944545891:role/pages-staging-oidc-overturemaps
           aws-region: us-west-2
 
-      - name: Upload to S3
+      - name: Download artifacts 📥
+        uses: actions/download-artifact@v4
+        with:
+          name: build-artifact
+
+      - name: Copy to S3
         run: |
-          aws s3 sync public_releases s3://overturemaps-managed-staging-usw2/gh-pages/stac/pr/${{ github.event.pull_request.number }}/
+          aws s3 cp --recursive . s3://overture-managed-staging-usw2/gh-pages/${{ github.repository }}/pr/${{ github.event.number }}/
+
+      - name: Bust the Cache
+        run: aws cloudfront create-invalidation --distribution-id E1KP2IN0H2RGGT --paths "/${{ github.repository }}/pr/${{ github.event.number }}/*"
