@@ -36,7 +36,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: stac-catalog
-          path: build-artifact
+          path: public_releases
 
   deploy:
     name: Deploy
@@ -56,7 +56,7 @@ jobs:
       - name: Download artifacts 📥
         uses: actions/download-artifact@v4
         with:
-          name: build-artifact
+          name: stac-catalog
 
       - name: Copy to S3
         run: |

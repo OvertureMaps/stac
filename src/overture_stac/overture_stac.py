@@ -98,20 +98,28 @@ def process_theme_worker(
         local_type_collections[type_name] = []
         schema = None
 
-        for fragment in (
-            list(type_dataset.get_fragments())[:1]
-            if debug
-            else type_dataset.get_fragments()
-        ):
+        # Get all fragments to calculate progress
+        all_fragments = list(type_dataset.get_fragments())
+        if debug:
+            all_fragments = all_fragments[:1]
+
+        total_fragments = len(all_fragments)
+        last_reported_percent = -10  # Start at -10 so 0% is reported
+
+        for idx, fragment in enumerate(all_fragments):
             schema = fragment.metadata.schema.to_arrow_schema()
 
             # Create STAC item from fragment
             filename = fragment.path.split("/")[-1]
             rel_path = ("/").join(fragment.path.split("/")[1:])
 
-            logger.info(
-                f" [ {fragment.path.split('/')[-2]} : {'.' * len(local_manifest_items)} ]"
-            )
+            # Log progress at 10% increments
+            current_percent = int((idx / total_fragments) * 100) if total_fragments > 0 else 100
+            if current_percent >= last_reported_percent + 10:
+                last_reported_percent = (current_percent // 10) * 10
+                logger.info(
+                    f" [ {fragment.path.split('/')[-2]} : {last_reported_percent}% complete ]"
+                )
 
             # Build bbox from metadata
             geo = json.loads(schema.metadata[b"geo"].decode("utf-8"))
