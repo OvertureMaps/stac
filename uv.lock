@@ -587,7 +587,7 @@ dependencies = [
     { name = "stac-geoparquet" },
 ]
 
-[package.optional-dependencies]
+[package.dev-dependencies]
 dev = [
     { name = "pytest" },
     { name = "ruff" },
@@ -597,12 +597,15 @@ dev = [
 requires-dist = [
     { name = "pyarrow", specifier = ">=14.0.1" },
     { name = "pystac", specifier = ">=1.8.4" },
-    { name = "pytest", marker = "extra == 'dev'", specifier = ">=7.4.0" },
     { name = "pyyaml", specifier = ">=6.0.2" },
-    { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.1.0" },
     { name = "stac-geoparquet", specifier = ">=0.7.0" },
 ]
-provides-extras = ["dev"]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "pytest", specifier = ">=7.4.0" },
+    { name = "ruff", specifier = ">=0.1.0" },
+]
 
 [[package]]
 name = "packaging"
