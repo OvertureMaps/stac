@@ -75,7 +75,7 @@ def process_theme_worker(
                 rel="pmtiles",
                 target=f"https://tiles.overturemaps.org/{release}/{theme_name}.pmtiles",
                 media_type="application/vnd.pmtiles",
-                title=f"{theme_name} PMTiles",
+                title=f"PMTiles",
             )
         )
 
@@ -137,6 +137,21 @@ def process_theme_worker(
                 properties={
                     "num_rows": fragment.count_rows(),
                     "num_row_groups": fragment.num_row_groups,
+                    "storage:schemes": {
+                        "aws": {
+                            "type": "aws-s3",
+                            "platform": "https://{bucket}.s3.{region}.amazonaws.com",
+                            "bucket": "overturemaps-us-west-2",
+                            "region": "us-west-2",
+                            "requester_pays": "false",
+                        },
+                        "azure": {
+                            "type": "ms-azure",
+                            "platform": "https://{account}.blob.core.windows.net/",
+                            "account": "overturemapswestus2",
+                            "requester_pays": "false",
+                        },
+                    },
                 },
                 datetime=release_datetime,
             )
@@ -155,22 +170,22 @@ def process_theme_worker(
 
             # Add assets
             stac_item.add_asset(
-                key="aws-s3",
-                asset=pystac.Asset(
-                    href=f"s3://{fragment.path}",
-                    media_type="application/vnd.apache.parquet",
-                ),
-            )
-            stac_item.add_asset(
-                key="aws-https",
+                key="aws",
                 asset=pystac.Asset(
                     href=f"https://overturemaps-us-west-2.s3.us-west-2.amazonaws.com/{rel_path}",
                     media_type="application/vnd.apache.parquet",
-                    extra_fields={"storage:refs": ["aws-s3"]},
+                    extra_fields={
+                        "storage:refs": ["aws"],
+                        "alternate": {
+                            "href": f"s3://{fragment.path}",
+                            "storage:refs": ["aws"],
+                            "name": "S3",
+                        },
+                    },
                 ),
             )
             stac_item.add_asset(
-                key="azure-https",
+                key="azure",
                 asset=pystac.Asset(
                     href=f"https://overturemapswestus2.blob.core.windows.net/{rel_path}",
                     media_type="application/vnd.apache.parquet",
@@ -274,7 +289,7 @@ class OvertureRelease:
             )
         except Exception as e:
             self.logger.warning(
-                f"Could not access PMTiles bucket for release {self.release}: {e}"
+                f"Couldn't find PMTiles for release: {self.release}: {e}"
             )
 
         return available_pmtiles
@@ -289,28 +304,14 @@ class OvertureRelease:
             title=title if title is not None else self.release,
             description=f"Geoparquet data released in the Overture {self.release} release",
             stac_extensions=[
-                "https://stac-extensions.github.io/storage/v2.0.0/schema.json"
+                "https://stac-extensions.github.io/storage/v2.0.0/schema.json",
+                "https://stac-extensions.github.io/alternate-assets/v1.1.0/schema.json",
             ],
         )
         self.release_catalog.extra_fields = {
             "release:version": self.release,
             "schema:version": self.schema,
             "schema:tag": f"https://github.com/OvertureMaps/schema/releases/tag/v{self.schema}",
-            "storage:schemes": {
-                "aws": {
-                    "type": "aws-s3",
-                    "platform": "https://{bucket}.s3.{region}.amazonaws.com",
-                    "bucket": "overturemaps-us-west-2",
-                    "region": "us-west-2",
-                    "requester_pays": "false",
-                },
-                "azure": {
-                    "type": "ms-azure",
-                    "platform": "https://{account}.blob.core.windows.net/",
-                    "account": "overturemapswestus2",
-                    "requester_pays": "false",
-                },
-            },
         }
 
     def get_release_themes(self) -> None:
