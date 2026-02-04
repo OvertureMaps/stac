@@ -1,6 +1,6 @@
 [project]
 name = "overture-stac"
-version = "1.0.2"
+version = "1.0.3"
 description = "Generate STAC catalogs for Overture Maps Releases"
 authors = [
     {name = "Overture Maps Foundation"}
@@ -15,7 +15,7 @@ dependencies = [
     "pyyaml>=6.0.2",
 ]
 
-[project.optional-dependencies]
+[dependency-groups]
 dev = [
     "pytest>=7.4.0",
     "ruff>=0.1.0",
@@ -36,10 +36,14 @@ testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
-addopts = ["--verbose"]
+addopts = ["--verbose", "-W", "default"]
 markers = [
     "integration: marks tests as integration tests (connects to real services)",
     "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+]
+filterwarnings = [
+    "default",
+    "ignore::DeprecationWarning:pystac.*",
 ]
 
 [tool.ruff]
