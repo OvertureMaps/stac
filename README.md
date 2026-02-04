@@ -4,47 +4,30 @@
 [![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-Generate STAC (SpatioTemporal Asset Catalog) catalogs for all public Overture Maps releases.
+Generate STAC catalogs for all public Overture Maps releases.
 
-See it in action here:
-<https://radiantearth.github.io/stac-browser/#/external/labs.overturemaps.org/stac/catalog.json?.language=en>
+**[Browse the catalog](https://radiantearth.github.io/stac-browser/#/external/labs.overturemaps.org/stac/catalog.json?.language=en)**
 
-### Installing/Updating Dependencies
+## Setup
 
 ```bash
-# Install package in editable mode with dev dependencies
-uv pip install -e ".[dev]"
-
-# Install just the package (no dev dependencies)
-uv pip install -e .
-
-# Update dependencies
-uv pip install --upgrade -e ".[dev]"
-
-# Add a new dependency (manually edit pyproject.toml, then):
-uv pip install -e ".[dev]"
+uv sync
 ```
 
-### Running the Application
+## Usage
 
 ```bash
-# Run the STAC generator (parallel mode with 4 workers by default)
-gen-stac --output ./public_releases
+gen-stac --output ./releases
 
-# Run in debug mode (generates only 1 item per collection)
-gen-stac --output ./public_releases --debug
+# Debug mode (2 items per collection)
+gen-stac --output ./releases --debug
 
-# Control parallelization
-gen-stac --output ./public_releases --workers 8  # Use 8 parallel workers
-gen-stac --output ./public_releases --no-parallel  # Disable parallelization
-
-# Recommended for production (balance speed and resource usage)
-gen-stac --output ./public_releases --workers 4
+# Custom worker count (default: 4)
+gen-stac --output ./releases --workers 8
 ```
 
-### Before Committing
+## Development
 
 ```bash
-# Run the full CI check locally
-ruff format . && ruff check . && pytest
+uv run ruff format . && uv run ruff check . && uv run pytest
 ```

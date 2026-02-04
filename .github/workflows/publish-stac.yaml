@@ -1,4 +1,4 @@
-name: Publish STAC
+name: Publish STAC to GH-Pages
 
 on:
   # Run daily at 6 AM UTC

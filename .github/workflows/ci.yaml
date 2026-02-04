@@ -50,11 +50,11 @@ jobs:
 
       - name: Install dependencies
         run: |
-          uv pip install --system -e ".[dev]"
+          uv sync --all-groups
 
       - name: Run tests
         run: |
-          pytest
+          uv run pytest
 
   test-package-install:
     name: Test Package Installation

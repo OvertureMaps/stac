@@ -31,13 +31,6 @@ def main():
     )
 
     parser.add_argument(
-        "--no-parallel",
-        dest="parallel",
-        action="store_false",
-        help="Disable parallel processing (default: parallel enabled)",
-    )
-
-    parser.add_argument(
         "--workers",
         type=int,
         default=4,
@@ -47,15 +40,16 @@ def main():
     args = parser.parse_args()
 
     filesystem = fs.S3FileSystem(anonymous=True, region="us-west-2")
-    public_releases = filesystem.get_file_info(
+    available_releases = filesystem.get_file_info(
         fs.FileSelector("overturemaps-us-west-2/release")
     )
 
     # TODO: These should be stored elsewhere, but for now we'll hardcode them here
-    schema_version_mapping = {
+    schema_version_mapping: dict[str, str] = {
+        "2026-03-18.0": "TBD",
+        "2026-02-18.0": "1.15.0",
         "2026-01-21.0": "1.15.0",
         "2025-12-17.0": "1.15.0",
-        "2025-11-19.0": "1.14.0",
     }
 
     overture_releases_catalog = pystac.Catalog(
@@ -67,11 +61,13 @@ def main():
     output.mkdir(parents=True, exist_ok=True)
 
     for idx, release_info in enumerate(
-        sorted(public_releases, key=lambda p: p.path, reverse=True)
+        sorted(available_releases, key=lambda p: p.path, reverse=True)
     ):
         release = release_info.path.split("/")[-1]
 
-        title = f"{release} Overture Release" if idx > 0 else "Latest Overture Release"
+        title: str = (
+            f"{release} Overture Release" if idx > 0 else "Latest Overture Release"
+        )
 
         this_release = OvertureRelease(
             release=release,
@@ -80,9 +76,7 @@ def main():
             debug=args.debug,
         )
 
-        this_release.build_release_catalog(
-            title=title, parallel=args.parallel, max_workers=args.workers
-        )
+        this_release.build_release_catalog(title=title, max_workers=args.workers)
 
         child = overture_releases_catalog.add_child(
             child=this_release.release_catalog, title=title
