@@ -36,10 +36,14 @@ testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
-addopts = ["--verbose"]
+addopts = ["--verbose", "-W", "default"]
 markers = [
     "integration: marks tests as integration tests (connects to real services)",
     "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+]
+filterwarnings = [
+    "default",
+    "ignore::DeprecationWarning:pystac.*",
 ]
 
 [tool.ruff]

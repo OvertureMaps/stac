@@ -75,7 +75,7 @@ def process_theme_worker(
                 rel="pmtiles",
                 target=f"https://tiles.overturemaps.org/{release}/{theme_name}.pmtiles",
                 media_type="application/vnd.pmtiles",
-                title=f"PMTiles",
+                title="PMTiles",
             )
         )
 
@@ -98,13 +98,12 @@ def process_theme_worker(
         local_type_collections[type_name] = []
         schema = None
 
-        # Get all fragments to calculate progress
+        # Get all fragments
         all_fragments = list(type_dataset.get_fragments())
         if debug:
-            all_fragments = all_fragments[:1]
+            all_fragments = all_fragments[:2]
 
-        total_fragments = len(all_fragments)
-        last_reported_percent = -10  # Start at -10 so 0% is reported
+        total_fragments: int = len(all_fragments)
 
         for idx, fragment in enumerate(all_fragments):
             schema = fragment.metadata.schema.to_arrow_schema()
@@ -113,12 +112,10 @@ def process_theme_worker(
             filename = fragment.path.split("/")[-1]
             rel_path = ("/").join(fragment.path.split("/")[1:])
 
-            # Log progress at 10% increments
-            current_percent = int((idx / total_fragments) * 100) if total_fragments > 0 else 100
-            if current_percent >= last_reported_percent + 10:
-                last_reported_percent = (current_percent // 10) * 10
+            # Log progress every 10 fragments
+            if idx % 10 == 0 or idx == total_fragments - 1:
                 logger.info(
-                    f" [ {fragment.path.split('/')[-2]} : {last_reported_percent}% complete ]"
+                    f" [ {fragment.path.split('/')[-2]} : {idx + 1}/{total_fragments} fragments ]"
                 )
 
             # Build bbox from metadata
@@ -184,10 +181,13 @@ def process_theme_worker(
                     media_type="application/vnd.apache.parquet",
                     extra_fields={
                         "storage:refs": ["aws"],
+                        "alternate:name": "HTTPS",
                         "alternate": {
-                            "href": f"s3://{fragment.path}",
-                            "storage:refs": ["aws"],
-                            "name": "S3",
+                            "s3": {
+                                "href": f"s3://{fragment.path}",
+                                "alternate:name": "S3",
+                                "description": "Access the files via regular Amazon AWS S3 tooling.",
+                            }
                         },
                     },
                 ),
@@ -211,7 +211,7 @@ def process_theme_worker(
                 spatial=pystac.SpatialExtent(
                     bboxes=[i.bbox for i in local_type_collections[type_name]]
                 ),
-                temporal=pystac.TemporalExtent(intervals=[None, None]),
+                temporal=pystac.TemporalExtent(intervals=[[None, None]]),
             ),
             license=TYPE_LICENSE_MAP.get(type_name),
         )
@@ -313,7 +313,7 @@ class OvertureRelease:
             description=f"Geoparquet data released in the Overture {self.release} release",
             stac_extensions=[
                 "https://stac-extensions.github.io/storage/v2.0.0/schema.json",
-                "https://stac-extensions.github.io/alternate-assets/v1.1.0/schema.json",
+                "https://stac-extensions.github.io/alternate-assets/v1.2.0/schema.json",
             ],
         )
         self.release_catalog.extra_fields = {
