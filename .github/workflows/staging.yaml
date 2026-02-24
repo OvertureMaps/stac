@@ -33,7 +33,7 @@ jobs:
           gen-stac --output public_releases
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: stac-catalog
           path: public_releases
