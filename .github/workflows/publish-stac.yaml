@@ -19,8 +19,8 @@ jobs:
     name: Build and Deploy STAC Catalog
     permissions:
       contents: read
-      pages: write
-      id-token: write
+      pages: write # required to deploy to GitHub Pages
+      id-token: write # required for OIDC token exchange when deploying to GitHub Pages
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
