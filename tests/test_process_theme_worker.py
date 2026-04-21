@@ -254,9 +254,7 @@ class TestBuildReleaseCatalog:
         mock_theme.path = "bucket/release/theme=test"
         release.get_release_themes = lambda: setattr(release, "themes", [mock_theme])
 
-        with patch(
-            "overture_stac.overture_stac.ProcessPoolExecutor"
-        ) as mock_pool_cls:
+        with patch("overture_stac.overture_stac.ProcessPoolExecutor") as mock_pool_cls:
             release.build_release_catalog(title="Test", max_workers=1)
             # ProcessPoolExecutor should NOT have been instantiated
             mock_pool_cls.assert_not_called()
@@ -290,9 +288,7 @@ class TestBuildReleaseCatalog:
         mock_theme.path = "bucket/release/theme=test"
         release.get_release_themes = lambda: setattr(release, "themes", [mock_theme])
 
-        with patch(
-            "overture_stac.overture_stac.ProcessPoolExecutor"
-        ) as mock_pool_cls:
+        with patch("overture_stac.overture_stac.ProcessPoolExecutor") as mock_pool_cls:
             mock_future = MagicMock()
             mock_future.result.return_value = (mock_catalog, [], {}, "test")
 
