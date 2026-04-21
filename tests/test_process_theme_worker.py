@@ -7,12 +7,10 @@ These tests mock the S3/PyArrow layer to verify:
 """
 
 import json
-import tempfile
 from datetime import datetime
 from unittest.mock import MagicMock, patch
 
 import pystac
-import pytest
 
 from overture_stac.overture_stac import OvertureRelease, process_theme_worker
 
@@ -219,7 +217,7 @@ class TestProcessThemeWorker:
             available_pmtiles={"buildings": "some/path.pmtiles"},
         )
 
-        pmtiles_links = [l for l in theme_catalog.links if l.rel == "pmtiles"]
+        pmtiles_links = [link for link in theme_catalog.links if link.rel == "pmtiles"]
         assert len(pmtiles_links) == 1
 
 
