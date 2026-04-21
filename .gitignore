@@ -71,6 +71,7 @@ dmypy.json
 # Output directories
 public_releases/
 output/
+test_output/
 
 # Misc
 .DS_Store
