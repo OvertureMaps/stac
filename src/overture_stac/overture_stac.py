@@ -97,6 +97,7 @@ def process_theme_worker(
 
         local_type_collections[type_name] = []
         schema = None
+        total_row_count = 0
 
         # Get all fragments
         all_fragments = list(type_dataset.get_fragments())
@@ -135,12 +136,15 @@ def process_theme_worker(
                 ],
             }
 
+            num_rows = fragment.metadata.num_rows
+            total_row_count += num_rows
+
             stac_item = pystac.Item(
                 id=filename.split("-")[1],
                 geometry=geojson_bbox_geometry,
                 bbox=[xmin, ymin, xmax, ymax],
                 properties={
-                    "num_rows": fragment.count_rows(),
+                    "num_rows": num_rows,
                     "num_row_groups": fragment.num_row_groups,
                     "storage:schemes": {
                         "aws": {
@@ -230,7 +234,7 @@ def process_theme_worker(
         )
 
         if not debug:
-            type_collection.extra_fields = {"features": type_dataset.count_rows()}
+            type_collection.extra_fields = {"features": total_row_count}
 
         theme_catalog.add_child(type_collection)
 
@@ -337,53 +341,63 @@ class OvertureRelease:
         self.make_release_catalog(title=title)
         self.get_release_themes()
 
-        self.logger.info(f"Building catalog in parallel with {max_workers} workers...")
-
-        # Prepare arguments for worker processes
         theme_paths = [theme.path for theme in self.themes]
         s3_region = "us-west-2"
 
-        # Process themes in parallel
-        with ProcessPoolExecutor(max_workers=max_workers) as executor:
-            future_to_theme = {
-                executor.submit(
-                    process_theme_worker,
-                    theme_path,
-                    self.release_path,
-                    s3_region,
-                    self.debug,
-                    self.release_datetime,
-                    self.release,
-                    self.available_pmtiles,
-                ): theme_path
-                for theme_path in theme_paths
-            }
-
-            for future in as_completed(future_to_theme):
-                theme_path = future_to_theme[future]
-                try:
-                    (
-                        theme_catalog,
-                        manifest_items,
-                        type_collections,
-                        theme_name,
-                    ) = future.result()
-
-                    self.logger.info(f"Merging results for theme: {theme_name}")
-                    self.release_catalog.add_child(
-                        child=theme_catalog, title=theme_name
+        # Process themes
+        if max_workers <= 1:
+            self.logger.info("Processing themes sequentially (in-process)...")
+            results = []
+            for theme_path in theme_paths:
+                results.append(
+                    process_theme_worker(
+                        theme_path,
+                        self.release_path,
+                        s3_region,
+                        self.debug,
+                        self.release_datetime,
+                        self.release,
+                        self.available_pmtiles,
                     )
-                    self.manifest_items.extend(manifest_items)
-                    self.type_collections.update(type_collections)
+                )
+        else:
+            self.logger.info(
+                f"Processing themes in parallel with {max_workers} workers..."
+            )
+            results = []
+            with ProcessPoolExecutor(max_workers=max_workers) as executor:
+                future_to_theme = {
+                    executor.submit(
+                        process_theme_worker,
+                        theme_path,
+                        self.release_path,
+                        s3_region,
+                        self.debug,
+                        self.release_datetime,
+                        self.release,
+                        self.available_pmtiles,
+                    ): theme_path
+                    for theme_path in theme_paths
+                }
 
-                    theme_path_dir = Path(self.output, theme_name)
-                    theme_path_dir.mkdir(parents=True, exist_ok=True)
+                for future in as_completed(future_to_theme):
+                    theme_path = future_to_theme[future]
+                    try:
+                        results.append(future.result())
+                    except Exception as exc:
+                        self.logger.error(
+                            f"Theme {theme_path} generated an exception: {exc}"
+                        )
+                        raise
 
-                except Exception as exc:
-                    self.logger.error(
-                        f"Theme {theme_path} generated an exception: {exc}"
-                    )
-                    raise
+        for theme_catalog, manifest_items, type_collections, theme_name in results:
+            self.logger.info(f"Merging results for theme: {theme_name}")
+            self.release_catalog.add_child(child=theme_catalog, title=theme_name)
+            self.manifest_items.extend(manifest_items)
+            self.type_collections.update(type_collections)
+
+            theme_path_dir = Path(self.output, theme_name)
+            theme_path_dir.mkdir(parents=True, exist_ok=True)
 
         # Write outputs
         with open(f"{self.output}/manifest.geojson", "w") as f:
