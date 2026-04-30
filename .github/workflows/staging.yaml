@@ -49,9 +49,11 @@ jobs:
     name: Deploy
     runs-on: ubuntu-latest
     needs: build
+    if: github.event.pull_request.head.repo.full_name == github.repository
     permissions:
-      id-token: write   # required for OIDC token exchange with AWS
-      actions: read     # required for actions/download-artifact
+      id-token: write      # required for OIDC token exchange with AWS
+      actions: read        # required for actions/download-artifact
+      pull-requests: write # for posting staging preview PR comments
     environment:
       name: staging
       url: https://staging.overturemaps.org/${{ github.event.repository.name }}/pr/${{ github.event.number }}/catalog.json
@@ -80,3 +82,26 @@ jobs:
         env:
           GITHUB_EVENT_REPOSITORY_NAME: ${{ github.event.repository.name }}
           GITHUB_EVENT_NUMBER: ${{ github.event.number }}
+
+      - name: Gather metadata for PR comment
+        id: deploy-metadata
+        run: |
+          echo "time=$(date -u +'%b %d, %Y %H:%M UTC')" >> $GITHUB_OUTPUT
+          echo "short-sha=${PR_HEAD_SHA:0:7}" >> $GITHUB_OUTPUT
+        env:
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+
+      - name: Comment on PR
+        uses: marocchino/sticky-pull-request-comment@0ea0beb66eb9baf113663a64ec522f60e49231c0 # v3.0.4
+        with:
+          message: |
+            ## 🗺️ OMF STAC preview is live!
+
+            |                |                                                                           |
+            |----------------|---------------------------------------------------------------------------|
+            | 📦 **Catalog** | https://staging.overturemaps.org/${{ github.event.repository.name }}/pr/${{ github.event.number }}/catalog.json |
+            | 🕐 **Updated** | ${{ steps.deploy-metadata.outputs.time }}                                 |
+            | 📝 **Commit**  | [${{ steps.deploy-metadata.outputs.short-sha }}](${{ github.server_url }}/${{ github.repository }}/commit/${{ github.event.pull_request.head.sha }}) |
+
+            > [!NOTE]
+            > ♻️ This preview updates automatically with each push to this PR.
