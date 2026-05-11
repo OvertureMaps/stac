@@ -27,7 +27,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
         with:
-          python-version: "3.11"
+          python-version-file: .python-version
 
       - name: Install UV
         uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
@@ -51,10 +51,10 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Set up Python 3.11
+      - name: Set up Python
         uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
         with:
-          python-version: "3.11"
+          python-version-file: .python-version
 
       - name: Install UV
         uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
@@ -79,7 +79,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
         with:
-          python-version: "3.11"
+          python-version-file: .python-version
 
       - name: Install UV
         uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
@@ -98,12 +98,45 @@ jobs:
           python -c "from overture_stac.overture_stac import OvertureRelease; print('OvertureRelease imported')"
           python -c "from overture_stac.registry_manifest import RegistryManifest; print('RegistryManifest imported')"
 
+  stac-validate:
+    name: STAC Validation
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version-file: .python-version
+
+      - name: Install UV
+        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+
+      - name: Install dependencies
+        run: uv sync --all-groups
+
+      - name: Generate local STAC catalog (debug mode)
+        run: uv run python tests/setup_test_catalog.py --output tests/data --workers 2
+
+      - name: Validate root catalog
+        uses: lowlydba/stac-check-action@3b06576bbf96c8d172f627c1639ac128f4fd7e38 # v1.0.0
+        with:
+          stac-check-version: "1.14.0"
+          file: tests/data/catalog.json
+          recursive: "true"
+          fast-linting: "true"
+          job-summary: "true"
+
   all-checks-pass:
     name: All Checks Pass
-    needs: [lint, test, test-package-install]
+    needs: [lint, test, test-package-install, stac-validate]
     runs-on: ubuntu-latest
     if: always()
     steps:
-      - uses: lowlydba/are-we-good@7efad05442f92a1203940ca8b79dd4fb930e75d4 # v1.0.2
+      - uses: lowlydba/are-we-good@bb8ee9e793e4233fac1992bb880e2a28bed7f42f # v1.0.3
         with:
           jobs: ${{ toJSON(needs) }}
+          allowed-to-fail: "stac-validate" #TODO: Remove after issues #48, 49, 50, 51 are resolved and this passes
