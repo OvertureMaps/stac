@@ -1,0 +1,68 @@
+---
+# Publishes the overture-stac package in two scenarios:
+#   1. Release (production): triggered when a GitHub Release is published → publishes to PyPI. Ensure pyproject.toml has had a version bump that matches the release version.
+#   2. Dry-run: triggered manually via workflow_dispatch → publishes to Test PyPI to verify
+#      the build and publish pipeline end-to-end without affecting the production package index.
+# Uses OIDC trusted publishing — no API token required.
+name: Publish overture-stac
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: read # required to checkout the code from the repo
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+        with:
+          enable-cache: true
+
+      - name: Build package
+        run: uv build
+
+      - name: Upload dist artifacts
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: dist
+          path: dist/
+
+  publish:
+    name: Target '${{ github.event_name == 'workflow_dispatch' && 'Test PyPI' || 'PyPI' }}'
+    needs: build
+    runs-on: ubuntu-latest
+    environment: ${{ github.event_name == 'workflow_dispatch' && 'test-pypi' || 'pypi' }}
+    env:
+      TEST_PYPI_URL: https://test.pypi.org/legacy/
+    permissions:
+      id-token: write # OIDC — required for PyPI trusted publishing
+    steps:
+      - name: Download dist artifacts
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: dist
+          path: dist/
+
+      - name: Publish
+        uses: pypa/gh-action-pypi-publish@cef221092ed1bacb1cc03d23a2d87d1d172e277b # v1.14.0
+        with:
+          repository-url: ${{ github.event_name == 'workflow_dispatch' && env.TEST_PYPI_URL || '' }}
+          skip-existing: ${{ github.event_name == 'workflow_dispatch' }}
+          attestations: true
+          verbose: false
