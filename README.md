@@ -31,3 +31,10 @@ gen-stac --output ./releases --workers 8
 ```bash
 uv run ruff format . && uv run ruff check . && uv run pytest
 ```
+
+## Release
+
+Once a GitHub Release has been created (and the pyproject.toml contains a version bump),
+`publish-pypi.yml` is triggered to publish to PyPI.
+
+Manual dispatches of that workflow will publish to https://test.pypi.org/project/overture-stac/ for debugging and validation.
