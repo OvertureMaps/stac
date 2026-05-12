@@ -102,7 +102,7 @@ def process_theme_worker(
         # Get all fragments
         all_fragments = list(type_dataset.get_fragments())
         if debug:
-            all_fragments = all_fragments[:2]
+            all_fragments = all_fragments[:3]
 
         total_fragments: int = len(all_fragments)
 
