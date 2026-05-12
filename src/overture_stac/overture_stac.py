@@ -222,16 +222,21 @@ def process_theme_worker(
 
         type_collection.add_items(local_type_collections[type_name])
 
-        type_collection.summaries = pystac.Summaries(
-            {
-                "schema": (
-                    json.loads(schema.metadata[b"geo"]).get("version")
-                    if schema is not None
-                    else None
-                ),
-                "columns": schema.names if schema is not None else None,
-            }
-        )
+        type_collection.stac_extensions = [
+            "https://stac-extensions.github.io/table/v1.2.0/schema.json"
+        ]
+        type_collection.extra_fields = {
+            "table:columns": (
+                [{"name": name} for name in schema.names] if schema is not None else []
+            ),
+            "table:primary_geometry": "geometry",
+            "table:row_count": total_row_count,
+            "geoparquet:version": (
+                json.loads(schema.metadata[b"geo"]).get("version")
+                if schema is not None
+                else None
+            ),
+        }
 
         if not debug:
             type_collection.extra_fields = {"features": total_row_count}
