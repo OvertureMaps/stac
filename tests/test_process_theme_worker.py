@@ -266,6 +266,8 @@ class TestProcessThemeWorker:
         assert collections[0].title is not None
         assert collections[0].title == "place"
 
+
+class TestBuildReleaseCatalog:
     """Tests for the build_release_catalog method."""
 
     @patch("overture_stac.overture_stac.stac_geoparquet")
