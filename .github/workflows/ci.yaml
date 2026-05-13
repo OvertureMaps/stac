@@ -139,4 +139,3 @@ jobs:
       - uses: lowlydba/are-we-good@bb8ee9e793e4233fac1992bb880e2a28bed7f42f # v1.0.3
         with:
           jobs: ${{ toJSON(needs) }}
-          allowed-to-fail: "stac-validate" #TODO: Remove after issues #48, 49, 50, 51 are resolved and this passes
