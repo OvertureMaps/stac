@@ -220,7 +220,6 @@ class TestProcessThemeWorker:
         pmtiles_links = [link for link in theme_catalog.links if link.rel == "pmtiles"]
         assert len(pmtiles_links) == 1
 
-
     @patch("overture_stac.overture_stac.ds")
     @patch("overture_stac.overture_stac.fs")
     def test_child_links_have_titles(self, mock_fs, mock_ds):
@@ -266,6 +265,7 @@ class TestProcessThemeWorker:
         collections = list(theme_catalog.get_children())
         assert collections[0].title is not None
         assert collections[0].title == "place"
+
     """Tests for the build_release_catalog method."""
 
     @patch("overture_stac.overture_stac.stac_geoparquet")
