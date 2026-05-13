@@ -12,19 +12,20 @@ import stac_geoparquet
 
 TYPE_LICENSE_MAP: dict[str, str] = {
     "bathymetry": "CC0-1.0",
-    "land_cover": "	CC-BY-4.0",
+    "land_cover": "CC-BY-4.0",
     "infrastructure": "ODbL-1.0",
     "land": "ODbL-1.0",
     "land_use": "ODbL-1.0",
     "water": "ODbL-1.0",
     "building": "ODbL-1.0",
+    "building_part": "ODbL-1.0",
     "division": "ODbL-1.0",
     "division_area": "ODbL-1.0",
     "division_boundary": "ODbL-1.0",
     "segment": "ODbL-1.0",
     "connector": "ODbL-1.0",
-    "place": "CDLA-Permissive-2.0, Apache 2.0, CC0 1.0.",
-    "address": "Multiple Open Licenses",
+    "place": "other",
+    "address": "other",
 }
 
 
@@ -219,6 +220,16 @@ def process_theme_worker(
             ),
             license=TYPE_LICENSE_MAP.get(type_name),
         )
+
+        # Licenses with multiple SPDXs must be marked as "other" and include a link to the license details
+        if TYPE_LICENSE_MAP.get(type_name) == "other":
+            type_collection.add_link(
+                pystac.Link(
+                    rel="license",
+                    target="https://docs.overturemaps.org/attribution/",
+                    title="Overture Maps Attribution and Licensing",
+                )
+            )
 
         type_collection.add_items(local_type_collections[type_name])
 
