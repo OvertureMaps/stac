@@ -46,6 +46,7 @@ def main():
 
     # TODO: These should be stored elsewhere, but for now we'll hardcode them here
     schema_version_mapping: dict[str, str] = {
+        "2026-05-20.0": "1.17.0",
         "2026-04-15.0": "1.16.0",
         "2026-03-18.0": "1.16.0",
         "2026-02-18.0": "1.16.0",
