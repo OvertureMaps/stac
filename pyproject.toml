@@ -41,6 +41,14 @@ build-backend = "hatchling.build"
 [tool.hatch.build.targets.wheel]
 packages = ["src/overture_stac"]
 
+[tool.hatch.build.targets.sdist]
+exclude = [
+    "/.github",
+    "/.gitignore",
+    "/CODEOWNERS",
+    "/uv.lock",
+]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 python_files = ["test_*.py"]
