@@ -60,7 +60,7 @@ dmypy.json
 .ipynb_checkpoints
 
 # pyenv
-.python-version
+# .python-version is intentionally tracked — it is the canonical Python version pin for CI and uv
 
 # UV
 .uv/
@@ -71,6 +71,7 @@ dmypy.json
 # Output directories
 public_releases/
 output/
+test_output/
 
 # Misc
 .DS_Store
