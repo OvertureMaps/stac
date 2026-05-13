@@ -112,6 +112,7 @@ def build_test_catalog(
     # Create root catalog to match CLI structure
     root_catalog = pystac.Catalog(
         id="Overture Releases",
+        title="Overture Releases",
         description="All Overture Releases (Test)",
     )
 
