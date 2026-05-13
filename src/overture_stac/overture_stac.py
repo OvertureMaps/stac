@@ -65,7 +65,9 @@ def process_theme_worker(
     logger.info(f"Processing Theme: {theme_name}")
 
     theme_catalog = pystac.Catalog(
-        id=theme_name, description=f"Overture's {theme_name} theme"
+        id=theme_name,
+        title=theme_name,
+        description=f"Overture's {theme_name} theme",
     )
 
     # Add PMTiles link if available for this theme
@@ -211,6 +213,7 @@ def process_theme_worker(
         # Create type collection
         type_collection = pystac.Collection(
             id=type_name,
+            title=type_name,
             description=f"Overture's {type_name} collection",
             extent=pystac.Extent(
                 spatial=pystac.SpatialExtent(
@@ -252,7 +255,7 @@ def process_theme_worker(
         if not debug:
             type_collection.extra_fields = {"features": total_row_count}
 
-        theme_catalog.add_child(type_collection)
+        theme_catalog.add_child(type_collection, title=type_name)
 
     return (theme_catalog, local_manifest_items, local_type_collections, theme_name)
 

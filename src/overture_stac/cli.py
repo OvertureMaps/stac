@@ -55,6 +55,7 @@ def main():
 
     overture_releases_catalog = pystac.Catalog(
         id="Overture Releases",
+        title="Overture Releases",
         description="All Overture Releases",
     )
 
