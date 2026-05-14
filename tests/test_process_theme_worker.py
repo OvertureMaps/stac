@@ -220,6 +220,52 @@ class TestProcessThemeWorker:
         pmtiles_links = [link for link in theme_catalog.links if link.rel == "pmtiles"]
         assert len(pmtiles_links) == 1
 
+    @patch("overture_stac.overture_stac.ds")
+    @patch("overture_stac.overture_stac.fs")
+    def test_child_links_have_titles(self, mock_fs, mock_ds):
+        """Verify all child links on theme_catalog include a title field."""
+        fragments = [
+            make_mock_fragment(
+                "bucket/release/theme=places/type=place/part-00000-abc.parquet",
+                num_rows=50,
+            ),
+        ]
+
+        file_info, dataset = make_mock_theme_type(
+            "bucket/release/theme=places/type=place", fragments
+        )
+
+        mock_filesystem = MagicMock()
+        mock_filesystem.get_file_info.return_value = [file_info]
+        mock_fs.S3FileSystem.return_value = mock_filesystem
+        mock_ds.dataset.return_value = dataset
+
+        theme_catalog, _, _, _ = process_theme_worker(
+            theme_path="bucket/release/theme=places",
+            release_path="s3://bucket/release",
+            s3_region="us-west-2",
+            debug=False,
+            release_datetime=datetime(2026, 4, 15),
+            release="2026-04-15.0",
+            available_pmtiles={},
+        )
+
+        child_links = [link for link in theme_catalog.links if link.rel == "child"]
+        assert len(child_links) > 0, "theme_catalog should have child links"
+        for link in child_links:
+            assert link.title is not None, (
+                f"Child link {link.href} is missing a title field"
+            )
+
+        # Also verify the theme_catalog itself has a title
+        assert theme_catalog.title is not None
+        assert theme_catalog.title == "places"
+
+        # Verify collection has a title
+        collections = list(theme_catalog.get_children())
+        assert collections[0].title is not None
+        assert collections[0].title == "place"
+
 
 class TestBuildReleaseCatalog:
     """Tests for the build_release_catalog method."""
