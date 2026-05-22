@@ -122,7 +122,7 @@ jobs:
         run: uv run python tests/setup_test_catalog.py --output tests/data --workers 2
 
       - name: Validate root catalog
-        uses: lowlydba/stac-check-action@3b06576bbf96c8d172f627c1639ac128f4fd7e38 # v1.0.0
+        uses: OvertureMaps/stac-check-action@3b06576bbf96c8d172f627c1639ac128f4fd7e38 # v1.0.0
         with:
           stac-check-version: "1.14.0"
           file: tests/data/catalog.json

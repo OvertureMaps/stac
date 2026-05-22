@@ -7,6 +7,8 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
+    cooldown:
+      default-days: 7
     open-pull-requests-limit: 5
     groups:
       actions:
@@ -15,7 +17,5 @@ updates:
     labels:
       - "bot"
     commit-message:
-      prefix: "[CHORE](deps)"
+      prefix: "[CHORE](gha-deps)"
       include: "scope"
-    cooldown:
-      default-days: 7
