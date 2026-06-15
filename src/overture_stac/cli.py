@@ -37,31 +37,53 @@ def main():
         help="Number of parallel workers (default: 4)",
     )
 
+    parser.add_argument(
+        "--release",
+        type=str,
+        default=None,
+        help="Release version to generate STAC for (e.g. 2026-05-20.0). When omitted, all releases are processed.",
+    )
+
+    parser.add_argument(
+        "--schema-version",
+        type=str,
+        default=None,
+        help="Schema version for the release (e.g. 1.17.0). Required when --release is provided.",
+    )
+
     args = parser.parse_args()
+
+    if args.release and not args.schema_version:
+        parser.error("--schema-version is required when --release is provided")
+
+    output = Path(args.output)
+    output.mkdir(parents=True, exist_ok=True)
+
+    if args.release:
+        this_release = OvertureRelease(
+            release=args.release,
+            schema=args.schema_version,
+            output=output,
+            debug=args.debug,
+        )
+        title = f"{args.release} Overture Release"
+        this_release.build_release_catalog(title=title, max_workers=args.workers)
+        this_release.release_catalog.normalize_and_save(
+            root_href=str(output / args.release),
+            catalog_type=pystac.CatalogType.SELF_CONTAINED,
+        )
+        return
 
     filesystem = fs.S3FileSystem(anonymous=True, region="us-west-2")
     available_releases = filesystem.get_file_info(
         fs.FileSelector("overturemaps-us-west-2/release")
     )
 
-    # TODO: These should be stored elsewhere, but for now we'll hardcode them here
-    schema_version_mapping: dict[str, str] = {
-        "2026-05-20.0": "1.17.0",
-        "2026-04-15.0": "1.16.0",
-        "2026-03-18.0": "1.16.0",
-        "2026-02-18.0": "1.16.0",
-        "2026-01-21.0": "1.15.0",
-        "2025-12-17.0": "1.15.0",
-    }
-
     overture_releases_catalog = pystac.Catalog(
         id="Overture Releases",
         title="Overture Releases",
         description="All Overture Releases",
     )
-
-    output = Path(args.output)
-    output.mkdir(parents=True, exist_ok=True)
 
     for idx, release_info in enumerate(
         sorted(available_releases, key=lambda p: p.path, reverse=True)
@@ -74,7 +96,7 @@ def main():
 
         this_release = OvertureRelease(
             release=release,
-            schema=schema_version_mapping.get(release),
+            schema=None,
             output=output,
             debug=args.debug,
         )
