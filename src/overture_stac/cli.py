@@ -1,6 +1,7 @@
 """Command-line interface for generating STAC catalogs."""
 
 import argparse
+import re
 from pathlib import Path
 
 import pyarrow.fs as fs
@@ -55,6 +56,12 @@ def main():
 
     if args.release and not args.schema_version:
         parser.error("--schema-version is required when --release is provided")
+
+    if args.release and not re.fullmatch(r"\d{4}-\d{2}-\d{2}\.\d+", args.release):
+        parser.error("--release must be in format YYYY-MM-DD.N (e.g. 2026-05-20.0)")
+
+    if args.schema_version and not re.fullmatch(r"\d+\.\d+\.\d+", args.schema_version):
+        parser.error("--schema-version must be in format X.Y.Z (e.g. 1.17.0)")
 
     output = Path(args.output)
     output.mkdir(parents=True, exist_ok=True)
