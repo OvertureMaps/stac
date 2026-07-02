@@ -37,7 +37,8 @@ jobs:
 
       - name: Build STAC Catalog
         run: |
-          gen-stac --output public_releases
+          gen-stac --output public_releases \
+            --root-href "https://staging.overturemaps.org/${{ github.event.repository.name }}/pr/${{ github.event.number }}"
 
       - name: Upload artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
