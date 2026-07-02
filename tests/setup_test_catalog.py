@@ -138,7 +138,8 @@ def build_test_catalog(
     # except Exception as e:
     #     logger.warning(f"Could not create registry manifest: {e}")
 
-    # Normalize and save
+    # Normalize and save. Strip any trailing slash from user input first so
+    # the appended "/" below always joins with exactly one slash.
     logger.info(f"Saving catalog to {output_dir}...")
     root_catalog.normalize_hrefs(root_href.rstrip("/") + "/")
     root_catalog.save(

@@ -67,6 +67,8 @@ def main():
 
     args = parser.parse_args()
 
+    # Normalize to no trailing slash so downstream f"{root_href}/..." hrefs
+    # always join with exactly one slash, regardless of user input.
     root_href = args.root_href.rstrip("/")
 
     if args.release and not args.schema_version:
