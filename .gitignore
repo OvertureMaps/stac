@@ -80,3 +80,6 @@ test_output/
 *~
 
 tests/data
+
+# Local tooling cache
+.impeccable/
