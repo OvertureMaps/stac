@@ -72,6 +72,7 @@ def build_test_catalog(
     output_dir: Path,
     release: str | None = None,
     workers: int = 2,
+    root_href: str = f"http://localhost:{DEFAULT_PORT}",
 ) -> Path:
     """
     Build a STAC catalog in debug mode for testing.
@@ -80,6 +81,9 @@ def build_test_catalog(
         output_dir: Directory to output the catalog
         release: Specific release to build (None = latest)
         workers: Number of parallel workers
+        root_href: Public root URL used to build absolute 'self' links. Should
+            match wherever the catalog will actually be served from (e.g. the
+            local test HTTP server) so hierarchical links resolve correctly.
 
     Returns:
         Path to the built catalog directory
@@ -136,9 +140,10 @@ def build_test_catalog(
 
     # Normalize and save
     logger.info(f"Saving catalog to {output_dir}...")
-    root_catalog.normalize_and_save(
-        root_href=str(output_dir),
-        catalog_type=pystac.CatalogType.SELF_CONTAINED,
+    root_catalog.normalize_hrefs(root_href.rstrip("/") + "/")
+    root_catalog.save(
+        catalog_type=pystac.CatalogType.ABSOLUTE_PUBLISHED,
+        dest_href=str(output_dir),
     )
 
     catalog_path = output_dir / release
@@ -268,6 +273,16 @@ def main():
         help=f"Port for HTTP server (default: {DEFAULT_PORT})",
     )
 
+    parser.add_argument(
+        "--root-href",
+        type=str,
+        default=None,
+        help=(
+            "Public root URL used to build absolute 'self' links. Defaults to "
+            "http://localhost:<port>, matching the local test HTTP server."
+        ),
+    )
+
     args = parser.parse_args()
 
     if args.list_releases:
@@ -289,10 +304,12 @@ def main():
         return
 
     # Build the catalog
+    root_href = args.root_href or f"http://localhost:{args.port}"
     catalog_path = build_test_catalog(
         output_dir=output_dir,
         release=args.release,
         workers=args.workers,
+        root_href=root_href,
     )
 
     print("\n✓ Test catalog built successfully!")

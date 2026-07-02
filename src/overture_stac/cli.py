@@ -10,6 +10,8 @@ import pystac
 from overture_stac.overture_stac import OvertureRelease
 from overture_stac.registry_manifest import RegistryManifest
 
+PROD_ROOT_HREF = "https://stac.overturemaps.org"
+
 
 def main():
     """Main entry point for the CLI."""
@@ -52,7 +54,20 @@ def main():
         help="Schema version for the release (e.g. 1.17.0). Required when --release is provided.",
     )
 
+    parser.add_argument(
+        "--root-href",
+        type=str,
+        default=PROD_ROOT_HREF,
+        help=(
+            "Public root URL the catalog will be hosted at, used to build absolute "
+            f"'self' links (default: {PROD_ROOT_HREF}). Override for staging/testing, "
+            "e.g. https://labs.overturemaps.org/stac."
+        ),
+    )
+
     args = parser.parse_args()
+
+    root_href = args.root_href.rstrip("/")
 
     if args.release and not args.schema_version:
         parser.error("--schema-version is required when --release is provided")
@@ -75,9 +90,10 @@ def main():
         )
         title = f"{args.release} Overture Release"
         this_release.build_release_catalog(title=title, max_workers=args.workers)
-        this_release.release_catalog.normalize_and_save(
-            root_href=str(output / args.release),
-            catalog_type=pystac.CatalogType.SELF_CONTAINED,
+        this_release.release_catalog.normalize_hrefs(f"{root_href}/{args.release}/")
+        this_release.release_catalog.save(
+            catalog_type=pystac.CatalogType.ABSOLUTE_PUBLISHED,
+            dest_href=str(output / args.release),
         )
         return
 
@@ -125,8 +141,9 @@ def main():
         "manifest": registry_manifest.create_manifest(),
     }
 
-    overture_releases_catalog.normalize_and_save(
-        root_href=str(output), catalog_type=pystac.CatalogType.SELF_CONTAINED
+    overture_releases_catalog.normalize_hrefs(f"{root_href}/")
+    overture_releases_catalog.save(
+        catalog_type=pystac.CatalogType.ABSOLUTE_PUBLISHED, dest_href=str(output)
     )
 
 
