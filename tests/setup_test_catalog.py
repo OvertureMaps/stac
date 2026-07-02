@@ -18,7 +18,7 @@ import os
 import sys
 import threading
 from functools import partial
-from http.server import HTTPServer, SimpleHTTPRequestHandler
+from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 import pyarrow.fs as fs
@@ -72,7 +72,7 @@ def build_test_catalog(
     output_dir: Path,
     release: str | None = None,
     workers: int = 2,
-    root_href: str = f"http://localhost:{DEFAULT_PORT}",
+    root_href: str = f"http://127.0.0.1:{DEFAULT_PORT}",
 ) -> Path:
     """
     Build a STAC catalog in debug mode for testing.
@@ -169,7 +169,7 @@ class CORSRequestHandler(SimpleHTTPRequestHandler):
         logger.debug(f"HTTP: {args[0]}")
 
 
-def serve_catalog(directory: Path, port: int = DEFAULT_PORT) -> HTTPServer:
+def serve_catalog(directory: Path, port: int = DEFAULT_PORT) -> ThreadingHTTPServer:
     """
     Start an HTTP server to serve the catalog directory.
 
@@ -178,19 +178,22 @@ def serve_catalog(directory: Path, port: int = DEFAULT_PORT) -> HTTPServer:
         port: Port to serve on
 
     Returns:
-        HTTPServer instance
+        ThreadingHTTPServer instance
     """
     os.chdir(directory)
     handler = partial(CORSRequestHandler, directory=directory)
-    server = HTTPServer(("localhost", port), handler)
+    # Bind explicitly to the IPv4 loopback address (rather than "localhost")
+    # to avoid slow IPv6-then-IPv4 connection fallback delays seen with some
+    # HTTP clients (e.g. requests/urllib3 on Windows).
+    server = ThreadingHTTPServer(("127.0.0.1", port), handler)
     return server
 
 
 def run_server_blocking(directory: Path, port: int = DEFAULT_PORT):
     """Run the HTTP server in blocking mode (for CLI use)."""
     server = serve_catalog(directory, port)
-    print(f"Serving catalog at http://localhost:{port}")
-    print(f"Root catalog: http://localhost:{port}/catalog.json")
+    print(f"Serving catalog at http://127.0.0.1:{port}")
+    print(f"Root catalog: http://127.0.0.1:{port}/catalog.json")
     print("Press Ctrl+C to stop...")
 
     try:
@@ -203,7 +206,9 @@ def run_server_blocking(directory: Path, port: int = DEFAULT_PORT):
         print("Server stopped.")
 
 
-def start_server_background(directory: Path, port: int = DEFAULT_PORT) -> HTTPServer:
+def start_server_background(
+    directory: Path, port: int = DEFAULT_PORT
+) -> ThreadingHTTPServer:
     """
     Start the HTTP server in a background thread.
 
@@ -212,12 +217,12 @@ def start_server_background(directory: Path, port: int = DEFAULT_PORT) -> HTTPSe
         port: Port to serve on
 
     Returns:
-        HTTPServer instance (call shutdown() to stop)
+        ThreadingHTTPServer instance (call shutdown() to stop)
     """
     server = serve_catalog(directory, port)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
-    logger.info(f"Server started at http://localhost:{port}")
+    logger.info(f"Server started at http://127.0.0.1:{port}")
     return server
 
 
@@ -279,7 +284,7 @@ def main():
         default=None,
         help=(
             "Public root URL used to build absolute 'self' links. Defaults to "
-            "http://localhost:<port>, matching the local test HTTP server."
+            "http://127.0.0.1:<port>, matching the local test HTTP server."
         ),
     )
 
@@ -304,7 +309,7 @@ def main():
         return
 
     # Build the catalog
-    root_href = args.root_href or f"http://localhost:{args.port}"
+    root_href = args.root_href or f"http://127.0.0.1:{args.port}"
     catalog_path = build_test_catalog(
         output_dir=output_dir,
         release=args.release,
