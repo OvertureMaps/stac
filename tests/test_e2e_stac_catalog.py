@@ -51,7 +51,7 @@ def find_release_name() -> str | None:
 def is_port_in_use(port: int) -> bool:
     """Check if a port is already in use."""
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        return s.connect_ex(("localhost", port)) == 0
+        return s.connect_ex(("127.0.0.1", port)) == 0
 
 
 def get_all_items_from_catalog(catalog: pystac.Catalog) -> list[pystac.Item]:
@@ -105,7 +105,7 @@ def catalog_server():
     # Check if server is already running
     if is_port_in_use(port):
         # Assume it's our server already running
-        yield f"http://localhost:{port}"
+        yield f"http://127.0.0.1:{port}"
         return
 
     # Start the server
@@ -113,7 +113,7 @@ def catalog_server():
     time.sleep(0.5)  # Give server time to start
 
     try:
-        yield f"http://localhost:{port}"
+        yield f"http://127.0.0.1:{port}"
     finally:
         # Properly shutdown and close the server
         server.shutdown()

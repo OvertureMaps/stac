@@ -36,8 +36,12 @@ jobs:
           uv pip install --system -e .
 
       - name: Build STAC Catalog
+        env:
+          REPO_NAME: ${{ github.event.repository.name }}
+          PR_NUMBER: ${{ github.event.number }}
         run: |
-          gen-stac --output public_releases
+          gen-stac --output public_releases \
+            --root-href "https://staging.overturemaps.org/${REPO_NAME}/pr/${PR_NUMBER}"
 
       - name: Upload artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1

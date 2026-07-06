@@ -18,7 +18,7 @@ import os
 import sys
 import threading
 from functools import partial
-from http.server import HTTPServer, SimpleHTTPRequestHandler
+from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 import pyarrow.fs as fs
@@ -72,6 +72,7 @@ def build_test_catalog(
     output_dir: Path,
     release: str | None = None,
     workers: int = 2,
+    root_href: str = f"http://127.0.0.1:{DEFAULT_PORT}",
 ) -> Path:
     """
     Build a STAC catalog in debug mode for testing.
@@ -80,6 +81,9 @@ def build_test_catalog(
         output_dir: Directory to output the catalog
         release: Specific release to build (None = latest)
         workers: Number of parallel workers
+        root_href: Public root URL used to build absolute 'self' links. Should
+            match wherever the catalog will actually be served from (e.g. the
+            local test HTTP server) so hierarchical links resolve correctly.
 
     Returns:
         Path to the built catalog directory
@@ -134,11 +138,13 @@ def build_test_catalog(
     # except Exception as e:
     #     logger.warning(f"Could not create registry manifest: {e}")
 
-    # Normalize and save
+    # Normalize and save. Strip any trailing slash from user input first so
+    # the appended "/" below always joins with exactly one slash.
     logger.info(f"Saving catalog to {output_dir}...")
-    root_catalog.normalize_and_save(
-        root_href=str(output_dir),
-        catalog_type=pystac.CatalogType.SELF_CONTAINED,
+    root_catalog.normalize_hrefs(root_href.rstrip("/") + "/")
+    root_catalog.save(
+        catalog_type=pystac.CatalogType.ABSOLUTE_PUBLISHED,
+        dest_href=str(output_dir),
     )
 
     catalog_path = output_dir / release
@@ -164,7 +170,7 @@ class CORSRequestHandler(SimpleHTTPRequestHandler):
         logger.debug(f"HTTP: {args[0]}")
 
 
-def serve_catalog(directory: Path, port: int = DEFAULT_PORT) -> HTTPServer:
+def serve_catalog(directory: Path, port: int = DEFAULT_PORT) -> ThreadingHTTPServer:
     """
     Start an HTTP server to serve the catalog directory.
 
@@ -173,19 +179,22 @@ def serve_catalog(directory: Path, port: int = DEFAULT_PORT) -> HTTPServer:
         port: Port to serve on
 
     Returns:
-        HTTPServer instance
+        ThreadingHTTPServer instance
     """
     os.chdir(directory)
     handler = partial(CORSRequestHandler, directory=directory)
-    server = HTTPServer(("localhost", port), handler)
+    # Bind explicitly to the IPv4 loopback address (rather than "localhost")
+    # to avoid slow IPv6-then-IPv4 connection fallback delays seen with some
+    # HTTP clients (e.g. requests/urllib3 on Windows).
+    server = ThreadingHTTPServer(("127.0.0.1", port), handler)
     return server
 
 
 def run_server_blocking(directory: Path, port: int = DEFAULT_PORT):
     """Run the HTTP server in blocking mode (for CLI use)."""
     server = serve_catalog(directory, port)
-    print(f"Serving catalog at http://localhost:{port}")
-    print(f"Root catalog: http://localhost:{port}/catalog.json")
+    print(f"Serving catalog at http://127.0.0.1:{port}")
+    print(f"Root catalog: http://127.0.0.1:{port}/catalog.json")
     print("Press Ctrl+C to stop...")
 
     try:
@@ -198,7 +207,9 @@ def run_server_blocking(directory: Path, port: int = DEFAULT_PORT):
         print("Server stopped.")
 
 
-def start_server_background(directory: Path, port: int = DEFAULT_PORT) -> HTTPServer:
+def start_server_background(
+    directory: Path, port: int = DEFAULT_PORT
+) -> ThreadingHTTPServer:
     """
     Start the HTTP server in a background thread.
 
@@ -207,12 +218,12 @@ def start_server_background(directory: Path, port: int = DEFAULT_PORT) -> HTTPSe
         port: Port to serve on
 
     Returns:
-        HTTPServer instance (call shutdown() to stop)
+        ThreadingHTTPServer instance (call shutdown() to stop)
     """
     server = serve_catalog(directory, port)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
-    logger.info(f"Server started at http://localhost:{port}")
+    logger.info(f"Server started at http://127.0.0.1:{port}")
     return server
 
 
@@ -268,6 +279,16 @@ def main():
         help=f"Port for HTTP server (default: {DEFAULT_PORT})",
     )
 
+    parser.add_argument(
+        "--root-href",
+        type=str,
+        default=None,
+        help=(
+            "Public root URL used to build absolute 'self' links. Defaults to "
+            "http://127.0.0.1:<port>, matching the local test HTTP server."
+        ),
+    )
+
     args = parser.parse_args()
 
     if args.list_releases:
@@ -289,10 +310,12 @@ def main():
         return
 
     # Build the catalog
+    root_href = args.root_href or f"http://127.0.0.1:{args.port}"
     catalog_path = build_test_catalog(
         output_dir=output_dir,
         release=args.release,
         workers=args.workers,
+        root_href=root_href,
     )
 
     print("\n✓ Test catalog built successfully!")
