@@ -45,6 +45,12 @@ jobs:
           </html>
           HTML
 
+          # GitHub Pages serves 404.html for any unmatched path, so this also
+          # catches old deep links (e.g. /stac/catalog.json, /stac/collections/...)
+          # that pointed at real files before this workflow stopped building
+          # the catalog.
+          cp redirect_page/index.html redirect_page/404.html
+
       - name: Setup Pages
         uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
 
