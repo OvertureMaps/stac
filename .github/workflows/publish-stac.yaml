@@ -1,4 +1,4 @@
-name: Publish STAC to GH-Pages
+name: Publish Redirect Page to GH-Pages
 
 on:
   workflow_dispatch:
@@ -10,11 +10,13 @@ concurrency:
   group: "pages"
   cancel-in-progress: false
 
+# labs.overturemaps.org/stac is defunct. This workflow no longer builds the
+# STAC catalog; it publishes a single static page that redirects visitors to
+# the production STAC at https://stac.overturemaps.org/catalog.json.
 jobs:
-  build-and-deploy:
-    name: Build and Deploy STAC Catalog
+  deploy-redirect:
+    name: Deploy Redirect Page
     permissions:
-      contents: read
       pages: write # required to deploy to GitHub Pages
       id-token: write # required for OIDC token exchange when deploying to GitHub Pages
     environment:
@@ -22,26 +24,32 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-        with:
-          persist-credentials: false
-
-      - name: Set up Python
-        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
-        with:
-          python-version-file: .python-version
-
-      - name: Install UV
-        uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39 # v8.2.0
-
-      - name: Install dependencies
+      - name: Generate redirect page
         run: |
-          uv pip install --system -e .
+          mkdir -p redirect_page
+          cat > redirect_page/index.html <<'HTML'
+          <!DOCTYPE html>
+          <html lang="en">
+          <head>
+            <meta charset="utf-8">
+            <title>Overture STAC has moved</title>
+            <meta http-equiv="refresh" content="0; url=https://stac.overturemaps.org/catalog.json">
+            <link rel="canonical" href="https://stac.overturemaps.org/catalog.json">
+          </head>
+          <body>
+            <p>
+              This STAC catalog has moved. Redirecting to
+              <a href="https://stac.overturemaps.org/catalog.json">https://stac.overturemaps.org/catalog.json</a>.
+            </p>
+          </body>
+          </html>
+          HTML
 
-      - name: Build STAC Catalog
-        run: |
-          gen-stac --output public_releases
+          # GitHub Pages serves 404.html for any unmatched path, so this also
+          # catches old deep links (e.g. /stac/catalog.json, /stac/collections/...)
+          # that pointed at real files before this workflow stopped building
+          # the catalog.
+          cp redirect_page/index.html redirect_page/404.html
 
       - name: Setup Pages
         uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
@@ -49,7 +57,7 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
         with:
-          path: "public_releases"
+          path: "redirect_page"
 
       - name: Deploy to GitHub Pages
         id: deployment
