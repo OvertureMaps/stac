@@ -7,7 +7,7 @@
 
 Generate STAC catalogs for all public Overture Maps releases.
 
-**[Browse the catalog](https://radiantearth.github.io/stac-browser/#/external/labs.overturemaps.org/stac/catalog.json?.language=en)**
+**[Browse the catalog](https://radiantearth.github.io/stac-browser/#/external/stac.overturemaps.org/catalog.json?.language=en)**
 
 ## Setup
 

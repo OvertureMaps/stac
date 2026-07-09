@@ -61,7 +61,7 @@ def main():
         help=(
             "Public root URL the catalog will be hosted at, used to build absolute "
             f"'self' links (default: {PROD_ROOT_HREF}). Override for staging/testing, "
-            "e.g. https://labs.overturemaps.org/stac."
+            "e.g. https://staging.overturemaps.org/stac/pr/123."
         ),
     )
 
