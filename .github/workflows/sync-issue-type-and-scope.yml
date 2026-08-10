@@ -4,6 +4,9 @@ on:
   issues:
     types: [opened]
 
+# Jobs opt in to the permissions they need.
+permissions: {}
+
 # One sync run per issue at a time; drop duplicate triggers.
 concurrency:
   group: sync-issue-type-scope-${{ github.event.issue.number }}
@@ -11,8 +14,10 @@ concurrency:
 
 jobs:
   sync-fields:
+    name: Sync issue fields
     runs-on: ubuntu-latest
     permissions:
+      # Needed to set the Type, Scope, and Skillset fields on the opened issue.
       issues: write
     steps:
       - name: Sync Type and Scope from form answers
