@@ -33,7 +33,7 @@ body:
     id: skillset
     attributes:
       label: Skillset
-      description: Primary skill needed to complete this task. Used to populate the organization-level `Skillset` field during triage.
+      description: Primary skill needed to complete this task. Used to populate the organization-level `Skillset` field during triage. Optional - leave blank if none of these options describe the needed skillset.
       default: 2
       options:
         - data analysis
@@ -41,7 +41,7 @@ body:
         - dev ops
         - engineering
     validations:
-      required: true
+      required: false
   - type: textarea
     id: description
     attributes:
