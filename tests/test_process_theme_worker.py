@@ -12,7 +12,11 @@ from unittest.mock import MagicMock, patch
 
 import pystac
 
-from overture_stac.overture_stac import OvertureRelease, process_theme_worker
+from overture_stac.overture_stac import (
+    ITEM_STAC_EXTENSIONS,
+    OvertureRelease,
+    process_theme_worker,
+)
 
 
 def make_mock_fragment(path: str, num_rows: int = 100, num_row_groups: int = 2):
@@ -154,6 +158,178 @@ class TestProcessThemeWorker:
         collections = list(theme_catalog.get_children())
         assert len(collections) == 1
         assert collections[0].extra_fields["features"] == 6000
+
+    @patch("overture_stac.overture_stac.ds")
+    @patch("overture_stac.overture_stac.fs")
+    def test_table_extension_fields_survive_non_debug(self, mock_fs, mock_ds):
+        """Non-debug branch merges `features` into extra_fields instead of reassigning."""
+        fragments = [
+            make_mock_fragment(
+                "bucket/release/theme=things/type=gadget/part-00000-abc.parquet",
+                num_rows=1000,
+            ),
+            make_mock_fragment(
+                "bucket/release/theme=things/type=gadget/part-00001-def.parquet",
+                num_rows=2000,
+            ),
+        ]
+
+        file_info, dataset = make_mock_theme_type(
+            "bucket/release/theme=things/type=gadget", fragments
+        )
+
+        mock_filesystem = MagicMock()
+        mock_filesystem.get_file_info.return_value = [file_info]
+        mock_fs.S3FileSystem.return_value = mock_filesystem
+        mock_ds.dataset.return_value = dataset
+
+        theme_catalog, _, _, _ = process_theme_worker(
+            theme_path="bucket/release/theme=things",
+            release_path="s3://bucket/release",
+            s3_region="us-west-2",
+            debug=False,
+            release_datetime=datetime(2026, 4, 15),
+            release="2026-04-15.0",
+            available_pmtiles={},
+        )
+
+        collection = next(iter(theme_catalog.get_children()))
+        extra = collection.extra_fields
+
+        assert extra["table:columns"] == [
+            {"name": "id"},
+            {"name": "geometry"},
+            {"name": "name"},
+        ]
+        assert extra["table:primary_geometry"] == "geometry"
+        assert extra["table:row_count"] == 3000
+        assert extra["geoparquet:version"] == "1.0.0"
+        assert extra["features"] == 3000
+        assert (
+            "https://stac-extensions.github.io/table/v1.2.0/schema.json"
+            in collection.stac_extensions
+        )
+
+    @patch("overture_stac.overture_stac.ds")
+    @patch("overture_stac.overture_stac.fs")
+    def test_collection_summaries_from_item_row_stats(self, mock_fs, mock_ds):
+        """Collection summaries roll up num_rows / num_row_groups min-max from Items."""
+        fragments = [
+            make_mock_fragment(
+                "bucket/release/theme=things/type=gadget/part-00000-abc.parquet",
+                num_rows=1000,
+                num_row_groups=4,
+            ),
+            make_mock_fragment(
+                "bucket/release/theme=things/type=gadget/part-00001-def.parquet",
+                num_rows=5000,
+                num_row_groups=16,
+            ),
+            make_mock_fragment(
+                "bucket/release/theme=things/type=gadget/part-00002-ghi.parquet",
+                num_rows=3000,
+                num_row_groups=8,
+            ),
+        ]
+
+        file_info, dataset = make_mock_theme_type(
+            "bucket/release/theme=things/type=gadget", fragments
+        )
+
+        mock_filesystem = MagicMock()
+        mock_filesystem.get_file_info.return_value = [file_info]
+        mock_fs.S3FileSystem.return_value = mock_filesystem
+        mock_ds.dataset.return_value = dataset
+
+        theme_catalog, _, _, _ = process_theme_worker(
+            theme_path="bucket/release/theme=things",
+            release_path="s3://bucket/release",
+            s3_region="us-west-2",
+            debug=False,
+            release_datetime=datetime(2026, 4, 15),
+            release="2026-04-15.0",
+            available_pmtiles={},
+        )
+
+        collection = next(iter(theme_catalog.get_children()))
+        summaries = collection.summaries.to_dict()
+
+        assert summaries["num_rows"] == {"minimum": 1000, "maximum": 5000}
+        assert summaries["num_row_groups"] == {"minimum": 4, "maximum": 16}
+
+    @patch("overture_stac.overture_stac.ds")
+    @patch("overture_stac.overture_stac.fs")
+    def test_assets_have_descriptive_metadata(self, mock_fs, mock_ds):
+        """Item assets (top-level and alternate) carry title, description, roles=['data']."""
+        fragments = [
+            make_mock_fragment(
+                "bucket/release/theme=places/type=place/part-00000-abc.parquet",
+            ),
+        ]
+
+        file_info, dataset = make_mock_theme_type(
+            "bucket/release/theme=places/type=place", fragments
+        )
+
+        mock_filesystem = MagicMock()
+        mock_filesystem.get_file_info.return_value = [file_info]
+        mock_fs.S3FileSystem.return_value = mock_filesystem
+        mock_ds.dataset.return_value = dataset
+
+        _, _, type_collections, _ = process_theme_worker(
+            theme_path="bucket/release/theme=places",
+            release_path="s3://bucket/release",
+            s3_region="us-west-2",
+            debug=False,
+            release_datetime=datetime(2026, 4, 15),
+            release="2026-04-15.0",
+            available_pmtiles={},
+        )
+
+        item = type_collections["place"][0]
+        for key in ("aws", "azure"):
+            asset = item.assets[key]
+            assert asset.title, f"{key} asset is missing a title"
+            assert asset.description, f"{key} asset is missing a description"
+            assert asset.roles == ["data"], f"{key} asset should have roles=['data']"
+
+        s3_alt = item.assets["aws"].extra_fields["alternate"]["s3"]
+        assert s3_alt["roles"] == ["data"], "s3 alternate should have roles=['data']"
+
+    @patch("overture_stac.overture_stac.ds")
+    @patch("overture_stac.overture_stac.fs")
+    def test_items_declare_used_stac_extensions(self, mock_fs, mock_ds):
+        """Items declare stac_extensions matching the storage:* / alternate:* fields they use."""
+        fragments = [
+            make_mock_fragment(
+                "bucket/release/theme=places/type=place/part-00000-abc.parquet",
+            ),
+        ]
+
+        file_info, dataset = make_mock_theme_type(
+            "bucket/release/theme=places/type=place", fragments
+        )
+
+        mock_filesystem = MagicMock()
+        mock_filesystem.get_file_info.return_value = [file_info]
+        mock_fs.S3FileSystem.return_value = mock_filesystem
+        mock_ds.dataset.return_value = dataset
+
+        _, _, type_collections, _ = process_theme_worker(
+            theme_path="bucket/release/theme=places",
+            release_path="s3://bucket/release",
+            s3_region="us-west-2",
+            debug=False,
+            release_datetime=datetime(2026, 4, 15),
+            release="2026-04-15.0",
+            available_pmtiles={},
+        )
+
+        item = type_collections["place"][0]
+        for ext_url in ITEM_STAC_EXTENSIONS:
+            assert ext_url in item.stac_extensions, (
+                f"Item is missing declared extension {ext_url}"
+            )
 
     @patch("overture_stac.overture_stac.ds")
     @patch("overture_stac.overture_stac.fs")
