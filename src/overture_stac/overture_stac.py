@@ -10,6 +10,56 @@ import pyarrow.fs as fs
 import pystac
 import stac_geoparquet
 
+ITEM_STAC_EXTENSIONS: list[str] = [
+    "https://stac-extensions.github.io/storage/v2.0.0/schema.json",
+    "https://stac-extensions.github.io/alternate-assets/v1.2.0/schema.json",
+]
+
+
+def list_release_ids(filesystem: fs.S3FileSystem) -> list[str]:
+    """Return currently-published release ids from the public bucket, newest-first."""
+    info = filesystem.get_file_info(fs.FileSelector("overturemaps-us-west-2/release"))
+    return sorted((r.path.split("/")[-1] for r in info), reverse=True)
+
+
+def link_neighbor_releases(
+    catalog: pystac.Catalog,
+    all_release_ids: list[str],
+    root_href: str,
+) -> None:
+    """Add prev/next links to `catalog` from the current sibling ids (newest-first).
+
+    Derived from the current list at build time — no persisted state — so
+    releases removed by S3 lifecycle drop from the chain on the next rebuild.
+    """
+    try:
+        i = all_release_ids.index(catalog.id)
+    except ValueError:
+        return
+
+    root = root_href.rstrip("/")
+    if i > 0:
+        newer = all_release_ids[i - 1]
+        catalog.add_link(
+            pystac.Link(
+                rel="next",
+                target=f"{root}/{newer}/catalog.json",
+                media_type="application/json",
+                title=f"{newer} Overture Release",
+            )
+        )
+    if i < len(all_release_ids) - 1:
+        older = all_release_ids[i + 1]
+        catalog.add_link(
+            pystac.Link(
+                rel="prev",
+                target=f"{root}/{older}/catalog.json",
+                media_type="application/json",
+                title=f"{older} Overture Release",
+            )
+        )
+
+
 TYPE_LICENSE_MAP: dict[str, str] = {
     "bathymetry": "CC0-1.0",
     "land_cover": "CC-BY-4.0",
@@ -155,17 +205,18 @@ def process_theme_worker(
                             "platform": "https://{bucket}.s3.{region}.amazonaws.com",
                             "bucket": "overturemaps-us-west-2",
                             "region": "us-west-2",
-                            "requester_pays": "false",
+                            "requester_pays": False,
                         },
                         "azure": {
                             "type": "ms-azure",
-                            "platform": "https://{account}.blob.core.windows.net/",
+                            "platform": "https://{account}.blob.core.windows.net",
                             "account": "overturemapswestus2",
-                            "requester_pays": "false",
+                            "requester_pays": False,
                         },
                     },
                 },
                 datetime=release_datetime,
+                stac_extensions=list(ITEM_STAC_EXTENSIONS),
             )
 
             local_manifest_items.append(
@@ -186,6 +237,12 @@ def process_theme_worker(
                 asset=pystac.Asset(
                     href=f"https://overturemaps-us-west-2.s3.us-west-2.amazonaws.com/{rel_path}",
                     media_type="application/vnd.apache.parquet",
+                    title="GeoParquet on AWS S3",
+                    description=(
+                        "Zstd-compressed GeoParquet in the overturemaps-us-west-2 "
+                        "bucket, served over HTTPS."
+                    ),
+                    roles=["data"],
                     extra_fields={
                         "storage:refs": ["aws"],
                         "alternate:name": "HTTPS",
@@ -194,6 +251,7 @@ def process_theme_worker(
                                 "href": f"s3://{fragment.path}",
                                 "alternate:name": "S3",
                                 "description": "Access the files via regular Amazon AWS S3 tooling.",
+                                "roles": ["data"],
                             }
                         },
                     },
@@ -204,6 +262,12 @@ def process_theme_worker(
                 asset=pystac.Asset(
                     href=f"https://overturemapswestus2.blob.core.windows.net/{rel_path}",
                     media_type="application/vnd.apache.parquet",
+                    title="GeoParquet on Azure Blob Storage",
+                    description=(
+                        "Zstd-compressed GeoParquet in the overturemapswestus2 "
+                        "storage account (West US 2), served over HTTPS."
+                    ),
+                    roles=["data"],
                     extra_fields={"storage:refs": ["azure"]},
                 ),
             )
@@ -236,6 +300,21 @@ def process_theme_worker(
 
         type_collection.add_items(local_type_collections[type_name])
 
+        items = local_type_collections[type_name]
+        if items:
+            row_counts = [i.properties["num_rows"] for i in items]
+            row_group_counts = [i.properties["num_row_groups"] for i in items]
+            type_collection.summaries = pystac.Summaries(
+                {
+                    "num_rows": pystac.RangeSummary(
+                        minimum=min(row_counts), maximum=max(row_counts)
+                    ),
+                    "num_row_groups": pystac.RangeSummary(
+                        minimum=min(row_group_counts), maximum=max(row_group_counts)
+                    ),
+                }
+            )
+
         type_collection.stac_extensions = [
             "https://stac-extensions.github.io/table/v1.2.0/schema.json"
         ]
@@ -253,7 +332,7 @@ def process_theme_worker(
         }
 
         if not debug:
-            type_collection.extra_fields = {"features": total_row_count}
+            type_collection.extra_fields["features"] = total_row_count
 
         theme_catalog.add_child(type_collection, title=type_name)
 
@@ -334,10 +413,7 @@ class OvertureRelease:
             id=self.release,
             title=title if title is not None else self.release,
             description=f"Geoparquet data released in the Overture {self.release} release",
-            stac_extensions=[
-                "https://stac-extensions.github.io/storage/v2.0.0/schema.json",
-                "https://stac-extensions.github.io/alternate-assets/v1.2.0/schema.json",
-            ],
+            stac_extensions=list(ITEM_STAC_EXTENSIONS),
         )
         self.release_catalog.extra_fields = {
             "release:version": self.release,

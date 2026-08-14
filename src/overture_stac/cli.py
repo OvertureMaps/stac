@@ -7,7 +7,11 @@ from pathlib import Path
 import pyarrow.fs as fs
 import pystac
 
-from overture_stac.overture_stac import OvertureRelease
+from overture_stac.overture_stac import (
+    OvertureRelease,
+    link_neighbor_releases,
+    list_release_ids,
+)
 from overture_stac.registry_manifest import RegistryManifest
 
 PROD_ROOT_HREF = "https://stac.overturemaps.org"
@@ -92,6 +96,11 @@ def main():
         )
         title = f"{args.release} Overture Release"
         this_release.build_release_catalog(title=title, max_workers=args.workers)
+        link_neighbor_releases(
+            this_release.release_catalog,
+            list_release_ids(this_release.filesystem),
+            root_href,
+        )
         this_release.release_catalog.normalize_hrefs(f"{root_href}/{args.release}/")
         this_release.release_catalog.save(
             catalog_type=pystac.CatalogType.ABSOLUTE_PUBLISHED,
@@ -110,6 +119,7 @@ def main():
         description="All Overture Releases",
     )
 
+    release_catalogs: list[pystac.Catalog] = []
     for idx, release_info in enumerate(
         sorted(available_releases, key=lambda p: p.path, reverse=True)
     ):
@@ -131,11 +141,16 @@ def main():
         child = overture_releases_catalog.add_child(
             child=this_release.release_catalog, title=title
         )
+        release_catalogs.append(this_release.release_catalog)
 
         if idx == 0:
             child.extra_fields = {"latest": True}
             this_release.release_catalog.extra_fields["latest"] = True
             overture_releases_catalog.extra_fields = {"latest": release}
+
+    release_ids = [c.id for c in release_catalogs]
+    for cat in release_catalogs:
+        link_neighbor_releases(cat, release_ids, root_href)
 
     registry_manifest = RegistryManifest()
     overture_releases_catalog.extra_fields["registry"] = {

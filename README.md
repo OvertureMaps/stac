@@ -33,6 +33,8 @@ gen-stac --output ./releases --workers 8
 uv run ruff format . && uv run ruff check . && uv run pytest
 ```
 
+A [`justfile`](./justfile) collects the common development commands. Install [just](https://github.com/casey/just) with `brew install just` and run `just` to see the available recipes. For instance, `just check` runs the same lint, format, and test steps as CI.
+
 ## Release
 
 Once a GitHub Release has been created (and the pyproject.toml contains a version bump),
