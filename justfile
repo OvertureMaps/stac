@@ -72,3 +72,26 @@ serve:
 # Remove all generated catalog outputs.
 clean:
     rm -rf {{OUTPUT}} {{FIXTURE_DIR}}
+
+# --- Rust port (see rust/) ---
+
+RS := './rust/target/release/gen-stac-rs'
+
+# Build the Rust CLI in release mode.
+rs-build:
+    cd rust && cargo build --release
+
+# Run the Rust CLI against a release. Pass --debug via CARGS='--debug' for a fast run.
+rs-run schema release CARGS='--debug': rs-build
+    {{RS}} {{CARGS}} --output rust_output --workers 6 --release {{release}} --schema-version {{schema}}
+
+# Run BOTH implementations against the same release and diff every JSON file.
+rs-compare schema release CARGS='--debug': sync rs-build
+    rm -rf py_output rust_output
+    uv run gen-stac {{CARGS}} --output py_output --workers 6 --release {{release}} --schema-version {{schema}}
+    {{RS}} {{CARGS}} --output rust_output --workers 6 --release {{release}} --schema-version {{schema}}
+    diff -r --brief py_output rust_output || true
+
+# Run the Rust unit tests.
+rs-test:
+    cd rust && cargo test

@@ -1,0 +1,26 @@
+[package]
+name = "overture-stac-rs"
+version = "0.1.0"
+edition = "2021"
+description = "Rust port of the Overture STAC catalog generator"
+license = "MIT"
+
+[[bin]]
+name = "gen-stac-rs"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = "1"
+bytes = "1"
+chrono = "0.4"
+clap = { version = "4", features = ["derive"] }
+futures = "0.3"
+object_store = { version = "0.13", features = ["aws"] }
+parquet = { version = "59", features = ["async", "object_store"] }
+regex = "1"
+serde_json = { version = "1", features = ["float_roundtrip"] }
+stac = { version = "0.17.4", features = ["geoparquet"] }
+stac-io = { version = "0.3.2", features = ["geoparquet"] }
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }

@@ -83,3 +83,6 @@ tests/data
 
 # Local tooling cache
 .impeccable/
+
+py_output/
+rust_output/
