@@ -24,7 +24,7 @@ from pathlib import Path
 import pyarrow.fs as fs
 import pystac
 
-from overture_stac.overture_stac import OvertureRelease
+from overture_stac.overture_stac import OvertureRelease, build_root_catalog
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -38,6 +38,24 @@ SCHEMA_VERSION_MAPPING: dict[str, str] = {
 }
 
 DEFAULT_PORT = 8888
+
+# Stub older release so the fixture exercises the multi-release root.
+STUB_OLDER_RELEASE_ID = "2000-01-01.0"
+
+
+def _write_stub_release_catalog(
+    output_dir: Path, release_id: str, root_href: str
+) -> None:
+    """Minimal per-release catalog.json so the root's child link resolves."""
+    stub_dir = output_dir / release_id
+    stub_dir.mkdir(parents=True, exist_ok=True)
+    stub = pystac.Catalog(
+        id=release_id,
+        title=f"{release_id} Overture Release",
+        description=f"Synthetic older release ({release_id}) for CI fixture.",
+    )
+    stub.set_self_href(f"{root_href.rstrip('/')}/{release_id}/catalog.json")
+    stub.save_object(include_self_link=True, dest_href=str(stub_dir / "catalog.json"))
 
 
 def discover_releases() -> list[str]:
@@ -112,39 +130,24 @@ def build_test_catalog(
 
     title = f"Test Release {release}"
     overture_release.build_release_catalog(title=title, max_workers=workers)
-
-    # Create root catalog to match CLI structure
-    root_catalog = pystac.Catalog(
-        id="Overture Releases",
-        title="Overture Releases",
-        description="All Overture Releases (Test)",
-    )
-
-    child = root_catalog.add_child(
-        child=overture_release.release_catalog,
-        title=title,
-    )
-    child.extra_fields = {"latest": True}
     overture_release.release_catalog.extra_fields["latest"] = True
-    root_catalog.extra_fields = {"latest": release}
-
-    # # Add registry manifest
-    # try:
-    #     registry_manifest = RegistryManifest()
-    #     root_catalog.extra_fields["registry"] = {
-    #         "path": "s3://overturemaps-us-west-2/registry",
-    #         "manifest": registry_manifest.create_manifest(),
-    #     }
-    # except Exception as e:
-    #     logger.warning(f"Could not create registry manifest: {e}")
-
-    # Normalize and save. Strip any trailing slash from user input first so
-    # the appended "/" below always joins with exactly one slash.
-    logger.info(f"Saving catalog to {output_dir}...")
-    root_catalog.normalize_hrefs(root_href.rstrip("/") + "/")
-    root_catalog.save(
+    overture_release.release_catalog.normalize_hrefs(
+        f"{root_href.rstrip('/')}/{release}/"
+    )
+    overture_release.release_catalog.save(
         catalog_type=pystac.CatalogType.ABSOLUTE_PUBLISHED,
-        dest_href=str(output_dir),
+        dest_href=str(output_dir / release),
+    )
+
+    _write_stub_release_catalog(output_dir, STUB_OLDER_RELEASE_ID, root_href)
+
+    # Same function the CLI uses — fixture doubles as a live test.
+    logger.info(f"Saving root catalog to {output_dir}...")
+    build_root_catalog(
+        output=output_dir,
+        root_href=root_href,
+        release_ids=[release, STUB_OLDER_RELEASE_ID],
+        registry=None,
     )
 
     catalog_path = output_dir / release
