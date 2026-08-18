@@ -6,25 +6,9 @@
 ![PyPI - Version](https://img.shields.io/pypi/v/overture-stac)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-This repo owns two things: `overture-stac`, the CLI that generates STAC catalogs for public Overture releases, and the production catalog at `stac.overturemaps.org`, built and published by this repo's own GitHub Actions workflow.
+This repo owns two things: `overture-stac`, the CLI that generates STAC catalogs for public Overture releases, and the production catalog at `stac.overturemaps.org`. See [`docs/architecture.md`](https://github.com/OvertureMaps/stac/blob/main/docs/architecture.md) for how the catalog gets built and published.
 
 **[Browse the catalog](https://radiantearth.github.io/stac-browser/#/external/stac.overturemaps.org/catalog.json?.language=en)**
-
-## Production catalog
-
-`publish-catalog.yaml` rebuilds the catalog every 6 hours from every release currently in the public bucket, validates it with `stac-check-action`, then mirrors it to `stac.overturemaps.org` and busts the CloudFront cache. See [`docs/architecture.md`](./docs/architecture.md) for how the publish step spans two AWS accounts and why.
-
-It also runs on manual dispatch, gated behind the `manual-publish` environment's required reviewer approval.
-
-### Slack notifications
-
-To get a Slack channel notified of publish runs, use GitHub's [Slack app](https://slack.github.com/) from that channel:
-
-```
-/github subscribe OvertureMaps/stac workflows:{"name":"Publish STAC Catalog"}
-```
-
-This is a one-time, per-channel setup step; it isn't configured by the workflow itself.
 
 ## The `overture-stac` CLI
 

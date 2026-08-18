@@ -32,3 +32,13 @@ The bucket that serves `stac.overturemaps.org` and the CloudFront distribution i
 ## Triggers and gating
 
 `publish-catalog.yaml` runs on a `schedule` (every 6 hours) and on `workflow_dispatch`. Both triggers share one `publish` job; what differs is the job's `environment`, set via `${{ github.event_name == 'workflow_dispatch' && 'manual-publish' || '' }}`.
+
+## Slack notifications
+
+To get a Slack channel notified of publish runs, use GitHub's [Slack app](https://slack.github.com/) from that channel:
+
+```
+/github subscribe OvertureMaps/stac workflows:{"name":"Publish STAC Catalog"}
+```
+
+This is a one-time, per-channel setup step; it isn't configured by the workflow itself.
