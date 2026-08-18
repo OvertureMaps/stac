@@ -20,6 +20,7 @@ env:
   STAC_PUBLISH_ROLE_ARN: arn:aws:iam::913550007193:role/stac-publish-oidc-overturemaps
   CLOUDFRONT_INVALIDATOR_ROLE_ARN: arn:aws:iam::763944545891:role/cloudfront-invalidator
   CATALOG_OUTPUT_DIR: public_releases
+  CLOUDFRONT_DISTRIBUTION_ID: E209PEWSOCNO5D
 
 jobs:
   build:
@@ -102,4 +103,4 @@ jobs:
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Bust the cache
-        run: aws cloudfront create-invalidation --distribution-id E209PEWSOCNO5D --paths "/*"
+        run: aws cloudfront create-invalidation --distribution-id "$CLOUDFRONT_DISTRIBUTION_ID" --paths "/*"
