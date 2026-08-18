@@ -19,6 +19,7 @@ env:
   AWS_REGION: us-west-2
   STAC_PUBLISH_ROLE_ARN: arn:aws:iam::913550007193:role/stac-publish-oidc-overturemaps
   CLOUDFRONT_INVALIDATOR_ROLE_ARN: arn:aws:iam::763944545891:role/cloudfront-invalidator
+  CATALOG_OUTPUT_DIR: public_releases
 
 jobs:
   build:
@@ -46,13 +47,13 @@ jobs:
           uv pip install --system -e .
 
       - name: Build STAC Catalog
-        run: gen-stac --output public_releases
+        run: gen-stac --output "$CATALOG_OUTPUT_DIR"
 
       - name: Validate STAC Catalog
         uses: OvertureMaps/stac-check-action@3b06576bbf96c8d172f627c1639ac128f4fd7e38 # v1.0.0
         with:
           stac-check-version: "1.14.0"
-          file: ./public_releases/catalog.json
+          file: ${{ env.CATALOG_OUTPUT_DIR }}/catalog.json
           recursive: "true"
           fast-linting: "true"
           job-summary: "true"
@@ -61,7 +62,7 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: stac-catalog
-          path: public_releases
+          path: ${{ env.CATALOG_OUTPUT_DIR }}
 
   publish:
     name: Publish
