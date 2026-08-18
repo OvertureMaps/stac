@@ -1,6 +1,7 @@
 # Overture STAC
 
 [![CI](https://github.com/OvertureMaps/stac/actions/workflows/ci.yaml/badge.svg)](https://github.com/OvertureMaps/stac/actions/workflows/ci.yaml)
+[![Publish STAC Catalog](https://github.com/OvertureMaps/stac/actions/workflows/publish-catalog.yaml/badge.svg)](https://github.com/OvertureMaps/stac/actions/workflows/publish-catalog.yaml)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 ![PyPI - Version](https://img.shields.io/pypi/v/overture-stac)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
@@ -41,3 +42,17 @@ Once a GitHub Release has been created (and the pyproject.toml contains a versio
 `publish-pypi.yml` is triggered to publish to PyPI.
 
 Manual dispatches of that workflow will publish to https://test.pypi.org/project/overture-stac/ for debugging and validation.
+
+## Publishing the STAC catalog
+
+`publish-catalog.yaml` rebuilds the production STAC catalog daily and mirrors it to `stac.overturemaps.org`. It also runs on manual dispatch, gated behind the `manual-publish` environment's required reviewer approval.
+
+### Slack notifications
+
+To get a Slack channel notified of publish runs, use GitHub's [Slack app](https://slack.github.com/) from that channel:
+
+```
+/github subscribe OvertureMaps/stac workflows:{"name":"Publish STAC Catalog"}
+```
+
+This is a one-time, per-channel setup step; it isn't configured by the workflow itself.
