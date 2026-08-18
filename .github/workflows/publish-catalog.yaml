@@ -98,7 +98,7 @@ jobs:
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Sync to S3
-        uses: OvertureMaps/workflows/.github/actions/s5cmd@1e394d3cfcdc529069e9abe8643c3288ea940a52 # TEMP: OvertureMaps/workflows#84 e2e verification, revert to @main before merge
+        uses: OvertureMaps/workflows/.github/actions/s5cmd@main # zizmor: ignore[unpinned-uses] intentionally track main
         with:
           command: sync
           flags: --delete
