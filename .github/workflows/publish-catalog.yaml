@@ -50,13 +50,30 @@ jobs:
       - name: Build STAC Catalog
         run: gen-stac --output "$CATALOG_OUTPUT_DIR"
 
-      - name: Validate STAC Catalog
+      # TEMP: A/B timing comparison for OvertureMaps/stac#112. Runs validation twice
+      # against the real, full-scale production catalog straight off disk (no debug
+      # limit, no local HTTP server), so the numbers match what actually runs during
+      # a publish. Remove the fast-linting step once we've measured a real run.
+      - name: Validate STAC Catalog (fast-linting, baseline)
+        if: always()
+        timeout-minutes: 30
         uses: OvertureMaps/stac-check-action@71e219583b4fd87f797bac5840b088c048116765 # v1.1.0
         with:
           stac-check-version: "1.14.0"
           file: ${{ env.CATALOG_OUTPUT_DIR }}/catalog.json
           recursive: "true"
           fast-linting: "true"
+          job-summary: "true"
+
+      - name: Validate STAC Catalog (fast, candidate)
+        if: always()
+        timeout-minutes: 30
+        uses: OvertureMaps/stac-check-action@71e219583b4fd87f797bac5840b088c048116765 # v1.1.0
+        with:
+          stac-check-version: "1.14.0"
+          file: ${{ env.CATALOG_OUTPUT_DIR }}/catalog.json
+          recursive: "true"
+          fast: "true"
           job-summary: "true"
 
       - name: Upload artifact
