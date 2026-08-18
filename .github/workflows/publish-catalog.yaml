@@ -89,7 +89,7 @@ jobs:
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Sync to S3
-        uses: OvertureMaps/workflows/.github/actions/s5cmd@1d64352771111dac23f75453caaa560e67bf8bc2 # main
+        uses: OvertureMaps/workflows/.github/actions/s5cmd@main # zizmor: ignore[unpinned-uses] intentionally track main
         with:
           command: sync
           flags: --delete
@@ -128,7 +128,7 @@ jobs:
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Sync to S3
-        uses: OvertureMaps/workflows/.github/actions/s5cmd@1d64352771111dac23f75453caaa560e67bf8bc2 # main
+        uses: OvertureMaps/workflows/.github/actions/s5cmd@main # zizmor: ignore[unpinned-uses] intentionally track main
         with:
           command: sync
           flags: --delete
