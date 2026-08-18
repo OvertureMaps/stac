@@ -89,7 +89,12 @@ jobs:
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Sync to S3
-        run: aws s3 sync --delete . s3://overturemaps-extras-us-west-2/stac/
+        uses: OvertureMaps/workflows/.github/actions/s5cmd@1d64352771111dac23f75453caaa560e67bf8bc2 # main
+        with:
+          command: sync
+          flags: --delete
+          source: ./
+          destination: s3://overturemaps-extras-us-west-2/stac/
 
       - name: Configure AWS credentials (CloudFront invalidation, cross-account) 🔐
         uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c # v6.2.3
@@ -123,7 +128,12 @@ jobs:
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Sync to S3
-        run: aws s3 sync --delete . s3://overturemaps-extras-us-west-2/stac/
+        uses: OvertureMaps/workflows/.github/actions/s5cmd@1d64352771111dac23f75453caaa560e67bf8bc2 # main
+        with:
+          command: sync
+          flags: --delete
+          source: ./
+          destination: s3://overturemaps-extras-us-west-2/stac/
 
       - name: Configure AWS credentials (CloudFront invalidation, cross-account) 🔐
         uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c # v6.2.3
