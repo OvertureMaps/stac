@@ -12,7 +12,7 @@ This repo owns two things: `overture-stac`, the CLI that generates STAC catalogs
 
 ## Production catalog
 
-`publish-catalog.yaml` rebuilds the catalog every 6 hours from every release currently in the public bucket, validates it with `stac-check-action`, then mirrors it to `stac.overturemaps.org` and busts the CloudFront cache.
+`publish-catalog.yaml` rebuilds the catalog every 6 hours from every release currently in the public bucket, validates it with `stac-check-action`, then mirrors it to `stac.overturemaps.org` and busts the CloudFront cache. See [`docs/architecture.md`](./docs/architecture.md) for how the publish step spans two AWS accounts and why.
 
 It also runs on manual dispatch, gated behind the `manual-publish` environment's required reviewer approval.
 
