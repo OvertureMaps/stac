@@ -8,6 +8,11 @@ on:
   schedule:
     - cron: "0 */6 * * *" # every 6 hours
   workflow_dispatch:
+    inputs:
+      publish:
+        description: "Actually publish to S3/CloudFront (leave unchecked for dry runs, e.g. A/B timing tests)"
+        type: boolean
+        default: false
 
 permissions: {}
 
@@ -86,6 +91,10 @@ jobs:
     name: Publish
     runs-on: ubuntu-latest
     needs: build
+    # Scheduled runs always publish. Manual dispatches only publish if the `publish`
+    # input is explicitly checked, so a dry run (e.g. A/B timing tests) never creates
+    # a pending manual-publish approval in the first place.
+    if: ${{ github.event_name == 'schedule' || inputs.publish == true }}
     # Empty string evaluates to "no environment" for a job-level `environment:`,
     # so the schedule trigger skips the manual-publish gate entirely.
     environment: ${{ github.event_name == 'workflow_dispatch' && 'manual-publish' || '' }} # manual-publish requires reviewer approval
