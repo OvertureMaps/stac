@@ -31,4 +31,4 @@ The bucket that serves `stac.overturemaps.org` and the CloudFront distribution i
 
 ## Triggers and gating
 
-`publish-catalog.yaml` runs on a `schedule` (every 6 hours) and on `workflow_dispatch`. Both triggers share one `publish` job; what differs is the job's `environment`, set via `${{ github.event_name == 'workflow_dispatch' && 'manual-publish' || '' }}`. An empty string evaluates to no environment, so the scheduled run publishes straight through, while a manual dispatch is gated behind the `manual-publish` environment's required reviewer approval.
+`publish-catalog.yaml` runs on a `schedule` (every 6 hours) and on `workflow_dispatch`. Both triggers share one `publish` job; what differs is the job's `environment`, set via `${{ github.event_name == 'workflow_dispatch' && 'manual-publish' || '' }}`.
