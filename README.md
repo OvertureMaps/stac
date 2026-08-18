@@ -6,7 +6,7 @@
 ![PyPI - Version](https://img.shields.io/pypi/v/overture-stac)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-This repo owns two things: `overture-stac`, the CLI that generates STAC catalogs for public Overture Maps releases, and the production catalog at `stac.overturemaps.org`, built and published by this repo's own GitHub Actions workflow.
+This repo owns two things: `overture-stac`, the CLI that generates STAC catalogs for public Overture releases, and the production catalog at `stac.overturemaps.org`, built and published by this repo's own GitHub Actions workflow.
 
 **[Browse the catalog](https://radiantearth.github.io/stac-browser/#/external/stac.overturemaps.org/catalog.json?.language=en)**
 
