@@ -1,8 +1,7 @@
 ---
 # Publishes the production STAC catalog (stac.overturemaps.org). Rebuilds the
 # catalog for every release currently in the public bucket, validates it, then
-# mirrors it to the public S3 bucket and busts the CloudFront cache. Replaces
-# tf-data-platform's `release_publish_stac_dag` (see OvertureMaps/stac#107).
+# mirrors it to the public S3 bucket and busts the CloudFront cache.
 name: Publish STAC Catalog
 
 on:
@@ -15,6 +14,11 @@ permissions: {}
 concurrency:
   group: ${{ github.workflow }}
   cancel-in-progress: false
+
+env:
+  AWS_REGION: us-west-2
+  STAC_PUBLISH_ROLE_ARN: arn:aws:iam::913550007193:role/stac-publish-oidc-overturemaps
+  CLOUDFRONT_INVALIDATOR_ROLE_ARN: arn:aws:iam::763944545891:role/cloudfront-invalidator
 
 jobs:
   build:
@@ -82,8 +86,8 @@ jobs:
       - name: Configure AWS credentials (S3 push) 🔐
         uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c # v6.2.3
         with:
-          role-to-assume: arn:aws:iam::913550007193:role/stac-publish-oidc-overturemaps
-          aws-region: us-west-2
+          role-to-assume: ${{ env.STAC_PUBLISH_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
 
       - name: Sync to S3
         run: aws s3 sync --delete . s3://overturemaps-extras-us-west-2/stac/
@@ -91,9 +95,9 @@ jobs:
       - name: Configure AWS credentials (CloudFront invalidation, cross-account) 🔐
         uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c # v6.2.3
         with:
-          role-to-assume: arn:aws:iam::763944545891:role/cloudfront-invalidator
+          role-to-assume: ${{ env.CLOUDFRONT_INVALIDATOR_ROLE_ARN }}
           role-chaining: true
-          aws-region: us-west-2
+          aws-region: ${{ env.AWS_REGION }}
 
       - name: Bust the cache
         run: aws cloudfront create-invalidation --distribution-id E209PEWSOCNO5D --paths "/*"
@@ -103,7 +107,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: build
     if: github.event_name == 'workflow_dispatch'
-    environment: manual-publish # requires reviewer approval; see OvertureMaps/omf-github-terraform#121
+    environment: manual-publish # requires reviewer approval
     permissions:
       id-token: write # required for OIDC token exchange with AWS
       actions: read # required for actions/download-artifact
@@ -116,8 +120,8 @@ jobs:
       - name: Configure AWS credentials (S3 push) 🔐
         uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c # v6.2.3
         with:
-          role-to-assume: arn:aws:iam::913550007193:role/stac-publish-oidc-overturemaps
-          aws-region: us-west-2
+          role-to-assume: ${{ env.STAC_PUBLISH_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
 
       - name: Sync to S3
         run: aws s3 sync --delete . s3://overturemaps-extras-us-west-2/stac/
@@ -125,9 +129,9 @@ jobs:
       - name: Configure AWS credentials (CloudFront invalidation, cross-account) 🔐
         uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c # v6.2.3
         with:
-          role-to-assume: arn:aws:iam::763944545891:role/cloudfront-invalidator
+          role-to-assume: ${{ env.CLOUDFRONT_INVALIDATOR_ROLE_ARN }}
           role-chaining: true
-          aws-region: us-west-2
+          aws-region: ${{ env.AWS_REGION }}
 
       - name: Bust the cache
         run: aws cloudfront create-invalidation --distribution-id E209PEWSOCNO5D --paths "/*"
