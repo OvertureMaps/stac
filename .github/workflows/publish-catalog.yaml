@@ -64,11 +64,10 @@ jobs:
           path: public_releases
 
   # Split into scheduled vs. manual jobs (rather than one job with a
-  # conditional `environment:`) because the OIDC trust policy on the S3 role
-  # keys off the job's claims: `ref:refs/heads/main` for the scheduled run,
-  # `environment:manual-publish` for workflow_dispatch. A single job can't
-  # carry both claims, and GitHub Actions doesn't support conditionally
-  # omitting `environment:` on one job.
+  # conditional `environment:`) because manual publishes need to go through
+  # the `manual-publish` environment's required reviewer approval, and
+  # GitHub Actions doesn't support conditionally omitting `environment:` on
+  # one job.
   publish-scheduled:
     name: Publish (scheduled)
     runs-on: ubuntu-latest
