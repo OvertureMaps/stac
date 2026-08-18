@@ -45,7 +45,7 @@ Manual dispatches of that workflow will publish to https://test.pypi.org/project
 
 ## Publishing the STAC catalog
 
-`publish-catalog.yaml` rebuilds the production STAC catalog daily and mirrors it to `stac.overturemaps.org`. It also runs on manual dispatch, gated behind the `manual-publish` environment's required reviewer approval.
+`publish-catalog.yaml` rebuilds the production STAC catalog every 6 hours and mirrors it to `stac.overturemaps.org`. It also runs on manual dispatch, gated behind the `manual-publish` environment's required reviewer approval.
 
 ### Slack notifications
 

@@ -6,7 +6,7 @@ name: Publish STAC Catalog
 
 on:
   schedule:
-    - cron: "0 0 * * *" # daily at midnight UTC, same cadence as the old DAG
+    - cron: "0 */6 * * *" # every 6 hours
   workflow_dispatch:
 
 permissions: {}
