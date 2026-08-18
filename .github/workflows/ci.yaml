@@ -134,13 +134,27 @@ jobs:
             sleep 0.5
           done
 
-      - name: Validate root catalog
+      # TEMP: A/B timing comparison for OvertureMaps/stac#112. Runs validation twice,
+      # once with the current fast-linting mode and once with fast (skips linting
+      # too), so this PR's CI run gives us real numbers before switching the
+      # publish-catalog.yaml gate over. Remove the fast-linting step once we've
+      # measured a few runs.
+      - name: Validate root catalog (fast-linting, baseline)
         uses: OvertureMaps/stac-check-action@71e219583b4fd87f797bac5840b088c048116765 # v1.1.0
         with:
           stac-check-version: "1.14.0"
           file: http://127.0.0.1:8888/catalog.json
           recursive: "true"
           fast-linting: "true"
+          job-summary: "true"
+
+      - name: Validate root catalog (fast, candidate)
+        uses: OvertureMaps/stac-check-action@71e219583b4fd87f797bac5840b088c048116765 # v1.1.0
+        with:
+          stac-check-version: "1.14.0"
+          file: http://127.0.0.1:8888/catalog.json
+          recursive: "true"
+          fast: "true"
           job-summary: "true"
 
       - name: Stop local server

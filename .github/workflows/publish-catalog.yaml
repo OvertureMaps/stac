@@ -50,26 +50,13 @@ jobs:
       - name: Build STAC Catalog
         run: gen-stac --output "$CATALOG_OUTPUT_DIR"
 
-      # TEMP: A/B timing comparison. Runs validation twice, once with the current
-      # fast-linting mode and once with fast (skips linting too), so we can compare
-      # job duration before switching over. Remove the fast-linting step once we've
-      # collected a few scheduled runs' worth of timings.
-      - name: Validate STAC Catalog (fast-linting, baseline)
+      - name: Validate STAC Catalog
         uses: OvertureMaps/stac-check-action@71e219583b4fd87f797bac5840b088c048116765 # v1.1.0
         with:
           stac-check-version: "1.14.0"
           file: ${{ env.CATALOG_OUTPUT_DIR }}/catalog.json
           recursive: "true"
           fast-linting: "true"
-          job-summary: "true"
-
-      - name: Validate STAC Catalog (fast, candidate)
-        uses: OvertureMaps/stac-check-action@71e219583b4fd87f797bac5840b088c048116765 # v1.1.0
-        with:
-          stac-check-version: "1.14.0"
-          file: ${{ env.CATALOG_OUTPUT_DIR }}/catalog.json
-          recursive: "true"
-          fast: "true"
           job-summary: "true"
 
       - name: Upload artifact
