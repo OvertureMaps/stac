@@ -29,8 +29,6 @@ The bucket that serves `stac.overturemaps.org` and the CloudFront distribution i
 - The distribution account owns `overturemaps-extras-us-west-2`, the S3 bucket the catalog is synced into under the `stac/` prefix.
 - The core-data account owns the CloudFront distribution that fronts `stac.overturemaps.org` and caches what's in that bucket.
 
-A single IAM role in one account can't reach into the other, so the workflow assumes a role in each account in turn, chaining from the distribution account's role into the core-data account's, both via GitHub's OIDC provider rather than long-lived credentials.
-
 ## Triggers and gating
 
 `publish-catalog.yaml` runs on a `schedule` (every 6 hours) and on `workflow_dispatch`. Both triggers share one `publish` job; what differs is the job's `environment`, set via `${{ github.event_name == 'workflow_dispatch' && 'manual-publish' || '' }}`. An empty string evaluates to no environment, so the scheduled run publishes straight through, while a manual dispatch is gated behind the `manual-publish` environment's required reviewer approval.
