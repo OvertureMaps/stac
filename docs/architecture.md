@@ -16,8 +16,8 @@ The build stage runs unauthenticated: it only reads public data and needs no AWS
 
 The bucket that serves `stac.overturemaps.org` and the CloudFront distribution in front of it live in different AWS accounts, split along Overture's existing account boundaries rather than anything specific to this workflow:
 
-- The distribution account (`913550007193`) owns `overturemaps-extras-us-west-2`, the S3 bucket the catalog is synced into under the `stac/` prefix.
-- The core-data account (`763944545891`) owns the CloudFront distribution ("Overture STAC Index", ID `E209PEWSOCNO5D`) that fronts `stac.overturemaps.org` and caches what's in that bucket.
+- The distribution account owns `overturemaps-extras-us-west-2`, the S3 bucket the catalog is synced into under the `stac/` prefix.
+- The core-data account owns the CloudFront distribution that fronts `stac.overturemaps.org` and caches what's in that bucket.
 
 A single IAM role in one account can't reach into the other, so the workflow authenticates twice per publish: once to push the catalog to S3, once to bust the CDN cache.
 
