@@ -140,6 +140,8 @@ jobs:
       # publish-catalog.yaml gate over. Remove the fast-linting step once we've
       # measured a few runs.
       - name: Validate root catalog (fast-linting, baseline)
+        if: always()
+        timeout-minutes: 10
         uses: OvertureMaps/stac-check-action@71e219583b4fd87f797bac5840b088c048116765 # v1.1.0
         with:
           stac-check-version: "1.14.0"
@@ -149,6 +151,8 @@ jobs:
           job-summary: "true"
 
       - name: Validate root catalog (fast, candidate)
+        if: always()
+        timeout-minutes: 10
         uses: OvertureMaps/stac-check-action@71e219583b4fd87f797bac5840b088c048116765 # v1.1.0
         with:
           stac-check-version: "1.14.0"
