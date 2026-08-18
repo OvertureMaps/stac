@@ -9,12 +9,14 @@ import pystac
 
 from overture_stac.overture_stac import (
     OvertureRelease,
+    build_root_catalog,
     link_neighbor_releases,
     list_release_ids,
 )
 from overture_stac.registry_manifest import RegistryManifest
 
 PROD_ROOT_HREF = "https://stac.overturemaps.org"
+REGISTRY_S3_PATH = "s3://overturemaps-us-west-2/registry"
 
 
 def main():
@@ -96,9 +98,10 @@ def main():
         )
         title = f"{args.release} Overture Release"
         this_release.build_release_catalog(title=title, max_workers=args.workers)
+        release_ids = list_release_ids(this_release.filesystem)
         link_neighbor_releases(
             this_release.release_catalog,
-            list_release_ids(this_release.filesystem),
+            release_ids,
             root_href,
         )
         this_release.release_catalog.normalize_hrefs(f"{root_href}/{args.release}/")
@@ -106,25 +109,23 @@ def main():
             catalog_type=pystac.CatalogType.ABSOLUTE_PUBLISHED,
             dest_href=str(output / args.release),
         )
+
+        # Refresh root so `latest` reflects the current bucket.
+        build_root_catalog(
+            output=output,
+            root_href=root_href,
+            release_ids=release_ids,
+            registry={
+                "path": REGISTRY_S3_PATH,
+                "manifest": RegistryManifest().create_manifest(),
+            },
+        )
         return
 
     filesystem = fs.S3FileSystem(anonymous=True, region="us-west-2")
-    available_releases = filesystem.get_file_info(
-        fs.FileSelector("overturemaps-us-west-2/release")
-    )
+    release_ids = list_release_ids(filesystem)
 
-    overture_releases_catalog = pystac.Catalog(
-        id="Overture Releases",
-        title="Overture Releases",
-        description="All Overture Releases",
-    )
-
-    release_catalogs: list[pystac.Catalog] = []
-    for idx, release_info in enumerate(
-        sorted(available_releases, key=lambda p: p.path, reverse=True)
-    ):
-        release = release_info.path.split("/")[-1]
-
+    for idx, release in enumerate(release_ids):
         title: str = (
             f"{release} Overture Release" if idx > 0 else "Latest Overture Release"
         )
@@ -135,32 +136,26 @@ def main():
             output=output,
             debug=args.debug,
         )
-
         this_release.build_release_catalog(title=title, max_workers=args.workers)
 
-        child = overture_releases_catalog.add_child(
-            child=this_release.release_catalog, title=title
-        )
-        release_catalogs.append(this_release.release_catalog)
-
+        link_neighbor_releases(this_release.release_catalog, release_ids, root_href)
         if idx == 0:
-            child.extra_fields = {"latest": True}
             this_release.release_catalog.extra_fields["latest"] = True
-            overture_releases_catalog.extra_fields = {"latest": release}
 
-    release_ids = [c.id for c in release_catalogs]
-    for cat in release_catalogs:
-        link_neighbor_releases(cat, release_ids, root_href)
+        this_release.release_catalog.normalize_hrefs(f"{root_href}/{release}/")
+        this_release.release_catalog.save(
+            catalog_type=pystac.CatalogType.ABSOLUTE_PUBLISHED,
+            dest_href=str(output / release),
+        )
 
-    registry_manifest = RegistryManifest()
-    overture_releases_catalog.extra_fields["registry"] = {
-        "path": "s3://overturemaps-us-west-2/registry",
-        "manifest": registry_manifest.create_manifest(),
-    }
-
-    overture_releases_catalog.normalize_hrefs(f"{root_href}/")
-    overture_releases_catalog.save(
-        catalog_type=pystac.CatalogType.ABSOLUTE_PUBLISHED, dest_href=str(output)
+    build_root_catalog(
+        output=output,
+        root_href=root_href,
+        release_ids=release_ids,
+        registry={
+            "path": REGISTRY_S3_PATH,
+            "manifest": RegistryManifest().create_manifest(),
+        },
     )
 
 

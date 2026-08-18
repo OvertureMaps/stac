@@ -29,23 +29,22 @@ def get_test_data_dir() -> Path:
 
 
 def find_release_name() -> str | None:
-    """
-    Find a release directory name in the test data directory.
-
-    Returns:
-        Release name (e.g., '2025-01-22.0'), or None if not found
-    """
+    """Newest real release id; skips the stub the fixture also writes."""
     data_dir = get_test_data_dir()
     if not data_dir.exists():
         return None
 
-    for item in data_dir.iterdir():
-        if item.is_dir() and item.name[0].isdigit():
-            catalog_path = item / "catalog.json"
-            if catalog_path.exists():
-                return item.name
-
-    return None
+    candidates = sorted(
+        (
+            item.name
+            for item in data_dir.iterdir()
+            if item.is_dir()
+            and item.name[0].isdigit()
+            and (item / "catalog.json").exists()
+        ),
+        reverse=True,
+    )
+    return candidates[0] if candidates else None
 
 
 def is_port_in_use(port: int) -> bool:
@@ -200,6 +199,28 @@ class TestRootCatalogValidation:
     def test_root_catalog_has_latest_field(self, root_catalog):
         """Test that the root catalog has a 'latest' field."""
         assert "latest" in root_catalog.extra_fields
+
+    @pytest.mark.integration
+    def test_root_catalog_has_two_children(self, root_catalog):
+        """Real release + stub."""
+        children = list(root_catalog.get_child_links())
+        assert len(children) == 2
+
+    @pytest.mark.integration
+    def test_root_catalog_children_ordered_newest_first(self, root_catalog):
+        """Newest-first ordering drives `latest`."""
+        titles = [link.title for link in root_catalog.get_child_links()]
+        assert titles[0] == "Latest Overture Release"
+
+    @pytest.mark.integration
+    def test_root_catalog_latest_matches_newest_child(self, root_catalog, release_name):
+        assert root_catalog.extra_fields["latest"] == release_name
+
+    @pytest.mark.integration
+    def test_root_catalog_newest_child_link_marked_latest(self, root_catalog):
+        """Consumers walking links (not extra_fields) rely on this."""
+        first = next(iter(root_catalog.get_child_links()))
+        assert first.extra_fields.get("latest") is True
 
 
 class TestReleaseCatalogValidation:

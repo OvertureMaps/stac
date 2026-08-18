@@ -22,6 +22,53 @@ def list_release_ids(filesystem: fs.S3FileSystem) -> list[str]:
     return sorted((r.path.split("/")[-1] for r in info), reverse=True)
 
 
+def build_root_catalog(
+    output: Path,
+    root_href: str,
+    release_ids: list[str],
+    registry: Optional[dict] = None,
+) -> pystac.Catalog:
+    """Write the root 'Overture Releases' catalog to ``output/catalog.json``.
+
+    Function sorts ``release_ids`` lexicographically (release ids are
+    YYYY-MM-DD.N) and marks the newest as ``latest``.
+    """
+    root = root_href.rstrip("/")
+    output.mkdir(parents=True, exist_ok=True)
+
+    release_ids = sorted(release_ids, reverse=True)
+
+    catalog = pystac.Catalog(
+        id="Overture Releases",
+        title="Overture Releases",
+        description="All Overture Releases",
+    )
+
+    for idx, release_id in enumerate(release_ids):
+        link = pystac.Link(
+            rel="child",
+            target=f"{root}/{release_id}/catalog.json",
+            media_type="application/json",
+            title=(
+                "Latest Overture Release"
+                if idx == 0
+                else f"{release_id} Overture Release"
+            ),
+        )
+        if idx == 0:
+            link.extra_fields = {"latest": True}
+        catalog.add_link(link)
+
+    if release_ids:
+        catalog.extra_fields["latest"] = release_ids[0]
+    if registry is not None:
+        catalog.extra_fields["registry"] = registry
+
+    catalog.set_self_href(f"{root}/catalog.json")
+    catalog.save_object(include_self_link=True, dest_href=str(output / "catalog.json"))
+    return catalog
+
+
 def link_neighbor_releases(
     catalog: pystac.Catalog,
     all_release_ids: list[str],
