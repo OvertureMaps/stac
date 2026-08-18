@@ -110,6 +110,7 @@ jobs:
         with:
           role-to-assume: ${{ env.CLOUDFRONT_INVALIDATOR_ROLE_ARN }}
           role-chaining: true
+          role-skip-session-tagging: true # stac-publish-oidc-overturemaps lacks sts:TagSession on cloudfront-invalidator; nothing consumes session tags here
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Bust the cache
