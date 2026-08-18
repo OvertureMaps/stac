@@ -1,13 +1,27 @@
 ---
 # Publishes the production STAC catalog (stac.overturemaps.org). Rebuilds the
-# catalog for every release currently in the public bucket, validates it, then
-# mirrors it to the public S3 bucket and busts the CloudFront cache.
+# catalog for every release currently in the public bucket, then mirrors it to the
+# public S3 bucket and busts the CloudFront cache.
+#
+# No pre-publish validation runs here: recursive stac-check validation of the real
+# production catalog (root -> release -> theme -> type -> item) doesn't finish in a
+# reasonable time single-threaded, an A/B timing run against it ran past 19 minutes
+# per mode before being cancelled. ci.yaml's stac-validate job already exercises the
+# same build_root_catalog/build_release_catalog code on every push and PR to main, so
+# catalogs generated from main are trusted without a second, much slower check here.
+# Tracked in OvertureMaps/stac#112: reintroduce validation once it's fanned out
+# per-theme so it's fast enough not to block the publish gate.
 name: Publish STAC Catalog
 
 on:
   schedule:
     - cron: "0 */6 * * *" # every 6 hours
   workflow_dispatch:
+    inputs:
+      publish:
+        description: "Actually publish to S3/CloudFront (leave unchecked for build-only dry runs)"
+        type: boolean
+        default: false
 
 permissions: {}
 
@@ -24,7 +38,7 @@ env:
 
 jobs:
   build:
-    name: Build & Validate
+    name: Build Catalog
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -50,15 +64,6 @@ jobs:
       - name: Build STAC Catalog
         run: gen-stac --output "$CATALOG_OUTPUT_DIR"
 
-      - name: Validate STAC Catalog
-        uses: OvertureMaps/stac-check-action@3b06576bbf96c8d172f627c1639ac128f4fd7e38 # v1.0.0
-        with:
-          stac-check-version: "1.14.0"
-          file: ${{ env.CATALOG_OUTPUT_DIR }}/catalog.json
-          recursive: "true"
-          fast-linting: "true"
-          job-summary: "true"
-
       - name: Upload artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
@@ -69,6 +74,10 @@ jobs:
     name: Publish
     runs-on: ubuntu-latest
     needs: build
+    # Scheduled runs always publish. Manual dispatches only publish if the `publish`
+    # input is explicitly checked, so a build-only dry run never creates a pending
+    # manual-publish approval in the first place.
+    if: ${{ github.event_name == 'schedule' || inputs.publish == true }}
     # Empty string evaluates to "no environment" for a job-level `environment:`,
     # so the schedule trigger skips the manual-publish gate entirely.
     environment: ${{ github.event_name == 'workflow_dispatch' && 'manual-publish' || '' }} # manual-publish requires reviewer approval
