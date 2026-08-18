@@ -1,6 +1,6 @@
 # Publishing architecture
 
-`stac.overturemaps.org` used to come out of an Airflow DAG in `tf-data-platform`, `release_publish_stac_dag`, which meant the catalog's build logic lived in a different repo than the code that defined the catalog format. This repo is now self-contained: `publish-catalog.yaml` builds the catalog with this repo's own `overture-stac` CLI, validates it, and publishes it, all without leaving GitHub Actions.
+`publish-catalog.yaml` builds the production STAC catalog with this repo's own `overture-stac` CLI, validates it, and publishes it to `stac.overturemaps.org`, all without leaving GitHub Actions.
 
 ## Overall architecture
 
