@@ -7,7 +7,7 @@ just := quote(just_executable())
 # Default output path for generated catalogs (matches the CLI's --output default).
 OUTPUT := 'public_releases'
 
-BIN := './target/release/gen-stac-rs'
+BIN := './target/release/overture-stac'
 
 @_default:
     {{just}} --list
@@ -50,7 +50,7 @@ run schema release='' mode='debug': build
     if [[ "{{mode}}" == "full" ]]; then
       debug_flag=""
     fi
-    {{BIN}} $debug_flag --output {{OUTPUT}} --workers 6 --release "$release" --schema-version {{schema}}
+    {{BIN}} build $debug_flag --output {{OUTPUT}} --concurrency 6 --release-version "$release" --schema-version {{schema}}
 
 # Remove all generated catalog outputs.
 clean:

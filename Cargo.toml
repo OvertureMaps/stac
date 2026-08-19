@@ -1,12 +1,12 @@
 [package]
-name = "overture-stac-rs"
+name = "overture-stac"
 version = "0.1.0"
 edition = "2021"
-description = "Rust port of the Overture STAC catalog generator"
+description = "Overture STAC catalog generator"
 license = "MIT"
 
 [[bin]]
-name = "gen-stac-rs"
+name = "overture-stac"
 path = "src/main.rs"
 
 [dependencies]
@@ -15,7 +15,7 @@ bytes = "1"
 chrono = "0.4"
 clap = { version = "4", features = ["derive"] }
 futures = "0.3"
-object_store = { version = "0.13", features = ["aws"] }
+object_store = { version = "0.13", features = ["aws", "gcp", "azure", "http"] }
 parquet = { version = "59", features = ["async", "object_store"] }
 regex = "1"
 serde_json = { version = "1", features = ["float_roundtrip"] }

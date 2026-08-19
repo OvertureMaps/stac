@@ -15,14 +15,14 @@ cargo build --release
 ## Usage
 
 ```bash
-cargo run --release -- \
-  --release 2026-07-22.0 \
+cargo run --release -- build \
+  --release-version 2026-07-22.0 \
   --schema-version 1.18.0 \
   --output ./public_releases \
-  --workers 6
+  --concurrency 6
 ```
 
-Same flags as the Python CLI. Pass `--debug` for a fast run (a few fragments per type).
+Pass `--debug` for a fast run (a few fragments per type). The `build` subcommand reads from the Overture public bucket over `object_store`, which supports `s3://`, `gs://`, `az://`, and `http(s)://` URIs — the CLI defaults to Overture's S3 location, but the underlying core is cloud-agnostic.
 
 ## Development
 

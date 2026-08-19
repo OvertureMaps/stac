@@ -48,7 +48,7 @@ pub async fn build_single_release(
     schema: &str,
     title: &str,
     debug: bool,
-    _workers: usize,
+    concurrency: usize,
     output: &Path,
 ) -> Result<ReleaseCatalog> {
     let out_dir = output.join(release);
@@ -91,7 +91,7 @@ pub async fn build_single_release(
         debug,
         release_dt,
         pmtiles_arc,
-        4,
+        concurrency,
     )
     .await?;
     results.sort_by(|a, b| a.theme_name.cmp(&b.theme_name));
@@ -150,13 +150,13 @@ async fn process_themes_parallel(
     debug: bool,
     release_dt: chrono::DateTime<Utc>,
     pmtiles: Arc<BTreeMap<String, String>>,
-    workers: usize,
+    concurrency: usize,
 ) -> Result<Vec<ThemeResult>> {
     use futures::stream::{FuturesUnordered, StreamExt};
     let mut in_flight = FuturesUnordered::new();
     let mut paths_iter = theme_paths.into_iter();
     let mut results = Vec::new();
-    for _ in 0..workers.max(1) {
+    for _ in 0..concurrency.max(1) {
         if let Some(p) = paths_iter.next() {
             in_flight.push(spawn_theme(
                 bucket.clone(),
@@ -518,7 +518,7 @@ pub async fn build_top_catalog(
     ids: &[String],
     _root_href: &str,
     debug: bool,
-    workers: usize,
+    concurrency: usize,
     output: &Path,
 ) -> Result<ReleaseCatalog> {
     let mut children: Vec<ReleaseCatalog> = Vec::new();
@@ -529,7 +529,7 @@ pub async fn build_top_catalog(
             format!("{release} Overture Release")
         };
         let mut child =
-            build_single_release(bucket, release, "", &title, debug, workers, output).await?;
+            build_single_release(bucket, release, "", &title, debug, concurrency, output).await?;
         if idx == 0 {
             child
                 .catalog

@@ -1,10 +1,10 @@
 use anyhow::{bail, Context, Result};
-use clap::Parser;
+use clap::{Parser, Subcommand};
 use regex::Regex;
 use std::path::PathBuf;
 use tracing_subscriber::EnvFilter;
 
-use overture_stac_rs::{
+use overture_stac::{
     catalog::{
         build_single_release, build_top_catalog, link_neighbor_releases, list_release_ids,
         save_absolute_published,
@@ -14,27 +14,39 @@ use overture_stac_rs::{
 
 const PROD_ROOT_HREF: &str = "https://stac.overturemaps.org";
 
-/// Generate a STAC Index for Overture Maps Data from the public release bucket.
+/// Generate a STAC index for Overture Maps data from the public release bucket.
 #[derive(Parser, Debug)]
 #[command(version, about)]
 struct Cli {
-    /// Output path for Catalog
+    #[command(subcommand)]
+    command: Command,
+}
+
+#[derive(Subcommand, Debug)]
+enum Command {
+    /// Build a STAC catalog.
+    Build(BuildArgs),
+}
+
+#[derive(clap::Args, Debug)]
+struct BuildArgs {
+    /// Output path for the catalog.
     #[arg(long, default_value = "public_releases")]
     output: PathBuf,
 
-    /// Debug flag to only generate 1 item per collection
+    /// Sample mode — only 1 item per collection.
     #[arg(long, default_value_t = false)]
     debug: bool,
 
-    /// Number of parallel workers (default: 4)
+    /// Concurrent theme-processing futures (default: 4).
     #[arg(long, default_value_t = 4)]
-    workers: usize,
+    concurrency: usize,
 
     /// Release version to generate STAC for (e.g. 2026-05-20.0). When omitted, all releases are processed.
-    #[arg(long)]
-    release: Option<String>,
+    #[arg(long = "release-version")]
+    release_version: Option<String>,
 
-    /// Schema version for the release (e.g. 1.17.0). Required when --release is provided.
+    /// Schema version for the release (e.g. 1.17.0). Required when --release-version is provided.
     #[arg(long = "schema-version")]
     schema_version: Option<String>,
 
@@ -53,33 +65,38 @@ async fn main() -> Result<()> {
         .init();
 
     let cli = Cli::parse();
+    match cli.command {
+        Command::Build(args) => build(args).await,
+    }
+}
 
-    let root_href = cli.root_href.trim_end_matches('/').to_string();
+async fn build(args: BuildArgs) -> Result<()> {
+    let root_href = args.root_href.trim_end_matches('/').to_string();
 
-    if cli.release.is_some() && cli.schema_version.is_none() {
-        bail!("--schema-version is required when --release is provided");
+    if args.release_version.is_some() && args.schema_version.is_none() {
+        bail!("--schema-version is required when --release-version is provided");
     }
 
-    if let Some(r) = &cli.release {
+    if let Some(r) = &args.release_version {
         let re = Regex::new(r"^\d{4}-\d{2}-\d{2}\.\d+$").unwrap();
         if !re.is_match(r) {
-            bail!("--release must be in format YYYY-MM-DD.N (e.g. 2026-05-20.0)");
+            bail!("--release-version must be in format YYYY-MM-DD.N (e.g. 2026-05-20.0)");
         }
     }
-    if let Some(s) = &cli.schema_version {
+    if let Some(s) = &args.schema_version {
         let re = Regex::new(r"^\d+\.\d+\.\d+$").unwrap();
         if !re.is_match(s) {
             bail!("--schema-version must be in format X.Y.Z (e.g. 1.17.0)");
         }
     }
 
-    std::fs::create_dir_all(&cli.output)
-        .with_context(|| format!("creating output dir {}", cli.output.display()))?;
+    std::fs::create_dir_all(&args.output)
+        .with_context(|| format!("creating output dir {}", args.output.display()))?;
 
     let bucket = new_public_bucket("overturemaps-us-west-2", "us-west-2")?;
 
-    if let Some(release) = cli.release {
-        let schema = cli.schema_version.unwrap();
+    if let Some(release) = args.release_version {
+        let schema = args.schema_version.unwrap();
         let title = format!("{release} Overture Release");
 
         let mut catalog = build_single_release(
@@ -87,16 +104,16 @@ async fn main() -> Result<()> {
             &release,
             &schema,
             &title,
-            cli.debug,
-            cli.workers,
-            &cli.output,
+            args.debug,
+            args.concurrency,
+            &args.output,
         )
         .await?;
 
         let ids = list_release_ids(&bucket, "release").await?;
         link_neighbor_releases(&mut catalog, &ids, &root_href);
 
-        let dest = cli.output.join(&release);
+        let dest = args.output.join(&release);
         save_absolute_published(&catalog, &format!("{root_href}/{release}"), &dest)?;
         return Ok(());
     }
@@ -107,11 +124,11 @@ async fn main() -> Result<()> {
         &bucket,
         &ids,
         &root_href,
-        cli.debug,
-        cli.workers,
-        &cli.output,
+        args.debug,
+        args.concurrency,
+        &args.output,
     )
     .await?;
-    save_absolute_published(&top, &root_href, &cli.output)?;
+    save_absolute_published(&top, &root_href, &args.output)?;
     Ok(())
 }
