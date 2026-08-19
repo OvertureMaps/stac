@@ -3,7 +3,7 @@
 use anyhow::Result;
 use std::collections::BTreeMap;
 
-use crate::s3::{Bucket, list_top_level};
+use crate::s3::{list_top_level, Bucket};
 
 pub async fn discover(bucket_extras: &Bucket, release: &str) -> BTreeMap<String, String> {
     // The Python code catches all exceptions and warns; we do the same — a missing tiles

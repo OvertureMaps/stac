@@ -5,15 +5,15 @@
 //! `[[filename, max_id], ...]` list sorted by max_id.
 
 use anyhow::{Context, Result};
-use object_store::{ObjectStore, ObjectStoreExt, path::Path as ObjPath};
-use parquet::arrow::ParquetRecordBatchStreamBuilder;
+use object_store::{path::Path as ObjPath, ObjectStore, ObjectStoreExt};
 #[allow(deprecated)]
 use parquet::arrow::async_reader::ParquetObjectReader;
+use parquet::arrow::ParquetRecordBatchStreamBuilder;
 use parquet::file::statistics::Statistics;
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 use std::sync::Arc;
 
-use crate::s3::{Bucket, list_all};
+use crate::s3::{list_all, Bucket};
 
 pub async fn create_manifest(bucket: &Bucket) -> Result<Value> {
     let prefix = "registry";
@@ -44,17 +44,17 @@ pub async fn create_manifest(bucket: &Bucket) -> Result<Value> {
     entries.sort_by(|a, b| a.1.cmp(&b.1));
     tracing::info!("Total files processed: {}", entries.len());
 
-    let arr: Vec<Value> = entries
-        .into_iter()
-        .map(|(f, id)| json!([f, id]))
-        .collect();
+    let arr: Vec<Value> = entries.into_iter().map(|(f, id)| json!([f, id])).collect();
     Ok(Value::Array(arr))
 }
 
 #[allow(deprecated)]
 async fn read_max_id(store: &Arc<dyn ObjectStore>, key: &str) -> Result<Option<String>> {
     let path = ObjPath::from(key);
-    let meta = store.head(&path).await.with_context(|| format!("HEAD {key}"))?;
+    let meta = store
+        .head(&path)
+        .await
+        .with_context(|| format!("HEAD {key}"))?;
     let reader = ParquetObjectReader::new(Arc::clone(store), path).with_file_size(meta.size);
     let builder = ParquetRecordBatchStreamBuilder::new(reader)
         .await
@@ -64,23 +64,29 @@ async fn read_max_id(store: &Arc<dyn ObjectStore>, key: &str) -> Result<Option<S
     let schema = file_meta.schema_descr();
 
     let id_col_idx = (0..schema.num_columns()).find(|i| schema.column(*i).name() == "id");
-    let Some(idx) = id_col_idx else { return Ok(None) };
+    let Some(idx) = id_col_idx else {
+        return Ok(None);
+    };
 
     if pq_meta.num_row_groups() == 0 {
         return Ok(None);
     }
     let last_rg = pq_meta.row_group(pq_meta.num_row_groups() - 1);
     let col = last_rg.column(idx);
-    let Some(stats) = col.statistics() else { return Ok(None) };
+    let Some(stats) = col.statistics() else {
+        return Ok(None);
+    };
     Ok(extract_max(stats))
 }
 
 fn extract_max(stats: &Statistics) -> Option<String> {
     match stats {
-        Statistics::ByteArray(s) => s.max_opt().map(|b| String::from_utf8_lossy(b.data()).into_owned()),
-        Statistics::FixedLenByteArray(s) => {
-            s.max_opt().map(|b| String::from_utf8_lossy(b.data()).into_owned())
-        }
+        Statistics::ByteArray(s) => s
+            .max_opt()
+            .map(|b| String::from_utf8_lossy(b.data()).into_owned()),
+        Statistics::FixedLenByteArray(s) => s
+            .max_opt()
+            .map(|b| String::from_utf8_lossy(b.data()).into_owned()),
         Statistics::Int32(s) => s.max_opt().map(|v| v.to_string()),
         Statistics::Int64(s) => s.max_opt().map(|v| v.to_string()),
         Statistics::Int96(s) => s.max_opt().map(|v| v.to_string()),

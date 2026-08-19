@@ -2,52 +2,43 @@
 
 set shell := ['bash', '-c']
 
-# How to call the current just executable. Note that just_executable() may have `\` in Windows paths, so we need to quote it.
 just := quote(just_executable())
 
 # Default output path for generated catalogs (matches the CLI's --output default).
 OUTPUT := 'public_releases'
 
-# Local fixture catalog used by the e2e test (matches CI).
-FIXTURE_DIR := 'tests/data'
+BIN := './target/release/gen-stac-rs'
 
 @_default:
     {{just}} --list
 
-# Install project and dev-group dependencies into the local .venv (mirrors CI's `uv sync --all-groups`).
-sync:
-    uv sync --all-groups
+# Build the CLI in release mode.
+build:
+    cargo build --release
 
 # Run the unit test suite.
 test:
-    uv run pytest
+    cargo test
 
-# Run only the end-to-end catalog test (needs a fixture + running server — see `serve`).
-test-e2e:
-    uv run pytest tests/test_e2e_stac_catalog.py
-
-# Format all Python sources with ruff.
+# Format all Rust sources.
 fmt:
-    uv run ruff format .
+    cargo fmt
 
 # Check formatting without rewriting files (same command CI runs).
 fmt-check:
-    uv run ruff format --check .
+    cargo fmt --check
 
-# Run ruff lints.
+# Run clippy lints (informational — not gated).
 lint:
-    uv run ruff check .
+    cargo clippy --all-targets
 
-# Auto-fix everything ruff can fix, then reformat.
-fix:
-    uv run ruff check --fix .
-    uv run ruff format .
+# Run format check and tests. Stops on the first failure.
+check: fmt-check test
 
-# Run every check CI runs (format, lint, unit tests). Stops on the first failure.
-check: fmt-check lint test
-
-# Generate a STAC catalog locally. Defaults to --debug mode (1 item per collection); pass mode=full for the full catalog. Builds the latest release by default (discovered from stac.overturemaps.org/catalog.json); pass release=YYYY-MM-DD.N to override.
-run schema release='' mode='debug': sync
+# Generate a STAC catalog locally. Defaults to --debug mode (a few fragments per type);
+# pass mode=full for the full catalog. Builds the latest release by default (discovered
+# from stac.overturemaps.org/catalog.json); pass release=YYYY-MM-DD.N to override.
+run schema release='' mode='debug': build
     #!/usr/bin/env bash
     set -euo pipefail
     release='{{release}}'
@@ -59,39 +50,8 @@ run schema release='' mode='debug': sync
     if [[ "{{mode}}" == "full" ]]; then
       debug_flag=""
     fi
-    uv run gen-stac $debug_flag --output {{OUTPUT}} --workers 6 --release "$release" --schema-version {{schema}}
-
-# Build the small fixture catalog the e2e test consumes (writes to tests/data).
-fixture:
-    uv run python tests/setup_test_catalog.py --output {{FIXTURE_DIR}} --workers 2
-
-# Serve the fixture catalog on http://127.0.0.1:8888 (Ctrl+C to stop).
-serve:
-    uv run python tests/setup_test_catalog.py --serve-only --output {{FIXTURE_DIR}}
+    {{BIN}} $debug_flag --output {{OUTPUT}} --workers 6 --release "$release" --schema-version {{schema}}
 
 # Remove all generated catalog outputs.
 clean:
-    rm -rf {{OUTPUT}} {{FIXTURE_DIR}}
-
-# --- Rust port (see rust/) ---
-
-RS := './rust/target/release/gen-stac-rs'
-
-# Build the Rust CLI in release mode.
-rs-build:
-    cd rust && cargo build --release
-
-# Run the Rust CLI against a release. Pass --debug via CARGS='--debug' for a fast run.
-rs-run schema release CARGS='--debug': rs-build
-    {{RS}} {{CARGS}} --output rust_output --workers 6 --release {{release}} --schema-version {{schema}}
-
-# Run BOTH implementations against the same release and diff every JSON file.
-rs-compare schema release CARGS='--debug': sync rs-build
-    rm -rf py_output rust_output
-    uv run gen-stac {{CARGS}} --output py_output --workers 6 --release {{release}} --schema-version {{schema}}
-    {{RS}} {{CARGS}} --output rust_output --workers 6 --release {{release}} --schema-version {{schema}}
-    diff -r --brief py_output rust_output || true
-
-# Run the Rust unit tests.
-rs-test:
-    cd rust && cargo test
+    rm -rf {{OUTPUT}} target

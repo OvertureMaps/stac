@@ -1,46 +1,42 @@
-# Overture STAC
+# Overture STAC (Rust)
 
-[![CI](https://github.com/OvertureMaps/stac/actions/workflows/ci.yaml/badge.svg)](https://github.com/OvertureMaps/stac/actions/workflows/ci.yaml)
-[![Publish STAC Catalog](https://github.com/OvertureMaps/stac/actions/workflows/publish-catalog.yaml/badge.svg)](https://github.com/OvertureMaps/stac/actions/workflows/publish-catalog.yaml)
-[![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
-![PyPI - Version](https://img.shields.io/pypi/v/overture-stac)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-This repo owns two things: `overture-stac`, the CLI that generates STAC catalogs for public Overture releases, and the production catalog at `stac.overturemaps.org`. See [`docs/architecture.md`](https://github.com/OvertureMaps/stac/blob/main/docs/architecture.md) for how the catalog gets built and published.
+Rust port of `overture-stac`, the CLI that generates STAC catalogs for public Overture releases. This branch is a working prototype — the production catalog at `stac.overturemaps.org` is still published by the Python implementation on `main`. See [`docs/architecture.md`](./docs/architecture.md) for how the production catalog gets built and published.
 
 **[Browse the catalog](https://radiantearth.github.io/stac-browser/#/external/stac.overturemaps.org/catalog.json?.language=en)**
 
-## The `overture-stac` CLI
-
-### Setup
+## Build
 
 ```bash
-uv sync
+cargo build --release
 ```
 
-### Usage
+## Usage
 
 ```bash
-gen-stac --output ./releases
-
-# Debug mode (2 items per collection)
-gen-stac --output ./releases --debug
-
-# Custom worker count (default: 4)
-gen-stac --output ./releases --workers 8
+cargo run --release -- \
+  --release 2026-07-22.0 \
+  --schema-version 1.18.0 \
+  --output ./public_releases \
+  --workers 6
 ```
+
+Same flags as the Python CLI. Pass `--debug` for a fast run (a few fragments per type).
 
 ## Development
 
-```bash
-uv run ruff format . && uv run ruff check . && uv run pytest
-```
+A [`justfile`](./justfile) collects the common commands. Install [just](https://github.com/casey/just) with `brew install just` and run `just` to see recipes. `just check` runs `cargo fmt --check`, `cargo clippy`, and `cargo test` — the same checks CI would run.
 
-A [`justfile`](./justfile) collects the common development commands. Install [just](https://github.com/casey/just) with `brew install just` and run `just` to see the available recipes. For instance, `just check` runs the same lint, format, and test steps as CI.
+## Parity strategy
 
-## Releasing the package to PyPI
+Semantic parity with the Python `gen-stac` CLI, not byte-identical. Field order and whitespace follow the `stac` crate's Serialize impls, which differ from `pystac`'s output. Content matches: same catalog/collection/item structure, same items, same asset hrefs, same extension fields.
 
-Once a GitHub Release has been created (and the pyproject.toml contains a version bump),
-`publish-pypi.yml` is triggered to publish to PyPI.
+- Catalog/Collection/Item modeled via the `stac` crate (`Catalog`, `Collection`, `Item`, `Link`, `Asset`, `Bbox`, `Extent`).
+- OMF-specific extension fields (`storage:schemes`, `table:columns`, `release:version`, etc.) live in `additional_fields`.
+- `collections.parquet` written via `stac`'s `geoparquet` feature (`ItemCollection::into_geoparquet_path`).
+- Parquet fragment metadata read via `object_store` + `parquet::ParquetMetaDataReader::load_via_suffix_and_finish` — one ranged suffix GET per fragment, no HEAD.
 
-Manual dispatches of that workflow will publish to https://test.pypi.org/project/overture-stac/ for debugging and validation.
+## Verify against the Python implementation
+
+Check out the Python implementation from `main` in a sibling directory to compare outputs — see the PR that introduced this branch ([#101](https://github.com/OvertureMaps/stac/pull/101)) for the compare harness and results (4.2× faster, 996/996 semantic parity on `2026-07-22.0`).

@@ -5,13 +5,13 @@
 
 use anyhow::Result;
 use chrono::{DateTime, SecondsFormat, Utc};
-use serde_json::{Map as JsonMap, Value, json};
+use serde_json::{json, Map as JsonMap, Value};
 use stac::{Bbox, Catalog, Collection, Extent, Item, Link, SpatialExtent, TemporalExtent};
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
-use crate::parquet_io::{FragmentInfo, read_fragment};
-use crate::s3::{Bucket, list_top_level};
+use crate::parquet_io::{read_fragment, FragmentInfo};
+use crate::s3::{list_top_level, Bucket};
 
 pub const ITEM_STAC_EXTENSIONS: &[&str] = &[
     "https://stac-extensions.github.io/storage/v2.0.0/schema.json",
@@ -345,16 +345,14 @@ async fn process_type(
         if let Value::Object(m) = summaries {
             summaries_map = m;
         }
-        collection.summaries = serde_json::from_value(Value::Object(summaries_map)).unwrap_or_default();
+        collection.summaries =
+            serde_json::from_value(Value::Object(summaries_map)).unwrap_or_default();
     }
 
     // License link (only for "other"-licensed types).
     let mut extra_links = Vec::new();
     if type_license(&type_name) == Some("other") {
-        let mut l = Link::new(
-            "https://docs.overturemaps.org/attribution/",
-            "license",
-        );
+        let mut l = Link::new("https://docs.overturemaps.org/attribution/", "license");
         l.title = Some("Overture Maps Attribution and Licensing".into());
         extra_links.push(l);
     }

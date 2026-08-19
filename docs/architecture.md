@@ -1,6 +1,8 @@
 # Publishing architecture
 
-`publish-catalog.yaml` builds the production STAC catalog with this repo's own `overture-stac` CLI, validates it, and publishes it to `stac.overturemaps.org`, all without leaving GitHub Actions.
+> **Note:** This branch (`rust`) is a prototype Rust port of `gen-stac`. Production publishing at `stac.overturemaps.org` still runs from `main` (Python). The description below documents the current production pipeline; when the Rust port takes over, the `build` step is the only thing that changes.
+
+`publish-catalog.yaml` (on `main`) builds the production STAC catalog with this repo's own `overture-stac` CLI, validates it, and publishes it to `stac.overturemaps.org`, all without leaving GitHub Actions.
 
 ## Overall architecture
 

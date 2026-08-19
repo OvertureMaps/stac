@@ -1,77 +1,18 @@
-# Python
-__pycache__/
-*.py[cod]
-*$py.class
-*.so
-.Python
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-share/python-wheels/
-*.egg-info/
-.installed.cfg
-*.egg
-MANIFEST
+# Rust
+/target
+Cargo.lock
 
-# Virtual environments
-.env
-.venv
-env/
-venv/
-ENV/
-env.bak/
-venv.bak/
-
-# PyCharm
+# Editors / IDEs
 .idea/
-
-# VS Code
 .vscode/
 *.code-workspace
-
-# Testing
-.pytest_cache/
-.coverage
-htmlcov/
-.tox/
-.nox/
-coverage.xml
-*.cover
-*.log
-
-# MyPy
-.mypy_cache/
-.dmypy.json
-dmypy.json
-
-# Ruff
-.ruff_cache/
-
-# Jupyter Notebook
-.ipynb_checkpoints
-
-# pyenv
-# .python-version is intentionally tracked — it is the canonical Python version pin for CI and uv
-
-# UV
-.uv/
-
-# Distribution / Packaging
-*.whl
 
 # Output directories
 public_releases/
 output/
 test_output/
+py_output/
+rust_output/
 
 # Misc
 .DS_Store
@@ -79,10 +20,5 @@ test_output/
 *.swo
 *~
 
-tests/data
-
 # Local tooling cache
 .impeccable/
-
-py_output/
-rust_output/

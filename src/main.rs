@@ -1,4 +1,4 @@
-use anyhow::{Context, Result, bail};
+use anyhow::{bail, Context, Result};
 use clap::Parser;
 use regex::Regex;
 use std::path::PathBuf;
@@ -47,7 +47,9 @@ struct Cli {
 #[tokio::main(flavor = "multi_thread")]
 async fn main() -> Result<()> {
     tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info")))
+        .with_env_filter(
+            EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info")),
+        )
         .init();
 
     let cli = Cli::parse();
@@ -101,7 +103,15 @@ async fn main() -> Result<()> {
 
     // Multi-release path.
     let ids = list_release_ids(&bucket, "release").await?;
-    let top = build_top_catalog(&bucket, &ids, &root_href, cli.debug, cli.workers, &cli.output).await?;
+    let top = build_top_catalog(
+        &bucket,
+        &ids,
+        &root_href,
+        cli.debug,
+        cli.workers,
+        &cli.output,
+    )
+    .await?;
     save_absolute_published(&top, &root_href, &cli.output)?;
     Ok(())
 }

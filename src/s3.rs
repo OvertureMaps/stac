@@ -2,7 +2,7 @@
 
 use anyhow::{Context, Result};
 use object_store::aws::AmazonS3Builder;
-use object_store::{ObjectStore, path::Path};
+use object_store::{path::Path, ObjectStore};
 use std::sync::Arc;
 
 /// Handle to a single anonymous public S3 bucket.
@@ -28,7 +28,10 @@ pub fn new_public_bucket(bucket: &str, region: &str) -> Result<Bucket> {
 /// same shape pyarrow's `FileSelector(prefix)` returns: directories and files immediately under it.
 pub async fn list_top_level(bucket: &Bucket, prefix: &str) -> Result<Vec<String>> {
     let p = Path::from(prefix);
-    let result = bucket.store.list_with_delimiter(Some(&p)).await
+    let result = bucket
+        .store
+        .list_with_delimiter(Some(&p))
+        .await
         .with_context(|| format!("listing {prefix} in {}", bucket.name))?;
     let mut out = Vec::new();
     for pref in result.common_prefixes {

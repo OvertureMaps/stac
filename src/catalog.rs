@@ -9,7 +9,7 @@
 
 use anyhow::{Context, Result};
 use chrono::{Datelike, NaiveDate, TimeZone, Utc};
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 use stac::geoparquet::WriterOptions;
 use stac::{Catalog, Collection, Item, ItemCollection, Link};
 use stac_io::IntoGeoparquetPath;
@@ -19,8 +19,8 @@ use std::sync::Arc;
 
 use crate::pmtiles;
 use crate::registry;
-use crate::s3::{Bucket, list_top_level};
-use crate::theme::{ITEM_STAC_EXTENSIONS, ThemeResult, process_theme};
+use crate::s3::{list_top_level, Bucket};
+use crate::theme::{process_theme, ThemeResult, ITEM_STAC_EXTENSIONS};
 
 pub async fn list_release_ids(bucket: &Bucket, prefix: &str) -> Result<Vec<String>> {
     let mut ids = list_top_level(bucket, prefix).await?;
@@ -60,7 +60,14 @@ pub async fn build_single_release(
         .and_then(|d| NaiveDate::parse_from_str(d, "%Y-%m-%d").ok())
         .with_context(|| format!("parse release date from {release}"))?;
     let release_dt = Utc
-        .with_ymd_and_hms(release_date.year(), release_date.month(), release_date.day(), 0, 0, 0)
+        .with_ymd_and_hms(
+            release_date.year(),
+            release_date.month(),
+            release_date.day(),
+            0,
+            0,
+            0,
+        )
         .single()
         .expect("valid datetime");
 
@@ -99,7 +106,10 @@ pub async fn build_single_release(
         }
     }
     let manifest = json!({"type": "FeatureCollection", "features": manifest_items});
-    std::fs::write(out_dir.join("manifest.geojson"), serde_json::to_vec(&manifest)?)?;
+    std::fs::write(
+        out_dir.join("manifest.geojson"),
+        serde_json::to_vec(&manifest)?,
+    )?;
     write_collections_parquet(&out_dir.join("collections.parquet"), all_items)?;
 
     // Release catalog metadata.
@@ -148,13 +158,27 @@ async fn process_themes_parallel(
     let mut results = Vec::new();
     for _ in 0..workers.max(1) {
         if let Some(p) = paths_iter.next() {
-            in_flight.push(spawn_theme(bucket.clone(), p, release.clone(), debug, release_dt, pmtiles.clone()));
+            in_flight.push(spawn_theme(
+                bucket.clone(),
+                p,
+                release.clone(),
+                debug,
+                release_dt,
+                pmtiles.clone(),
+            ));
         }
     }
     while let Some(r) = in_flight.next().await {
         results.push(r?);
         if let Some(p) = paths_iter.next() {
-            in_flight.push(spawn_theme(bucket.clone(), p, release.clone(), debug, release_dt, pmtiles.clone()));
+            in_flight.push(spawn_theme(
+                bucket.clone(),
+                p,
+                release.clone(),
+                debug,
+                release_dt,
+                pmtiles.clone(),
+            ));
         }
     }
     Ok(results)
@@ -168,14 +192,14 @@ fn spawn_theme(
     release_dt: chrono::DateTime<Utc>,
     pmtiles: Arc<BTreeMap<String, String>>,
 ) -> impl std::future::Future<Output = Result<ThemeResult>> + Send + 'static {
-    async move {
-        process_theme(&bucket, &theme_path, &release, debug, release_dt, &pmtiles).await
-    }
+    async move { process_theme(&bucket, &theme_path, &release, debug, release_dt, &pmtiles).await }
 }
 
 pub fn link_neighbor_releases(catalog: &mut ReleaseCatalog, all_ids: &[String], root_href: &str) {
     let id = catalog.catalog.id.clone();
-    let Some(idx) = all_ids.iter().position(|x| *x == id) else { return };
+    let Some(idx) = all_ids.iter().position(|x| *x == id) else {
+        return;
+    };
     let root = root_href.trim_end_matches('/').to_string();
     if idx > 0 {
         let newer = &all_ids[idx - 1];
@@ -195,7 +219,11 @@ pub fn link_neighbor_releases(catalog: &mut ReleaseCatalog, all_ids: &[String], 
 
 /// Save a ReleaseCatalog (or top-level Overture Releases catalog) under `dest`, using
 /// absolute self-hrefs rooted at `base_url`.
-pub fn save_absolute_published(release: &ReleaseCatalog, base_url: &str, dest: &Path) -> Result<()> {
+pub fn save_absolute_published(
+    release: &ReleaseCatalog,
+    base_url: &str,
+    dest: &Path,
+) -> Result<()> {
     let base_url = base_url.trim_end_matches('/').to_string();
     std::fs::create_dir_all(dest)?;
     let self_href = format!("{base_url}/catalog.json");
@@ -204,7 +232,15 @@ pub fn save_absolute_published(release: &ReleaseCatalog, base_url: &str, dest: &
         .title
         .clone()
         .unwrap_or_else(|| release.catalog.id.clone());
-    write_release(release, &base_url, &self_href, &self_href, &root_title, dest, None)
+    write_release(
+        release,
+        &base_url,
+        &self_href,
+        &self_href,
+        &root_title,
+        dest,
+        None,
+    )
 }
 
 fn write_release(
@@ -220,17 +256,35 @@ fn write_release(
     catalog.links.clear();
 
     // root
-    catalog.links.push(mk_link("root", root_href, Some("application/json"), Some(root_title)));
+    catalog.links.push(mk_link(
+        "root",
+        root_href,
+        Some("application/json"),
+        Some(root_title),
+    ));
 
     // children (themes for a release catalog; nested release catalogs for the top-level catalog)
     for r in &release.bundles {
         let href = format!("{}/{}/catalog.json", strip_last(self_href), r.theme_name);
-        let title = r.theme_catalog.title.clone().unwrap_or_else(|| r.theme_name.clone());
-        catalog.links.push(mk_link("child", &href, Some("application/json"), Some(&title)));
+        let title = r
+            .theme_catalog
+            .title
+            .clone()
+            .unwrap_or_else(|| r.theme_name.clone());
+        catalog.links.push(mk_link(
+            "child",
+            &href,
+            Some("application/json"),
+            Some(&title),
+        ));
     }
     for c in &release.sub_children {
         let href = format!("{}/{}/catalog.json", strip_last(self_href), c.catalog.id);
-        let title = c.catalog.title.clone().unwrap_or_else(|| c.catalog.id.clone());
+        let title = c
+            .catalog
+            .title
+            .clone()
+            .unwrap_or_else(|| c.catalog.id.clone());
         let mut link = mk_link("child", &href, Some("application/json"), Some(&title));
         for (k, v) in &c.extra_child_fields {
             link.additional_fields.insert(k.clone(), v.clone());
@@ -245,10 +299,14 @@ fn write_release(
 
     // parent
     if let Some((h, t)) = &parent {
-        catalog.links.push(mk_link("parent", h, Some("application/json"), Some(t)));
+        catalog
+            .links
+            .push(mk_link("parent", h, Some("application/json"), Some(t)));
     }
     // self
-    catalog.links.push(mk_link("self", self_href, Some("application/json"), None));
+    catalog
+        .links
+        .push(mk_link("self", self_href, Some("application/json"), None));
 
     stac_io::write(dest.join("catalog.json"), catalog.clone())
         .with_context(|| format!("write {}/catalog.json", dest.display()))?;
@@ -277,7 +335,15 @@ fn write_release(
         let child_dir = dest.join(&c.catalog.id);
         std::fs::create_dir_all(&child_dir)?;
         let child_self = format!("{}/{}/catalog.json", strip_last(self_href), c.catalog.id);
-        write_release(c, base_url, &child_self, root_href, root_title, &child_dir, Some((self_href.to_string(), self_title.clone())))?;
+        write_release(
+            c,
+            base_url,
+            &child_self,
+            root_href,
+            root_title,
+            &child_dir,
+            Some((self_href.to_string(), self_title.clone())),
+        )?;
     }
     Ok(())
 }
@@ -292,16 +358,33 @@ fn write_theme(
 ) -> Result<()> {
     let mut catalog = result.theme_catalog.clone();
     catalog.links.clear();
-    catalog.links.push(mk_link("root", root_href, Some("application/json"), Some(root_title)));
+    catalog.links.push(mk_link(
+        "root",
+        root_href,
+        Some("application/json"),
+        Some(root_title),
+    ));
     for l in &result.theme_extra_links {
         catalog.links.push(l.clone());
     }
     for (type_name, _, _, _) in &result.type_collections {
         let href = format!("{}/{}/collection.json", strip_last(self_href), type_name);
-        catalog.links.push(mk_link("child", &href, Some("application/json"), Some(type_name)));
+        catalog.links.push(mk_link(
+            "child",
+            &href,
+            Some("application/json"),
+            Some(type_name),
+        ));
     }
-    catalog.links.push(mk_link("parent", &parent.0, Some("application/json"), Some(&parent.1)));
-    catalog.links.push(mk_link("self", self_href, Some("application/json"), None));
+    catalog.links.push(mk_link(
+        "parent",
+        &parent.0,
+        Some("application/json"),
+        Some(&parent.1),
+    ));
+    catalog
+        .links
+        .push(mk_link("self", self_href, Some("application/json"), None));
 
     stac_io::write(dest.join("catalog.json"), catalog)?;
 
@@ -314,7 +397,16 @@ fn write_theme(
         let coll_dir = dest.join(type_name);
         std::fs::create_dir_all(&coll_dir)?;
         let coll_href = format!("{}/{}/collection.json", strip_last(self_href), type_name);
-        write_collection(collection, items, extra_links, &coll_href, root_href, root_title, &coll_dir, (self_href.to_string(), theme_title.clone()))?;
+        write_collection(
+            collection,
+            items,
+            extra_links,
+            &coll_href,
+            root_href,
+            root_title,
+            &coll_dir,
+            (self_href.to_string(), theme_title.clone()),
+        )?;
     }
     Ok(())
 }
@@ -331,16 +423,28 @@ fn write_collection(
 ) -> Result<()> {
     let mut coll = collection.clone();
     coll.links.clear();
-    coll.links.push(mk_link("root", root_href, Some("application/json"), Some(root_title)));
+    coll.links.push(mk_link(
+        "root",
+        root_href,
+        Some("application/json"),
+        Some(root_title),
+    ));
     for l in extra_links {
         coll.links.push(l.clone());
     }
     for it in items {
         let href = format!("{}/{}/{}.json", strip_last(self_href), it.id, it.id);
-        coll.links.push(mk_link("item", &href, Some("application/geo+json"), None));
+        coll.links
+            .push(mk_link("item", &href, Some("application/geo+json"), None));
     }
-    coll.links.push(mk_link("parent", &parent.0, Some("application/json"), Some(&parent.1)));
-    coll.links.push(mk_link("self", self_href, Some("application/json"), None));
+    coll.links.push(mk_link(
+        "parent",
+        &parent.0,
+        Some("application/json"),
+        Some(&parent.1),
+    ));
+    coll.links
+        .push(mk_link("self", self_href, Some("application/json"), None));
 
     stac_io::write(dest.join("collection.json"), coll)?;
 
@@ -349,7 +453,9 @@ fn write_collection(
         let item_dir = dest.join(&it.id);
         std::fs::create_dir_all(&item_dir)?;
         let item_self = format!("{}/{}/{}.json", strip_last(self_href), it.id, it.id);
-        write_item(it, &item_self, root_href, root_title, &item_dir, self_href, &type_name)?;
+        write_item(
+            it, &item_self, root_href, root_title, &item_dir, self_href, &type_name,
+        )?;
     }
     Ok(())
 }
@@ -365,10 +471,26 @@ fn write_item(
 ) -> Result<()> {
     let mut it = item.clone();
     it.links.clear();
-    it.links.push(mk_link("root", root_href, Some("application/json"), Some(root_title)));
-    it.links.push(mk_link("collection", collection_href, Some("application/json"), Some(collection_id)));
-    it.links.push(mk_link("parent", collection_href, Some("application/json"), Some(collection_id)));
-    it.links.push(mk_link("self", self_href, Some("application/json"), None));
+    it.links.push(mk_link(
+        "root",
+        root_href,
+        Some("application/json"),
+        Some(root_title),
+    ));
+    it.links.push(mk_link(
+        "collection",
+        collection_href,
+        Some("application/json"),
+        Some(collection_id),
+    ));
+    it.links.push(mk_link(
+        "parent",
+        collection_href,
+        Some("application/json"),
+        Some(collection_id),
+    ));
+    it.links
+        .push(mk_link("self", self_href, Some("application/json"), None));
     it.collection = Some(collection_id.to_string());
 
     stac_io::write(dest.join(format!("{}.json", item.id)), it)?;
@@ -406,10 +528,16 @@ pub async fn build_top_catalog(
         } else {
             format!("{release} Overture Release")
         };
-        let mut child = build_single_release(bucket, release, "", &title, debug, workers, output).await?;
+        let mut child =
+            build_single_release(bucket, release, "", &title, debug, workers, output).await?;
         if idx == 0 {
-            child.catalog.additional_fields.insert("latest".into(), json!(true));
-            child.extra_child_fields.insert("latest".into(), json!(true));
+            child
+                .catalog
+                .additional_fields
+                .insert("latest".into(), json!(true));
+            child
+                .extra_child_fields
+                .insert("latest".into(), json!(true));
         }
         children.push(child);
     }

@@ -5,16 +5,16 @@
 //! (`Range: bytes=-N`), and only issues a second GET if the encoded metadata is larger than the
 //! prefetch. Avoids a separate HEAD and the full stream-builder setup.
 
-use anyhow::{Context, Result, bail};
+use anyhow::{bail, Context, Result};
 use bytes::Bytes;
 use futures::future::{BoxFuture, FutureExt};
-use object_store::{GetOptions, GetRange, ObjectStore, path::Path as ObjPath};
-use parquet::arrow::parquet_to_arrow_schema;
+use object_store::{path::Path as ObjPath, GetOptions, GetRange, ObjectStore};
 use parquet::arrow::async_reader::{MetadataFetch, MetadataSuffixFetch};
+use parquet::arrow::parquet_to_arrow_schema;
 use parquet::errors::{ParquetError, Result as ParquetResult};
-use std::ops::Range;
 use parquet::file::metadata::ParquetMetaDataReader;
 use serde_json::Value;
+use std::ops::Range;
 use std::sync::{Arc, OnceLock};
 use tokio::sync::Semaphore;
 
@@ -37,17 +37,24 @@ pub struct FragmentInfo {
 }
 
 pub async fn read_fragment(store: Arc<dyn ObjectStore>, key: &str) -> Result<FragmentInfo> {
-    let _permit = parquet_limit().acquire().await.expect("global parquet semaphore poisoned");
+    let _permit = parquet_limit()
+        .acquire()
+        .await
+        .expect("global parquet semaphore poisoned");
     let path = ObjPath::from(key);
-    let mut fetch = SuffixFetch { store: &store, path };
+    let mut fetch = SuffixFetch {
+        store: &store,
+        path,
+    };
     let meta = ParquetMetaDataReader::new()
         .load_via_suffix_and_finish(&mut fetch)
         .await
         .with_context(|| format!("load parquet metadata for {key}"))?;
     let file_meta = meta.file_metadata();
 
-    let arrow_schema = parquet_to_arrow_schema(file_meta.schema_descr(), file_meta.key_value_metadata())
-        .with_context(|| format!("parquet -> arrow schema for {key}"))?;
+    let arrow_schema =
+        parquet_to_arrow_schema(file_meta.schema_descr(), file_meta.key_value_metadata())
+            .with_context(|| format!("parquet -> arrow schema for {key}"))?;
     let column_names: Vec<String> = arrow_schema
         .fields()
         .iter()
@@ -59,8 +66,8 @@ pub async fn read_fragment(store: Arc<dyn ObjectStore>, key: &str) -> Result<Fra
         .and_then(|kvs| kvs.iter().find(|kv| kv.key == "geo"))
         .and_then(|kv| kv.value.clone())
         .ok_or_else(|| anyhow::anyhow!("no `geo` metadata in {key}"))?;
-    let geo: Value = serde_json::from_str(&geo_str)
-        .with_context(|| format!("parse geo metadata in {key}"))?;
+    let geo: Value =
+        serde_json::from_str(&geo_str).with_context(|| format!("parse geo metadata in {key}"))?;
 
     let geometry = geo
         .get("columns")
@@ -80,7 +87,10 @@ pub async fn read_fragment(store: Arc<dyn ObjectStore>, key: &str) -> Result<Fra
             .ok_or_else(|| anyhow::anyhow!("bbox coord {i} not a number"))?;
     }
 
-    let geoparquet_version = geo.get("version").and_then(|v| v.as_str()).map(str::to_owned);
+    let geoparquet_version = geo
+        .get("version")
+        .and_then(|v| v.as_str())
+        .map(str::to_owned);
 
     Ok(FragmentInfo {
         path: key.to_string(),
