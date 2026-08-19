@@ -101,7 +101,7 @@ jobs:
         uses: OvertureMaps/workflows/.github/actions/s5cmd@main # zizmor: ignore[unpinned-uses] intentionally track main
         with:
           command: sync
-          flags: --delete
+          subcommand-flags: --delete
           source: ${{ env.CATALOG_OUTPUT_DIR }}/
           destination: s3://overturemaps-extras-us-west-2/stac/
 
