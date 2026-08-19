@@ -1,16 +1,51 @@
-//! Anonymous S3 access to the public Overture bucket. Mirrors `pyarrow.fs.S3FileSystem(anonymous=True)`.
+//! Cloud-agnostic object store handle via `object_store::parse_url`.
 
-use anyhow::{Context, Result};
+use anyhow::{bail, Context, Result};
 use object_store::aws::AmazonS3Builder;
-use object_store::{path::Path, ObjectStore};
+use object_store::{parse_url, parse_url_opts, path::Path, ObjectStore};
 use std::sync::Arc;
+use url::Url;
 
-/// Handle to a single anonymous public S3 bucket.
+/// Handle to a single object-store-backed bucket.
+///
+/// Constructed via [`Bucket::from_url`]; supports any scheme `object_store` recognises
+/// (`s3://`, `gs://`, `az://`, `http(s)://`, `file://`). For `s3://`, anonymous access
+/// is used by default — matches the public Overture bucket's access model.
 pub struct Bucket {
     pub store: Arc<dyn ObjectStore>,
     pub name: String,
 }
 
+impl Bucket {
+    /// Build a bucket handle from an object-store URI. The URI must point at the bucket root
+    /// (no path segment); internal code uses fixed prefixes on top.
+    pub fn from_url(uri: &str) -> Result<Bucket> {
+        let url = Url::parse(uri).with_context(|| format!("parsing URI: {uri}"))?;
+        let (store, path) = if url.scheme() == "s3" {
+            parse_url_opts(&url, [("skip_signature", "true")])
+                .with_context(|| format!("initialising object store for {uri}"))?
+        } else {
+            parse_url(&url).with_context(|| format!("initialising object store for {uri}"))?
+        };
+        if !path.as_ref().is_empty() {
+            bail!("URI must point at bucket root (no path segment): {uri}");
+        }
+        let name = url.host_str().unwrap_or(uri).to_string();
+        Ok(Bucket {
+            store: Arc::from(store),
+            name,
+        })
+    }
+
+    pub fn clone_ref(&self) -> Self {
+        Self {
+            store: Arc::clone(&self.store),
+            name: self.name.clone(),
+        }
+    }
+}
+
+/// Kept for backwards-compat with any direct callers; prefer [`Bucket::from_url`].
 pub fn new_public_bucket(bucket: &str, region: &str) -> Result<Bucket> {
     let store = AmazonS3Builder::new()
         .with_bucket_name(bucket)

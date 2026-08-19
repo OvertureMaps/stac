@@ -24,6 +24,29 @@ cargo run --release -- build \
 
 Pass `--debug` for a fast run (a few fragments per type). The `build` subcommand reads from the Overture public bucket over `object_store`, which supports `s3://`, `gs://`, `az://`, and `http(s)://` URIs — the CLI defaults to Overture's S3 location, but the underlying core is cloud-agnostic.
 
+## Python bindings
+
+Same core, imported from Python:
+
+```python
+import asyncio
+import overture_stac
+
+asyncio.run(overture_stac.build_catalog(
+    release_version="2026-07-22.0",
+    schema_version="1.18.0",
+))
+```
+
+Build & install into the current venv with `maturin`:
+
+```bash
+uv run maturin develop --release --features python,extension-module
+# or: just py-develop
+```
+
+The function is async (returns a coroutine) and matches the CLI defaults — `data_uri`, `extras_uri`, `root_href`, `concurrency`, `debug` are all keyword arguments with production defaults. Errors surface as `overture_stac.OvertureStacError`.
+
 ## Development
 
 A [`justfile`](./justfile) collects the common commands. Install [just](https://github.com/casey/just) with `brew install just` and run `just` to see recipes. `just check` runs `cargo fmt --check`, `cargo clippy`, and `cargo test` — the same checks CI would run.

@@ -5,9 +5,20 @@ edition = "2021"
 description = "Overture STAC catalog generator"
 license = "MIT"
 
+[lib]
+name = "overture_stac"
+crate-type = ["rlib", "cdylib"]
+
 [[bin]]
 name = "overture-stac"
 path = "src/main.rs"
+
+[features]
+# Opt-in. Enable when building the Python wheel (maturin sets this automatically
+# via [tool.maturin]). Without it, plain `cargo build` produces the CLI + rlib
+# without any Python coupling.
+python = ["dep:pyo3", "dep:pyo3-async-runtimes"]
+extension-module = ["pyo3/extension-module"]
 
 [dependencies]
 anyhow = "1"
@@ -17,6 +28,8 @@ clap = { version = "4", features = ["derive"] }
 futures = "0.3"
 object_store = { version = "0.13", features = ["aws", "gcp", "azure", "http"] }
 parquet = { version = "59", features = ["async", "object_store"] }
+pyo3 = { version = "0.28", features = ["abi3-py311"], optional = true }
+pyo3-async-runtimes = { version = "0.28", features = ["tokio-runtime"], optional = true }
 regex = "1"
 serde_json = { version = "1", features = ["float_roundtrip"] }
 stac = { version = "0.17.4", features = ["geoparquet"] }
@@ -24,3 +37,4 @@ stac-io = { version = "0.3.2", features = ["geoparquet"] }
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+url = "2"

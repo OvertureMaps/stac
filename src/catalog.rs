@@ -44,6 +44,7 @@ pub struct ReleaseCatalog {
 
 pub async fn build_single_release(
     bucket: &Bucket,
+    extras_bucket: Option<&Bucket>,
     release: &str,
     schema: &str,
     title: &str,
@@ -71,8 +72,10 @@ pub async fn build_single_release(
         .single()
         .expect("valid datetime");
 
-    let extras_bucket = crate::s3::new_public_bucket("overturemaps-extras-us-west-2", "us-west-2")?;
-    let available_pmtiles = pmtiles::discover(&extras_bucket, release).await;
+    let available_pmtiles = match extras_bucket {
+        Some(eb) => pmtiles::discover(eb, release).await,
+        None => BTreeMap::new(),
+    };
 
     let release_prefix = format!("release/{release}");
     let mut theme_keys = list_top_level(bucket, &release_prefix).await?;
@@ -515,6 +518,7 @@ fn strip_last(href: &str) -> String {
 /// Build the top-level `Overture Releases` catalog (multi-release path).
 pub async fn build_top_catalog(
     bucket: &Bucket,
+    extras_bucket: Option<&Bucket>,
     ids: &[String],
     _root_href: &str,
     debug: bool,
@@ -528,8 +532,17 @@ pub async fn build_top_catalog(
         } else {
             format!("{release} Overture Release")
         };
-        let mut child =
-            build_single_release(bucket, release, "", &title, debug, concurrency, output).await?;
+        let mut child = build_single_release(
+            bucket,
+            extras_bucket,
+            release,
+            "",
+            &title,
+            debug,
+            concurrency,
+            output,
+        )
+        .await?;
         if idx == 0 {
             child
                 .catalog
@@ -560,15 +573,6 @@ pub async fn build_top_catalog(
         sub_children: children,
         extra_child_fields: serde_json::Map::new(),
     })
-}
-
-impl Bucket {
-    pub fn clone_ref(&self) -> Self {
-        Self {
-            store: Arc::clone(&self.store),
-            name: self.name.clone(),
-        }
-    }
 }
 
 fn write_collections_parquet(path: &Path, items: Vec<Item>) -> Result<()> {

@@ -9,10 +9,12 @@ use overture_stac::{
         build_single_release, build_top_catalog, link_neighbor_releases, list_release_ids,
         save_absolute_published,
     },
-    s3::new_public_bucket,
+    s3::Bucket,
 };
 
 const PROD_ROOT_HREF: &str = "https://stac.overturemaps.org";
+const PROD_DATA_URI: &str = "s3://overturemaps-us-west-2";
+const PROD_EXTRAS_URI: &str = "s3://overturemaps-extras-us-west-2";
 
 /// Generate a STAC index for Overture Maps data from the public release bucket.
 #[derive(Parser, Debug)]
@@ -33,6 +35,14 @@ struct BuildArgs {
     /// Output path for the catalog.
     #[arg(long, default_value = "public_releases")]
     output: PathBuf,
+
+    /// Object-store URI to the data bucket (s3://, gs://, az://, file:// ...).
+    #[arg(long = "data-uri", default_value = PROD_DATA_URI)]
+    data_uri: String,
+
+    /// Object-store URI to the extras bucket (holds PMTiles). Pass an empty string to skip.
+    #[arg(long = "extras-uri", default_value = PROD_EXTRAS_URI)]
+    extras_uri: String,
 
     /// Sample mode — only 1 item per collection.
     #[arg(long, default_value_t = false)]
@@ -93,7 +103,12 @@ async fn build(args: BuildArgs) -> Result<()> {
     std::fs::create_dir_all(&args.output)
         .with_context(|| format!("creating output dir {}", args.output.display()))?;
 
-    let bucket = new_public_bucket("overturemaps-us-west-2", "us-west-2")?;
+    let bucket = Bucket::from_url(&args.data_uri)?;
+    let extras_bucket = if args.extras_uri.is_empty() {
+        None
+    } else {
+        Some(Bucket::from_url(&args.extras_uri)?)
+    };
 
     if let Some(release) = args.release_version {
         let schema = args.schema_version.unwrap();
@@ -101,6 +116,7 @@ async fn build(args: BuildArgs) -> Result<()> {
 
         let mut catalog = build_single_release(
             &bucket,
+            extras_bucket.as_ref(),
             &release,
             &schema,
             &title,
@@ -122,6 +138,7 @@ async fn build(args: BuildArgs) -> Result<()> {
     let ids = list_release_ids(&bucket, "release").await?;
     let top = build_top_catalog(
         &bucket,
+        extras_bucket.as_ref(),
         &ids,
         &root_href,
         args.debug,

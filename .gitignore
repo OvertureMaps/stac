@@ -2,6 +2,14 @@
 /target
 Cargo.lock
 
+# Python / maturin
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+.pytest_cache/
+.venv/
+
 # Editors / IDEs
 .idea/
 .vscode/

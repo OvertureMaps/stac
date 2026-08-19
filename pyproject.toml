@@ -1,0 +1,41 @@
+[build-system]
+requires = ["maturin>=1.7,<2.0"]
+build-backend = "maturin"
+
+[project]
+name = "overture-stac"
+description = "Generate STAC catalogs for Overture Maps releases (Rust core with Python bindings)"
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.11"
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Rust",
+    "Typing :: Typed",
+]
+keywords = ["stac", "overture", "geospatial", "geoparquet"]
+dynamic = ["version"]
+dependencies = []
+
+[project.urls]
+Repository = "https://github.com/OvertureMaps/stac"
+Issues = "https://github.com/OvertureMaps/stac/issues"
+
+[tool.maturin]
+# Enable the python cfg-gated code + skip libpython linking (needed for wheels
+# on Linux/macOS). Building the wheel picks up both automatically.
+features = ["python", "extension-module"]
+module-name = "overture_stac"
+strip = true
+
+[dependency-groups]
+dev = [
+    "maturin>=1.7,<2.0",
+    "pytest>=8",
+    "pytest-asyncio>=0.24",
+]
