@@ -18,11 +18,18 @@ pub struct Bucket {
 impl Bucket {
     /// Build a bucket handle from an object-store URI. The URI must point at the bucket root
     /// (no path segment); internal code uses fixed prefixes on top.
+    ///
+    /// For `s3://` URIs, region is read from `AWS_REGION` (defaults to `us-west-2` — matches
+    /// where the public Overture buckets live). Access is anonymous by default.
     pub fn from_url(uri: &str) -> Result<Bucket> {
         let url = Url::parse(uri).with_context(|| format!("parsing URI: {uri}"))?;
         let (store, path) = if url.scheme() == "s3" {
-            parse_url_opts(&url, [("skip_signature", "true")])
-                .with_context(|| format!("initialising object store for {uri}"))?
+            let region = std::env::var("AWS_REGION").unwrap_or_else(|_| "us-west-2".to_string());
+            parse_url_opts(
+                &url,
+                [("skip_signature", "true"), ("region", region.as_str())],
+            )
+            .with_context(|| format!("initialising object store for {uri}"))?
         } else {
             parse_url(&url).with_context(|| format!("initialising object store for {uri}"))?
         };

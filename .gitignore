@@ -9,6 +9,8 @@ __pycache__/
 dist/
 .pytest_cache/
 .venv/
+# maturin develop drops the compiled .so alongside the Python source
+python/**/*.so
 
 # Editors / IDEs
 .idea/
