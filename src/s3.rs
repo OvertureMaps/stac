@@ -1,7 +1,6 @@
 //! Cloud-agnostic object store handle via `object_store::parse_url`.
 
 use anyhow::{bail, Context, Result};
-use object_store::aws::AmazonS3Builder;
 use object_store::{parse_url, parse_url_opts, path::Path, ObjectStore};
 use std::sync::Arc;
 use url::Url;
@@ -43,20 +42,6 @@ impl Bucket {
             name: self.name.clone(),
         }
     }
-}
-
-/// Kept for backwards-compat with any direct callers; prefer [`Bucket::from_url`].
-pub fn new_public_bucket(bucket: &str, region: &str) -> Result<Bucket> {
-    let store = AmazonS3Builder::new()
-        .with_bucket_name(bucket)
-        .with_region(region)
-        .with_skip_signature(true)
-        .build()
-        .with_context(|| format!("building anonymous S3 client for {bucket}"))?;
-    Ok(Bucket {
-        store: Arc::new(store),
-        name: bucket.to_string(),
-    })
 }
 
 /// List "top-level" entries under `prefix`, returning the last path segment for each — the
