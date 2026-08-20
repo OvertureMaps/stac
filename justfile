@@ -16,6 +16,10 @@ BIN := './target/release/overture-stac'
 build:
     cargo build --release
 
+# Install the CLI into ~/.cargo/bin (available on PATH globally).
+install:
+    cargo install --path . --force
+
 # Run the unit test suite.
 test:
     cargo test
