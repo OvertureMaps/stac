@@ -2,7 +2,12 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-Rust port of `overture-stac`, the CLI that generates STAC catalogs for public Overture releases. This branch is a working prototype — the production catalog at `stac.overturemaps.org` is still published by the Python implementation on `main`. See [`docs/architecture.md`](./docs/architecture.md) for how the production catalog gets built and published.
+> **Experimental branch.** Rust port of `overture-stac` — CLI + Python bindings.
+> The production catalog at `stac.overturemaps.org` is still published by the
+> Python implementation on `main`. See the [TODO](#todo) section for what's
+> pending before this branch can replace `main`.
+
+Rust port of `overture-stac`, the CLI that generates STAC catalogs for public Overture releases. See [`docs/architecture.md`](./docs/architecture.md) for how the production catalog gets built and published.
 
 **[Browse the catalog](https://radiantearth.github.io/stac-browser/#/external/stac.overturemaps.org/catalog.json?.language=en)**
 
@@ -63,3 +68,13 @@ Semantic parity with the Python `gen-stac` CLI, not byte-identical. Field order 
 ## Verify against the Python implementation
 
 Check out the Python implementation from `main` in a sibling directory to compare outputs — see the PR that introduced this branch ([#101](https://github.com/OvertureMaps/stac/pull/101)) for the compare harness and results (4.2× faster, 996/996 semantic parity on `2026-07-22.0`).
+
+## TODO
+
+Tracking here so we don't lose track of pending work while this branch is experimental.
+
+- **CI on `rust`** — no workflow currently builds Rust or runs tests on this branch. `main`'s CI targets the Python code; nothing verifies changes here. Needed before this can replace `main`.
+- **Wheel distribution** — building locally via `just py-develop` works. Not published anywhere. Once a service wants to `pip install overture-stac`, we need a `publish-pypi.yml` restored for maturin (or an internal index).
+- **Streaming upload** — `output` currently expects a local path. `object_store::multipart` would let `output=s3://…` write the catalog directly to the destination bucket. Would eliminate the intermediate on-disk step, but breaks the current "validate locally, then sync" production pattern. Design first.
+- **`pyo3-log` end-to-end** — the bridge is installed (`pyo3_log::init()`) but Rust `tracing`/`log` events aren't reaching Python's `logging` in practice. TODO comment in `src/python.rs`. Non-blocking (CLI logs work fine); annoying for scripts.
+- **Production migration** — `publish-catalog.yaml` on `main` invokes the Python CLI. To retire the Python impl, that workflow needs to install and invoke `overture-stac build` instead.
