@@ -9,12 +9,12 @@ fn cli() -> Command {
 }
 
 #[test]
-fn help_lists_build_subcommand() {
-    cli()
-        .arg("--help")
-        .assert()
-        .success()
-        .stdout(predicate::str::contains("build"));
+fn help_lists_subcommands() {
+    let assert = cli().arg("--help").assert().success();
+    let stdout = String::from_utf8(assert.get_output().stdout.clone()).unwrap();
+    for cmd in ["build", "list-releases"] {
+        assert!(stdout.contains(cmd), "help missing subcommand {cmd}");
+    }
 }
 
 #[test]
@@ -64,6 +64,15 @@ fn malformed_release_is_rejected() {
         .stderr(predicate::str::contains(
             "--release-version must be in format",
         ));
+}
+
+#[test]
+fn list_releases_help_lists_data_uri() {
+    cli()
+        .args(["list-releases", "--help"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("--data-uri"));
 }
 
 #[test]

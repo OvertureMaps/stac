@@ -28,6 +28,15 @@ struct Cli {
 enum Command {
     /// Build a STAC catalog.
     Build(BuildArgs),
+    /// List release IDs currently in the data bucket, newest first.
+    ListReleases(ListReleasesArgs),
+}
+
+#[derive(clap::Args, Debug)]
+struct ListReleasesArgs {
+    /// Object-store URI to the data bucket (s3://, gs://, az://, file:// ...).
+    #[arg(long = "data-uri", default_value = PROD_DATA_URI)]
+    data_uri: String,
 }
 
 #[derive(clap::Args, Debug)]
@@ -77,6 +86,7 @@ async fn main() -> Result<()> {
     let cli = Cli::parse();
     match cli.command {
         Command::Build(args) => build(args).await,
+        Command::ListReleases(args) => list_releases(args).await,
     }
 }
 
@@ -152,5 +162,14 @@ async fn build(args: BuildArgs) -> Result<()> {
     )
     .await?;
     save_absolute_published(&top, &root_href, &args.output)?;
+    Ok(())
+}
+
+async fn list_releases(args: ListReleasesArgs) -> Result<()> {
+    let bucket = Bucket::from_url(&args.data_uri)?;
+    let ids = list_release_ids(&bucket, "release").await?;
+    for id in ids {
+        println!("{id}");
+    }
     Ok(())
 }
