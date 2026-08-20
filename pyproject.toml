@@ -30,7 +30,8 @@ Issues = "https://github.com/OvertureMaps/stac/issues"
 # Enable the python cfg-gated code + skip libpython linking (needed for wheels
 # on Linux/macOS). Building the wheel picks up both automatically.
 features = ["python", "extension-module"]
-module-name = "overture_stac"
+python-source = "python"
+module-name = "overture_stac.overture_stac"
 strip = true
 
 [dependency-groups]
