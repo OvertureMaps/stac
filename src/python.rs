@@ -79,6 +79,9 @@ fn build_catalog<'py>(
     concurrency: Option<usize>,
     debug: bool,
 ) -> PyResult<Bound<'py, PyAny>> {
+    tracing::info!(
+        "build_catalog: release={release_version} schema={schema_version} data_uri={data_uri}"
+    );
     pyo3_async_runtimes::tokio::future_into_py(py, async move {
         let root_href = root_href.trim_end_matches('/').to_string();
         let output_path = PathBuf::from(&output);
@@ -121,6 +124,12 @@ fn build_catalog<'py>(
 
 #[pymodule]
 fn overture_stac(py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
+    // Forward Rust `tracing`/`log` events to Python's `logging` module. Callers control
+    // filtering the usual Python way: `logging.getLogger("overture_stac").setLevel(...)`.
+    // TODO(#pyo3-log): install() succeeds but Rust `tracing`/`log` events aren't
+    // currently reaching Python's `logging`. Skeleton kept in place so it starts
+    // flowing once the missing wiring is identified.
+    pyo3_log::init();
     m.add_function(wrap_pyfunction!(build_catalog, m)?)?;
     m.add("OvertureStacError", py.get_type::<OvertureStacError>())?;
     Ok(())

@@ -17,7 +17,7 @@ path = "src/main.rs"
 # Opt-in. Enable when building the Python wheel (maturin sets this automatically
 # via [tool.maturin]). Without it, plain `cargo build` produces the CLI + rlib
 # without any Python coupling.
-python = ["dep:pyo3", "dep:pyo3-async-runtimes"]
+python = ["dep:pyo3", "dep:pyo3-async-runtimes", "dep:pyo3-log", "tracing/log-always"]
 extension-module = ["pyo3/extension-module"]
 
 [dependencies]
@@ -31,6 +31,7 @@ object_store = { version = "0.13", features = ["aws", "gcp", "azure", "http"] }
 parquet = { version = "59", features = ["async", "object_store"] }
 pyo3 = { version = "0.28", features = ["abi3-py311"], optional = true }
 pyo3-async-runtimes = { version = "0.28", features = ["tokio-runtime"], optional = true }
+pyo3-log = { version = "0.13", optional = true }
 regex = "1"
 serde_json = { version = "1", features = ["float_roundtrip"] }
 stac = { version = "0.17.4", features = ["geoparquet"] }
