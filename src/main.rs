@@ -48,9 +48,9 @@ struct BuildArgs {
     #[arg(long, default_value_t = false)]
     debug: bool,
 
-    /// Concurrent theme-processing futures (default: 4).
-    #[arg(long, default_value_t = 4)]
-    concurrency: usize,
+    /// Concurrent theme-processing futures. Defaults to `num_cpus / 2` (min 1).
+    #[arg(long)]
+    concurrency: Option<usize>,
 
     /// Release version to generate STAC for (e.g. 2026-05-20.0). When omitted, all releases are processed.
     #[arg(long = "release-version")]
@@ -80,8 +80,13 @@ async fn main() -> Result<()> {
     }
 }
 
+fn default_concurrency() -> usize {
+    (num_cpus::get() / 2).max(1)
+}
+
 async fn build(args: BuildArgs) -> Result<()> {
     let root_href = args.root_href.trim_end_matches('/').to_string();
+    let concurrency = args.concurrency.unwrap_or_else(default_concurrency);
 
     if args.release_version.is_some() && args.schema_version.is_none() {
         bail!("--schema-version is required when --release-version is provided");
@@ -121,7 +126,7 @@ async fn build(args: BuildArgs) -> Result<()> {
             &schema,
             &title,
             args.debug,
-            args.concurrency,
+            concurrency,
             &args.output,
         )
         .await?;
@@ -142,7 +147,7 @@ async fn build(args: BuildArgs) -> Result<()> {
         &ids,
         &root_href,
         args.debug,
-        args.concurrency,
+        concurrency,
         &args.output,
     )
     .await?;

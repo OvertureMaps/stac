@@ -50,7 +50,7 @@ fn map_err(e: anyhow::Error) -> PyErr {
 ///         to skip PMTiles discovery. Defaults to
 ///         "s3://overturemaps-extras-us-west-2".
 ///     concurrency: Number of theme-processing futures to run concurrently.
-///         None = library default (currently 4).
+///         None = autodetect (`num_cpus / 2`, minimum 1).
 ///     debug: When True, samples 1 item per collection for fast iteration.
 ///
 /// Raises:
@@ -100,7 +100,7 @@ fn build_catalog<'py>(
             &schema_version,
             &title,
             debug,
-            concurrency.unwrap_or(4),
+            concurrency.unwrap_or_else(|| (num_cpus::get() / 2).max(1)),
             &output_path,
         )
         .await
