@@ -33,6 +33,7 @@ pyo3 = { version = "0.28", features = ["abi3-py311"], optional = true }
 pyo3-async-runtimes = { version = "0.28", features = ["tokio-runtime"], optional = true }
 pyo3-log = { version = "0.13", optional = true }
 regex = "1"
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json"] }
 serde_json = { version = "1", features = ["float_roundtrip"] }
 stac = { version = "0.17.4", features = ["geoparquet"] }
 stac-io = { version = "0.3.2", features = ["geoparquet"] }

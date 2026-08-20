@@ -3,7 +3,7 @@ class OvertureStacError(RuntimeError):
 
 async def build_catalog(
     release_version: str,
-    schema_version: str,
+    schema_version: str | None = ...,
     *,
     output: str = ...,
     data_uri: str = ...,
@@ -20,7 +20,13 @@ async def build_catalog(
 
     Args:
         release_version: Release identifier, e.g. ``"2026-07-22.0"``.
-        schema_version: Overture schema version, e.g. ``"1.18.0"``.
+        schema_version: One of:
+
+            - **Omitted** (default is the sentinel string ``"auto"``): auto-infer
+              from ``<root_href>/<release_version>/catalog.json`` — reads the
+              ``schema:version`` field.
+            - ``None``: build the catalog without any ``schema:version`` field.
+            - ``"1.18.0"`` (or any other string): use as-is.
         output: Local output directory. Defaults to ``"./public_releases/"``.
         data_uri: Object-store URI to the data bucket. Any URI supported by
             ``object_store`` (``s3://``, ``gs://``, ``az://``, ``file://`` ...).

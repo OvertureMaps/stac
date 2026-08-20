@@ -25,12 +25,11 @@ def test_build_catalog_has_docstring() -> None:
     assert "schema_version" in doc
 
 
-def test_missing_required_arg_raises_typeerror() -> None:
-    # `schema_version` is a required positional. Calling with only one arg
-    # should raise TypeError at the Python argparse layer, not our custom
-    # error (which is only raised for Rust-side failures).
+def test_schema_version_wrong_type_raises_typeerror() -> None:
+    # `schema_version` accepts str or None. Passing anything else raises TypeError
+    # at the Python argparse layer, not our custom error.
     with pytest.raises(TypeError):
-        overture_stac.build_catalog("2026-07-22.0")  # type: ignore[call-arg,unused-coroutine]
+        overture_stac.build_catalog("2026-07-22.0", 123)  # type: ignore[arg-type,unused-coroutine]
 
 
 async def test_bogus_data_uri_raises_overturestacerror() -> None:
@@ -45,6 +44,37 @@ async def test_bogus_data_uri_raises_overturestacerror() -> None:
             output="/tmp/pytest-overture-stac-bogus",
             debug=True,
         )
+
+
+async def test_schema_version_none_accepted() -> None:
+    # Passing None explicitly should be accepted; the call will fail on the bogus
+    # data URI further down, but only AFTER schema_version resolution succeeds.
+    with pytest.raises(overture_stac.OvertureStacError):
+        await overture_stac.build_catalog(
+            "2026-07-22.0",
+            None,
+            data_uri="s3://this-bucket-should-not-exist-abc",
+            extras_uri=None,
+            output="/tmp/pytest-overture-stac-schema-none",
+            debug=True,
+        )
+
+
+async def test_schema_version_omitted_triggers_http_fetch() -> None:
+    # Omitting schema_version triggers auto-infer via HTTP to root_href. Point
+    # root_href at an unreachable host so the fetch fails predictably — proves
+    # the code path is exercised without needing the real STAC catalog.
+    with pytest.raises(overture_stac.OvertureStacError) as excinfo:
+        await overture_stac.build_catalog(
+            "2026-07-22.0",
+            root_href="http://127.0.0.1:1",  # nothing listening
+            data_uri="s3://irrelevant",
+            extras_uri=None,
+            output="/tmp/pytest-overture-stac-autoinfer",
+            debug=True,
+        )
+    # Error should mention the fetch step, not S3
+    assert "catalog.json" in str(excinfo.value)
 
 
 async def test_build_catalog_returns_awaitable() -> None:
