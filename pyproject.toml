@@ -26,6 +26,10 @@ dependencies = []
 Repository = "https://github.com/OvertureMaps/stac"
 Issues = "https://github.com/OvertureMaps/stac/issues"
 
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+
 [tool.maturin]
 # Enable the python cfg-gated code + skip libpython linking (needed for wheels
 # on Linux/macOS). Building the wheel picks up both automatically.

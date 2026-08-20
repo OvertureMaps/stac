@@ -69,3 +69,11 @@ py-build:
 # Smoke test: import the module and print the exposed symbols.
 py-smoke: py-develop
     uv run python -c "import overture_stac; print(dir(overture_stac))"
+
+# Run the Python binding tests (pytest).
+py-test: py-develop
+    uv run pytest
+
+# Type-check via mypy against the .pyi stubs.
+py-typecheck: py-develop
+    uv run --with mypy mypy tests/
