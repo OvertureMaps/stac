@@ -76,10 +76,17 @@ fn list_releases_help_lists_data_uri() {
 }
 
 #[test]
-fn reconcile_help_lists_root_href_and_data_uri() {
+fn reconcile_help_lists_expected_flags() {
     let assert = cli().args(["reconcile", "--help"]).assert().success();
     let stdout = String::from_utf8(assert.get_output().stdout.clone()).unwrap();
-    for flag in ["--root-href", "--data-uri"] {
+    for flag in [
+        "--catalog-uri",
+        "--data-uri",
+        "--extras-uri",
+        "--root-href",
+        "--apply",
+        "--concurrency",
+    ] {
         assert!(stdout.contains(flag), "reconcile help missing flag {flag}");
     }
 }

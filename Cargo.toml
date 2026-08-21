@@ -37,6 +37,7 @@ reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"
 serde_json = { version = "1", features = ["float_roundtrip"] }
 stac = { version = "0.17.4", features = ["geoparquet"] }
 stac-io = { version = "0.3.2", features = ["geoparquet"] }
+tempfile = "3"
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }

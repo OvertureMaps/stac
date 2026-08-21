@@ -1,6 +1,8 @@
 use anyhow::{bail, Context, Result};
 use clap::{Parser, Subcommand};
 use regex::Regex;
+use serde_json::{json, Value};
+use std::collections::BTreeSet;
 use std::path::PathBuf;
 use tracing_subscriber::EnvFilter;
 
@@ -9,13 +11,13 @@ use overture_stac::{
         build_single_release, build_top_catalog, link_neighbor_releases, list_release_ids,
         save_absolute_published,
     },
-    s3::Bucket,
-    schema::fetch_catalog_children,
+    s3::{delete_prefix, get_json, put_json, upload_directory, Bucket},
 };
 
 const PROD_ROOT_HREF: &str = "https://stac.overturemaps.org";
 const PROD_DATA_URI: &str = "s3://overturemaps-us-west-2";
 const PROD_EXTRAS_URI: &str = "s3://overturemaps-extras-us-west-2";
+const PROD_CATALOG_URI: &str = "s3://overturemaps-extras-us-west-2/stac/";
 
 /// Generate a STAC index for Overture Maps data from the public release bucket.
 #[derive(Parser, Debug)]
@@ -45,13 +47,32 @@ struct ListReleasesArgs {
 
 #[derive(clap::Args, Debug)]
 struct ReconcileArgs {
-    /// Public root URL of the STAC catalog to check.
-    #[arg(long = "root-href", default_value = PROD_ROOT_HREF)]
-    root_href: String,
+    /// Object-store URI to the catalog storage (may include a path prefix).
+    /// Same URI is used for both read and write.
+    #[arg(long = "catalog-uri", default_value = PROD_CATALOG_URI)]
+    catalog_uri: String,
 
     /// Object-store URI to the data bucket (s3://, gs://, az://, file:// ...).
     #[arg(long = "data-uri", default_value = PROD_DATA_URI)]
     data_uri: String,
+
+    /// Object-store URI to the extras bucket (holds PMTiles). Only used when --apply
+    /// builds a new release. Pass an empty string to skip PMTiles discovery.
+    #[arg(long = "extras-uri", default_value = PROD_EXTRAS_URI)]
+    extras_uri: String,
+
+    /// Public root URL baked into `self:` links when apply builds new releases.
+    #[arg(long = "root-href", default_value = PROD_ROOT_HREF)]
+    root_href: String,
+
+    /// Actually apply the diff (write to --catalog-uri). Without this flag the
+    /// command is read-only and only reports drift.
+    #[arg(long, default_value_t = false)]
+    apply: bool,
+
+    /// Concurrent theme-processing futures used when building added releases.
+    #[arg(long)]
+    concurrency: Option<usize>,
 }
 
 #[derive(clap::Args, Debug)]
@@ -190,61 +211,292 @@ async fn list_releases(args: ListReleasesArgs) -> Result<()> {
     Ok(())
 }
 
+/// Diff between the catalog's known release IDs and the data bucket's actual release IDs.
+struct Diff {
+    to_add: Vec<String>,
+    to_remove: Vec<String>,
+}
+
+impl Diff {
+    fn compute(catalog_ids: &[String], bucket_ids: &[String]) -> Self {
+        let cat: BTreeSet<String> = catalog_ids.iter().cloned().collect();
+        let buk: BTreeSet<String> = bucket_ids.iter().cloned().collect();
+        Diff {
+            to_add: buk.difference(&cat).cloned().collect(),
+            to_remove: cat.difference(&buk).cloned().collect(),
+        }
+    }
+
+    fn is_empty(&self) -> bool {
+        self.to_add.is_empty() && self.to_remove.is_empty()
+    }
+}
+
+/// Read the root `catalog.json` from a catalog bucket and extract release IDs
+/// from its `rel: child` links. Returns an empty list if the catalog is missing.
+async fn read_catalog_children(
+    catalog_bucket: &Bucket,
+    catalog_prefix: &str,
+) -> Result<Vec<String>> {
+    let key = format!("{catalog_prefix}catalog.json");
+    let root = get_json(catalog_bucket, &key).await?;
+    Ok(children_from_root(&root))
+}
+
+fn children_from_root(root: &Value) -> Vec<String> {
+    let Some(links) = root.get("links").and_then(|v| v.as_array()) else {
+        return Vec::new();
+    };
+    let mut out = Vec::new();
+    for link in links {
+        if link.get("rel").and_then(|v| v.as_str()) != Some("child") {
+            continue;
+        }
+        let Some(href) = link.get("href").and_then(|v| v.as_str()) else {
+            continue;
+        };
+        if let Some(id) = release_id_from_href(href) {
+            out.push(id);
+        }
+    }
+    out
+}
+
+fn release_id_from_href(href: &str) -> Option<String> {
+    href.trim_end_matches("/catalog.json")
+        .rsplit('/')
+        .next()
+        .filter(|s| !s.is_empty())
+        .map(String::from)
+}
+
 async fn reconcile(args: ReconcileArgs) -> Result<()> {
-    let root_href = args.root_href.trim_end_matches('/');
-    let bucket = Bucket::from_url(&args.data_uri)?;
+    let (catalog_bucket, catalog_prefix) = Bucket::from_url_with_prefix(&args.catalog_uri)?;
+    let data_bucket = Bucket::from_url(&args.data_uri)?;
 
     let (catalog_ids, bucket_ids) = tokio::try_join!(
-        fetch_catalog_children(root_href),
-        list_release_ids(&bucket, "release"),
+        read_catalog_children(&catalog_bucket, &catalog_prefix),
+        list_release_ids(&data_bucket, "release"),
     )?;
+    let diff = Diff::compute(&catalog_ids, &bucket_ids);
 
-    let catalog: std::collections::BTreeSet<String> = catalog_ids.iter().cloned().collect();
-    let bucket_set: std::collections::BTreeSet<String> = bucket_ids.iter().cloned().collect();
-
-    let to_add: Vec<&String> = bucket_set.difference(&catalog).collect();
-    let to_remove: Vec<&String> = catalog.difference(&bucket_set).collect();
-
-    println!(
-        "Fetched {root_href}/catalog.json ({} releases)",
-        catalog.len()
+    print_diff_summary(
+        &args.catalog_uri,
+        &args.data_uri,
+        &catalog_ids,
+        &bucket_ids,
+        &diff,
     );
-    println!("Listed {} ({} releases)", args.data_uri, bucket_set.len());
+
+    if !args.apply {
+        if diff.is_empty() {
+            println!("Catalog is in sync with the bucket.");
+            Ok(())
+        } else {
+            println!(
+                "Catalog drift: {} release(s) differ.",
+                diff.to_add.len() + diff.to_remove.len()
+            );
+            println!("Re-run with --apply to fix.");
+            std::process::exit(1);
+        }
+    } else if diff.is_empty() {
+        println!("Catalog is in sync with the bucket. Nothing to apply.");
+        Ok(())
+    } else {
+        let extras_bucket = if args.extras_uri.is_empty() {
+            None
+        } else {
+            Some(Bucket::from_url(&args.extras_uri)?)
+        };
+        let concurrency = args.concurrency.unwrap_or_else(default_concurrency);
+        let root_href = args.root_href.trim_end_matches('/').to_string();
+        apply_diff(
+            &catalog_bucket,
+            &catalog_prefix,
+            &data_bucket,
+            extras_bucket.as_ref(),
+            &root_href,
+            &diff,
+            concurrency,
+        )
+        .await?;
+        println!();
+        println!(
+            "Applied {} change(s) to {}.",
+            diff.to_add.len() + diff.to_remove.len(),
+            args.catalog_uri
+        );
+        Ok(())
+    }
+}
+
+fn print_diff_summary(
+    catalog_uri: &str,
+    data_uri: &str,
+    catalog_ids: &[String],
+    bucket_ids: &[String],
+    diff: &Diff,
+) {
+    println!(
+        "Read  {catalog_uri}catalog.json ({} releases)",
+        catalog_ids.len()
+    );
+    println!("Listed {data_uri} ({} releases)", bucket_ids.len());
     println!();
 
-    if to_add.is_empty() {
+    if diff.to_add.is_empty() {
         println!("+ 0 releases to add (in bucket, not in catalog)");
     } else {
         println!(
             "+ {} release{} to add (in bucket, not in catalog):",
-            to_add.len(),
-            if to_add.len() == 1 { "" } else { "s" }
+            diff.to_add.len(),
+            if diff.to_add.len() == 1 { "" } else { "s" }
         );
-        for id in &to_add {
+        for id in &diff.to_add {
             println!("    + {id}");
         }
     }
-
-    if to_remove.is_empty() {
+    if diff.to_remove.is_empty() {
         println!("- 0 releases to remove (in catalog, not in bucket)");
     } else {
         println!(
             "- {} release{} to remove (in catalog, not in bucket):",
-            to_remove.len(),
-            if to_remove.len() == 1 { "" } else { "s" }
+            diff.to_remove.len(),
+            if diff.to_remove.len() == 1 { "" } else { "s" }
         );
-        for id in &to_remove {
+        for id in &diff.to_remove {
             println!("    - {id}");
         }
     }
-
     println!();
-    let drift = to_add.len() + to_remove.len();
-    if drift == 0 {
-        println!("Catalog is in sync with the bucket.");
-        Ok(())
-    } else {
-        println!("Catalog drift: {drift} release(s) differ.");
-        std::process::exit(1);
+}
+
+/// Apply the diff to the catalog bucket. Removals happen first (root updated first,
+/// then files deleted); additions happen after (files uploaded first, then root updated
+/// last). This keeps the root catalog pointing only at complete releases even mid-run.
+#[allow(clippy::too_many_arguments)]
+async fn apply_diff(
+    catalog_bucket: &Bucket,
+    catalog_prefix: &str,
+    data_bucket: &Bucket,
+    extras_bucket: Option<&Bucket>,
+    root_href: &str,
+    diff: &Diff,
+    concurrency: usize,
+) -> Result<()> {
+    let root_key = format!("{catalog_prefix}catalog.json");
+    let mut root = match get_json(catalog_bucket, &root_key).await {
+        Ok(v) => v,
+        Err(_) => build_empty_root(),
+    };
+
+    // Removals: update root first, then delete files.
+    for release in &diff.to_remove {
+        println!("- removing {release}");
+        remove_child_link(&mut root, release);
+        put_json(catalog_bucket, &root_key, &root).await?;
+        let deleted = delete_prefix(catalog_bucket, &format!("{catalog_prefix}{release}/")).await?;
+        println!("    dropped child link + deleted {deleted} object(s)");
     }
+
+    // Additions: build locally, upload, update root last.
+    for release in &diff.to_add {
+        println!("+ adding {release}");
+        let temp = tempfile::tempdir().context("creating temp dir for release build")?;
+        let title = format!("{release} Overture Release");
+        let release_catalog = build_single_release(
+            data_bucket,
+            extras_bucket,
+            release,
+            "",
+            &title,
+            false,
+            concurrency,
+            temp.path(),
+        )
+        .await
+        .with_context(|| format!("building release {release}"))?;
+
+        let release_dir = temp.path().join(release);
+        save_absolute_published(
+            &release_catalog,
+            &format!("{root_href}/{release}"),
+            &release_dir,
+        )?;
+
+        let uploaded = upload_directory(
+            catalog_bucket,
+            &format!("{catalog_prefix}{release}/"),
+            &release_dir,
+        )
+        .await?;
+
+        add_child_link(&mut root, release, root_href);
+        put_json(catalog_bucket, &root_key, &root).await?;
+        println!("    uploaded {uploaded} object(s) + added child link");
+    }
+
+    // Post-pass: update `latest` and neighbor-link neighbors would be nice but
+    // require rebuilding per-release catalogs. Round 1: just refresh `latest`
+    // from the current set of children.
+    let current_children = children_from_root(&root);
+    let mut sorted = current_children.clone();
+    sorted.sort_by(|a, b| b.cmp(a));
+    if let Some(latest) = sorted.first() {
+        root.as_object_mut()
+            .expect("root is object")
+            .insert("latest".into(), json!(latest));
+        put_json(catalog_bucket, &root_key, &root).await?;
+    }
+
+    Ok(())
+}
+
+fn build_empty_root() -> Value {
+    json!({
+        "type": "Catalog",
+        "id": "Overture Releases",
+        "description": "All Overture Releases",
+        "stac_version": "1.0.0",
+        "links": [],
+    })
+}
+
+fn remove_child_link(root: &mut Value, release: &str) {
+    let Some(links) = root.get_mut("links").and_then(|v| v.as_array_mut()) else {
+        return;
+    };
+    links.retain(|link| match link.get("href").and_then(|v| v.as_str()) {
+        Some(href) => release_id_from_href(href).as_deref() != Some(release),
+        None => true,
+    });
+}
+
+fn add_child_link(root: &mut Value, release: &str, root_href: &str) {
+    let obj = root.as_object_mut().expect("catalog root is a JSON object");
+    let links = obj
+        .entry("links".to_string())
+        .or_insert_with(|| json!([]))
+        .as_array_mut()
+        .expect("links is an array");
+    // Idempotency: skip if a child link for this release already exists.
+    let already_present = links.iter().any(|link| {
+        link.get("rel").and_then(|v| v.as_str()) == Some("child")
+            && link
+                .get("href")
+                .and_then(|v| v.as_str())
+                .and_then(release_id_from_href)
+                .as_deref()
+                == Some(release)
+    });
+    if already_present {
+        return;
+    }
+    links.push(json!({
+        "rel": "child",
+        "href": format!("{root_href}/{release}/catalog.json"),
+        "type": "application/json",
+        "title": format!("{release} Overture Release"),
+    }));
 }
