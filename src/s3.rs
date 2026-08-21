@@ -1,9 +1,10 @@
 //! Cloud-agnostic object store handle via `object_store::parse_url`.
 
-use anyhow::{bail, Context, Result};
 use object_store::{parse_url, parse_url_opts, path::Path, ObjectStore, ObjectStoreExt};
 use std::sync::Arc;
 use url::Url;
+
+use crate::{Error, Result, ResultExt};
 
 /// Handle to a single object-store-backed bucket.
 ///
@@ -25,7 +26,7 @@ impl Bucket {
     pub fn from_url(uri: &str) -> Result<Bucket> {
         let (bucket, path) = Self::from_url_with_prefix(uri)?;
         if !path.is_empty() {
-            bail!("URI must point at bucket root (no path segment): {uri}");
+            return Err(Error::UriHasPath(uri.to_string()));
         }
         Ok(bucket)
     }
@@ -34,7 +35,7 @@ impl Bucket {
     /// `/` normalised in), so callers can prepend it to their own keys. Used by commands
     /// (e.g. `reconcile`) that target a specific sub-tree of a bucket.
     pub fn from_url_with_prefix(uri: &str) -> Result<(Bucket, String)> {
-        let url = Url::parse(uri).with_context(|| format!("parsing URI: {uri}"))?;
+        let url = Url::parse(uri).context(format!("parsing URI: {uri}"))?;
         let (store, path) = if url.scheme() == "s3" {
             let region = std::env::var("AWS_REGION").unwrap_or_else(|_| "us-west-2".to_string());
             let mut opts: Vec<(String, String)> = vec![("region".into(), region)];
@@ -53,10 +54,9 @@ impl Bucket {
                 // (matches the Overture prod buckets, which are readable anon).
                 opts.push(("skip_signature".into(), "true".into()));
             }
-            parse_url_opts(&url, opts)
-                .with_context(|| format!("initialising object store for {uri}"))?
+            parse_url_opts(&url, opts).context(format!("initialising object store for {uri}"))?
         } else {
-            parse_url(&url).with_context(|| format!("initialising object store for {uri}"))?
+            parse_url(&url).context(format!("initialising object store for {uri}"))?
         };
         let name = url.host_str().unwrap_or(uri).to_string();
         let mut prefix = path.as_ref().to_string();

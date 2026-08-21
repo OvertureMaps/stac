@@ -1,4 +1,3 @@
-use anyhow::{bail, Context, Result};
 use clap::{Parser, Subcommand};
 use regex::Regex;
 use serde_json::{json, Value};
@@ -12,6 +11,7 @@ use overture_stac::{
         save_absolute_published,
     },
     s3::{delete_prefix, get_json, put_json, upload_directory, Bucket},
+    Error, Result, ResultExt,
 };
 
 const PROD_ROOT_HREF: &str = "https://stac.overturemaps.org";
@@ -117,13 +117,27 @@ struct BuildArgs {
 }
 
 #[tokio::main(flavor = "multi_thread")]
-async fn main() -> Result<()> {
+async fn main() {
     tracing_subscriber::fmt()
         .with_env_filter(
             EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info")),
         )
         .init();
 
+    if let Err(e) = run().await {
+        // Display formatting (respects thiserror's #[error("…")]) — plus the source
+        // chain when Context wraps something meaningful.
+        eprintln!("Error: {e}");
+        let mut src: Option<&(dyn std::error::Error + 'static)> = std::error::Error::source(&e);
+        while let Some(s) = src {
+            eprintln!("  Caused by: {s}");
+            src = s.source();
+        }
+        std::process::exit(1);
+    }
+}
+
+async fn run() -> Result<()> {
     let cli = Cli::parse();
     match cli.command {
         Command::Build(args) => build(args).await,
@@ -141,19 +155,19 @@ async fn build(args: BuildArgs) -> Result<()> {
     let concurrency = args.concurrency.unwrap_or_else(default_concurrency);
 
     if args.release_version.is_some() && args.schema_version.is_none() {
-        bail!("--schema-version is required when --release-version is provided");
+        return Err(Error::SchemaVersionRequired);
     }
 
     if let Some(r) = &args.release_version {
         let re = Regex::new(r"^\d{4}-\d{2}-\d{2}\.\d+$").unwrap();
         if !re.is_match(r) {
-            bail!("--release-version must be in format YYYY-MM-DD.N (e.g. 2026-05-20.0)");
+            return Err(Error::InvalidReleaseVersion(r.clone()));
         }
     }
     if let Some(s) = &args.schema_version {
         let re = Regex::new(r"^\d+\.\d+\.\d+$").unwrap();
         if !re.is_match(s) {
-            bail!("--schema-version must be in format X.Y.Z (e.g. 1.17.0)");
+            return Err(Error::InvalidSchemaVersion(s.clone()));
         }
     }
 

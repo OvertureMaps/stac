@@ -1,11 +1,12 @@
 //! Pure unit tests for `Bucket::from_url` — no network, no I/O.
 
 use overture_stac::s3::Bucket;
+use overture_stac::Error;
 
-fn err_msg<T>(r: Result<T, anyhow::Error>) -> String {
+fn err_msg<T>(r: Result<T, Error>) -> String {
     match r {
         Ok(_) => panic!("expected error, got Ok"),
-        Err(e) => format!("{e:#}"),
+        Err(e) => format!("{e}"),
     }
 }
 

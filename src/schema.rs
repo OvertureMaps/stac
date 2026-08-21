@@ -5,7 +5,7 @@
 //! - [`fetch_catalog_children`] reads the release IDs from the root catalog's
 //!   `rel: child` links.
 
-use anyhow::{Context, Result};
+use crate::{Result, ResultExt};
 
 const USER_AGENT: &str = concat!("overture-stac/", env!("CARGO_PKG_VERSION"));
 

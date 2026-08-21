@@ -4,7 +4,6 @@
 //! `id` column from the LAST row group's statistics of the first fragment, and returns a
 //! `[[filename, max_id], ...]` list sorted by max_id.
 
-use anyhow::{Context, Result};
 use object_store::{path::Path as ObjPath, ObjectStore, ObjectStoreExt};
 #[allow(deprecated)]
 use parquet::arrow::async_reader::ParquetObjectReader;
@@ -14,6 +13,7 @@ use serde_json::{json, Value};
 use std::sync::Arc;
 
 use crate::s3::{list_all, Bucket};
+use crate::{Result, ResultExt};
 
 pub async fn create_manifest(bucket: &Bucket) -> Result<Value> {
     let prefix = "registry";

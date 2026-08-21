@@ -21,7 +21,6 @@ python = ["dep:pyo3", "dep:pyo3-async-runtimes", "dep:pyo3-log", "tracing/log-al
 extension-module = ["pyo3/extension-module"]
 
 [dependencies]
-anyhow = "1"
 bytes = "1"
 chrono = "0.4"
 clap = { version = "4", features = ["derive"] }
@@ -38,6 +37,7 @@ serde_json = { version = "1", features = ["float_roundtrip"] }
 stac = { version = "0.17.4", features = ["geoparquet"] }
 stac-io = { version = "0.3.2", features = ["geoparquet"] }
 tempfile = "3"
+thiserror = "2"
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }

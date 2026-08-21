@@ -34,8 +34,8 @@ const AUTO_SENTINEL: &str = "auto";
 
 create_exception!(overture_stac, OvertureStacError, PyRuntimeError);
 
-fn map_err(e: anyhow::Error) -> PyErr {
-    OvertureStacError::new_err(format!("{e:#}"))
+fn map_err(e: crate::Error) -> PyErr {
+    OvertureStacError::new_err(format!("{e}"))
 }
 
 /// Resolve the three-state `schema_version` arg:
@@ -46,7 +46,7 @@ async fn resolve_schema_version(
     schema_version: Option<String>,
     root_href: &str,
     release_version: &str,
-) -> Result<String, anyhow::Error> {
+) -> crate::Result<String> {
     match schema_version {
         None => Ok(String::new()),
         Some(s) if s == AUTO_SENTINEL => Ok(fetch_schema_version(root_href, release_version)

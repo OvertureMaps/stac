@@ -5,7 +5,6 @@
 //! (`Range: bytes=-N`), and only issues a second GET if the encoded metadata is larger than the
 //! prefetch. Avoids a separate HEAD and the full stream-builder setup.
 
-use anyhow::{bail, Context, Result};
 use bytes::Bytes;
 use futures::future::{BoxFuture, FutureExt};
 use object_store::{path::Path as ObjPath, GetOptions, GetRange, ObjectStore};
@@ -17,6 +16,8 @@ use serde_json::Value;
 use std::ops::Range;
 use std::sync::{Arc, OnceLock};
 use tokio::sync::Semaphore;
+
+use crate::{Error, Result, ResultExt};
 
 /// Cap total concurrent parquet metadata GETs across the whole process. Combined with
 /// theme-level and type-level fan-out we can otherwise open thousands of concurrent S3
@@ -54,7 +55,7 @@ pub async fn read_fragment(store: Arc<dyn ObjectStore>, key: &str) -> Result<Fra
 
     let arrow_schema =
         parquet_to_arrow_schema(file_meta.schema_descr(), file_meta.key_value_metadata())
-            .with_context(|| format!("parquet -> arrow schema for {key}"))?;
+            .with_context(|| format!("parquet → arrow schema for {key}"))?;
     let column_names: Vec<String> = arrow_schema
         .fields()
         .iter()
@@ -65,26 +66,30 @@ pub async fn read_fragment(store: Arc<dyn ObjectStore>, key: &str) -> Result<Fra
     let geo_str = kv
         .and_then(|kvs| kvs.iter().find(|kv| kv.key == "geo"))
         .and_then(|kv| kv.value.clone())
-        .ok_or_else(|| anyhow::anyhow!("no `geo` metadata in {key}"))?;
+        .ok_or_else(|| Error::MissingGeoMetadata(key.to_string()))?;
     let geo: Value =
         serde_json::from_str(&geo_str).with_context(|| format!("parse geo metadata in {key}"))?;
 
     let geometry = geo
         .get("columns")
         .and_then(|c| c.get("geometry"))
-        .ok_or_else(|| anyhow::anyhow!("no columns.geometry in geo metadata"))?;
+        .ok_or_else(|| Error::MissingGeometryColumn(key.to_string()))?;
     let bbox_arr = geometry
         .get("bbox")
         .and_then(|b| b.as_array())
-        .ok_or_else(|| anyhow::anyhow!("no bbox in geometry metadata"))?;
+        .ok_or_else(|| Error::MissingBbox(key.to_string()))?;
     if bbox_arr.len() != 4 {
-        bail!("bbox length != 4 in {key}");
+        return Err(Error::InvalidBboxCoord {
+            key: key.to_string(),
+            index: bbox_arr.len(),
+        });
     }
     let mut bbox = [0f64; 4];
     for (i, v) in bbox_arr.iter().enumerate() {
-        bbox[i] = v
-            .as_f64()
-            .ok_or_else(|| anyhow::anyhow!("bbox coord {i} not a number"))?;
+        bbox[i] = v.as_f64().ok_or_else(|| Error::InvalidBboxCoord {
+            key: key.to_string(),
+            index: i,
+        })?;
     }
 
     let geoparquet_version = geo

@@ -7,7 +7,6 @@
 //! crate's Serialize impls). `collections.parquet` is written via
 //! `stac::geoparquet` through the `ItemCollection::into_geoparquet_path` helper.
 
-use anyhow::{Context, Result};
 use chrono::{Datelike, NaiveDate, TimeZone, Utc};
 use serde_json::{json, Value};
 use stac::geoparquet::WriterOptions;
@@ -21,6 +20,7 @@ use crate::pmtiles;
 use crate::registry;
 use crate::s3::{list_top_level, Bucket};
 use crate::theme::{process_theme, ThemeResult, ITEM_STAC_EXTENSIONS};
+use crate::{Error, Result, ResultExt};
 
 pub async fn list_release_ids(bucket: &Bucket, prefix: &str) -> Result<Vec<String>> {
     let mut ids = list_top_level(bucket, prefix).await?;
@@ -59,7 +59,7 @@ pub async fn build_single_release(
         .split('.')
         .next()
         .and_then(|d| NaiveDate::parse_from_str(d, "%Y-%m-%d").ok())
-        .with_context(|| format!("parse release date from {release}"))?;
+        .ok_or_else(|| Error::ParseReleaseDate(release.to_string()))?;
     let release_dt = Utc
         .with_ymd_and_hms(
             release_date.year(),

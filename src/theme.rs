@@ -3,7 +3,6 @@
 //! Returns typed `stac` values (Catalog per theme, Collection per type, Item per fragment)
 //! plus the manifest features destined for `manifest.geojson`.
 
-use anyhow::Result;
 use chrono::{DateTime, SecondsFormat, Utc};
 use serde_json::{json, Map as JsonMap, Value};
 use stac::{Bbox, Catalog, Collection, Extent, Item, Link, SpatialExtent, TemporalExtent};
@@ -12,6 +11,7 @@ use std::sync::Arc;
 
 use crate::parquet_io::{read_fragment, FragmentInfo};
 use crate::s3::{list_top_level, Bucket};
+use crate::{Error, Result};
 
 pub const ITEM_STAC_EXTENSIONS: &[&str] = &[
     "https://stac-extensions.github.io/storage/v2.0.0/schema.json",
@@ -152,7 +152,7 @@ async fn process_type(
             let store = Arc::clone(&store_arc);
             async move {
                 let info = read_fragment(store, &key).await?;
-                Ok::<(usize, FragmentInfo), anyhow::Error>((idx, info))
+                Ok::<(usize, FragmentInfo), Error>((idx, info))
             }
         })
         .collect();
