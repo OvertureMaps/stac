@@ -12,7 +12,7 @@ fn cli() -> Command {
 fn help_lists_subcommands() {
     let assert = cli().arg("--help").assert().success();
     let stdout = String::from_utf8(assert.get_output().stdout.clone()).unwrap();
-    for cmd in ["build", "list-releases"] {
+    for cmd in ["build", "list-releases", "reconcile"] {
         assert!(stdout.contains(cmd), "help missing subcommand {cmd}");
     }
 }
@@ -73,6 +73,15 @@ fn list_releases_help_lists_data_uri() {
         .assert()
         .success()
         .stdout(predicate::str::contains("--data-uri"));
+}
+
+#[test]
+fn reconcile_help_lists_root_href_and_data_uri() {
+    let assert = cli().args(["reconcile", "--help"]).assert().success();
+    let stdout = String::from_utf8(assert.get_output().stdout.clone()).unwrap();
+    for flag in ["--root-href", "--data-uri"] {
+        assert!(stdout.contains(flag), "reconcile help missing flag {flag}");
+    }
 }
 
 #[test]

@@ -10,6 +10,7 @@ use overture_stac::{
         save_absolute_published,
     },
     s3::Bucket,
+    schema::fetch_catalog_children,
 };
 
 const PROD_ROOT_HREF: &str = "https://stac.overturemaps.org";
@@ -30,10 +31,24 @@ enum Command {
     Build(BuildArgs),
     /// List release IDs currently in the data bucket, newest first.
     ListReleases(ListReleasesArgs),
+    /// Compare the live STAC catalog against the data bucket and report drift.
+    /// Read-only; exits non-zero when the catalog is out of sync.
+    Reconcile(ReconcileArgs),
 }
 
 #[derive(clap::Args, Debug)]
 struct ListReleasesArgs {
+    /// Object-store URI to the data bucket (s3://, gs://, az://, file:// ...).
+    #[arg(long = "data-uri", default_value = PROD_DATA_URI)]
+    data_uri: String,
+}
+
+#[derive(clap::Args, Debug)]
+struct ReconcileArgs {
+    /// Public root URL of the STAC catalog to check.
+    #[arg(long = "root-href", default_value = PROD_ROOT_HREF)]
+    root_href: String,
+
     /// Object-store URI to the data bucket (s3://, gs://, az://, file:// ...).
     #[arg(long = "data-uri", default_value = PROD_DATA_URI)]
     data_uri: String,
@@ -87,6 +102,7 @@ async fn main() -> Result<()> {
     match cli.command {
         Command::Build(args) => build(args).await,
         Command::ListReleases(args) => list_releases(args).await,
+        Command::Reconcile(args) => reconcile(args).await,
     }
 }
 
@@ -172,4 +188,63 @@ async fn list_releases(args: ListReleasesArgs) -> Result<()> {
         println!("{id}");
     }
     Ok(())
+}
+
+async fn reconcile(args: ReconcileArgs) -> Result<()> {
+    let root_href = args.root_href.trim_end_matches('/');
+    let bucket = Bucket::from_url(&args.data_uri)?;
+
+    let (catalog_ids, bucket_ids) = tokio::try_join!(
+        fetch_catalog_children(root_href),
+        list_release_ids(&bucket, "release"),
+    )?;
+
+    let catalog: std::collections::BTreeSet<String> = catalog_ids.iter().cloned().collect();
+    let bucket_set: std::collections::BTreeSet<String> = bucket_ids.iter().cloned().collect();
+
+    let to_add: Vec<&String> = bucket_set.difference(&catalog).collect();
+    let to_remove: Vec<&String> = catalog.difference(&bucket_set).collect();
+
+    println!(
+        "Fetched {root_href}/catalog.json ({} releases)",
+        catalog.len()
+    );
+    println!("Listed {} ({} releases)", args.data_uri, bucket_set.len());
+    println!();
+
+    if to_add.is_empty() {
+        println!("+ 0 releases to add (in bucket, not in catalog)");
+    } else {
+        println!(
+            "+ {} release{} to add (in bucket, not in catalog):",
+            to_add.len(),
+            if to_add.len() == 1 { "" } else { "s" }
+        );
+        for id in &to_add {
+            println!("    + {id}");
+        }
+    }
+
+    if to_remove.is_empty() {
+        println!("- 0 releases to remove (in catalog, not in bucket)");
+    } else {
+        println!(
+            "- {} release{} to remove (in catalog, not in bucket):",
+            to_remove.len(),
+            if to_remove.len() == 1 { "" } else { "s" }
+        );
+        for id in &to_remove {
+            println!("    - {id}");
+        }
+    }
+
+    println!();
+    let drift = to_add.len() + to_remove.len();
+    if drift == 0 {
+        println!("Catalog is in sync with the bucket.");
+        Ok(())
+    } else {
+        println!("Catalog drift: {drift} release(s) differ.");
+        std::process::exit(1);
+    }
 }
