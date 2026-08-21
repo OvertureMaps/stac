@@ -85,6 +85,7 @@ fn reconcile_help_lists_expected_flags() {
         "--extras-uri",
         "--root-href",
         "--apply",
+        "--backup-catalog",
         "--concurrency",
     ] {
         assert!(stdout.contains(flag), "reconcile help missing flag {flag}");

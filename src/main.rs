@@ -70,6 +70,11 @@ struct ReconcileArgs {
     #[arg(long, default_value_t = false)]
     apply: bool,
 
+    /// Before --apply mutates anything, copy the existing catalog.json to
+    /// catalog.json.bak-YYYYMMDD-HHMMSS in the same location.
+    #[arg(long = "backup-catalog", default_value_t = false)]
+    backup_catalog: bool,
+
     /// Concurrent theme-processing futures used when building added releases.
     #[arg(long)]
     concurrency: Option<usize>,
@@ -320,6 +325,7 @@ async fn reconcile(args: ReconcileArgs) -> Result<()> {
             &root_href,
             &diff,
             concurrency,
+            args.backup_catalog,
         )
         .await?;
         println!();
@@ -377,6 +383,7 @@ fn print_diff_summary(
 /// then files deleted); additions happen after (files uploaded first, then root updated
 /// last). This keeps the root catalog pointing only at complete releases even mid-run.
 #[allow(clippy::too_many_arguments)]
+#[allow(clippy::too_many_arguments)]
 async fn apply_diff(
     catalog_bucket: &Bucket,
     catalog_prefix: &str,
@@ -385,12 +392,23 @@ async fn apply_diff(
     root_href: &str,
     diff: &Diff,
     concurrency: usize,
+    backup: bool,
 ) -> Result<()> {
     let root_key = format!("{catalog_prefix}catalog.json");
-    let mut root = match get_json(catalog_bucket, &root_key).await {
-        Ok(v) => v,
-        Err(_) => build_empty_root(),
-    };
+    let existing_root = get_json(catalog_bucket, &root_key).await.ok();
+
+    if backup {
+        if let Some(current) = existing_root.as_ref() {
+            let ts = chrono::Utc::now().format("%Y%m%d-%H%M%S");
+            let backup_key = format!("{catalog_prefix}catalog.json.bak-{ts}");
+            put_json(catalog_bucket, &backup_key, current).await?;
+            println!("Backed up existing root → {backup_key}");
+        } else {
+            println!("No existing catalog.json to back up.");
+        }
+    }
+
+    let mut root = existing_root.unwrap_or_else(build_empty_root);
 
     // Removals: update root first, then delete files.
     for release in &diff.to_remove {
@@ -438,9 +456,9 @@ async fn apply_diff(
         println!("    uploaded {uploaded} object(s) + added child link");
     }
 
-    // Post-pass: update `latest` and neighbor-link neighbors would be nice but
-    // require rebuilding per-release catalogs. Round 1: just refresh `latest`
-    // from the current set of children.
+    // Post-pass: refresh `latest` from the current set of children and stamp
+    // the VCS extension so anyone reading the catalog can tell which build
+    // wrote it.
     let current_children = children_from_root(&root);
     let mut sorted = current_children.clone();
     sorted.sort_by(|a, b| b.cmp(a));
@@ -448,10 +466,31 @@ async fn apply_diff(
         root.as_object_mut()
             .expect("root is object")
             .insert("latest".into(), json!(latest));
-        put_json(catalog_bucket, &root_key, &root).await?;
     }
+    stamp_vcs(&mut root);
+    put_json(catalog_bucket, &root_key, &root).await?;
 
     Ok(())
+}
+
+const VCS_EXTENSION_URL: &str = "https://stac-extensions.github.io/vcs/v0.1.0/schema.json";
+
+fn stamp_vcs(root: &mut Value) {
+    let obj = root.as_object_mut().expect("root is object");
+    let extensions = obj
+        .entry("stac_extensions".to_string())
+        .or_insert_with(|| json!([]))
+        .as_array_mut()
+        .expect("stac_extensions is array");
+    if !extensions
+        .iter()
+        .any(|v| v.as_str() == Some(VCS_EXTENSION_URL))
+    {
+        extensions.push(json!(VCS_EXTENSION_URL));
+    }
+    obj.insert("vcs:type".into(), json!("git"));
+    obj.insert("vcs:branch".into(), json!(env!("GIT_BRANCH")));
+    obj.insert("vcs:commit".into(), json!(env!("GIT_COMMIT")));
 }
 
 fn build_empty_root() -> Value {
