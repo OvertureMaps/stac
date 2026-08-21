@@ -6,11 +6,11 @@ use std::path::PathBuf;
 use tracing_subscriber::EnvFilter;
 
 use overture_stac::{
-    catalog::{
+    stac::{
         build_single_release, build_top_catalog, link_neighbor_releases, list_release_ids,
         save_absolute_published,
     },
-    s3::{delete_prefix, get_json, put_json, upload_directory, Bucket},
+    storage::{delete_prefix, get_json, put_json, upload_directory, Bucket},
     Error, Result, ResultExt,
 };
 

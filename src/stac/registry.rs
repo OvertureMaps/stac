@@ -12,7 +12,7 @@ use parquet::file::statistics::Statistics;
 use serde_json::{json, Value};
 use std::sync::Arc;
 
-use crate::s3::{list_all, Bucket};
+use crate::storage::{list_all, Bucket};
 use crate::{Result, ResultExt};
 
 pub async fn create_manifest(bucket: &Bucket) -> Result<Value> {

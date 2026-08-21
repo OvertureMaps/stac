@@ -2,7 +2,7 @@
 
 use std::collections::BTreeMap;
 
-use crate::s3::{list_top_level, Bucket};
+use crate::storage::{list_top_level, Bucket};
 use crate::Result;
 
 pub async fn discover(bucket_extras: &Bucket, release: &str) -> BTreeMap<String, String> {

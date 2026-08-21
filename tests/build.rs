@@ -4,8 +4,8 @@
 
 use std::path::PathBuf;
 
-use overture_stac::catalog::build_single_release;
-use overture_stac::s3::Bucket;
+use overture_stac::stac::build_single_release;
+use overture_stac::storage::Bucket;
 
 const TEST_RELEASE: &str = "2026-07-22.0";
 const TEST_SCHEMA: &str = "1.18.0";

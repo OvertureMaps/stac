@@ -9,8 +9,7 @@ use stac::{Bbox, Catalog, Collection, Extent, Item, Link, SpatialExtent, Tempora
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
-use crate::parquet_io::{read_fragment, FragmentInfo};
-use crate::s3::{list_top_level, Bucket};
+use crate::storage::{list_top_level, read_fragment, Bucket, FragmentInfo};
 use crate::{Error, Result};
 
 pub const ITEM_STAC_EXTENSIONS: &[&str] = &[

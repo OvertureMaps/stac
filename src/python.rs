@@ -17,11 +17,10 @@ use pyo3::exceptions::PyRuntimeError;
 use pyo3::prelude::*;
 use pyo3::types::PyString;
 
-use crate::catalog::{
+use crate::stac::{
     build_single_release, link_neighbor_releases, list_release_ids, save_absolute_published,
 };
-use crate::s3::Bucket;
-use crate::schema::fetch_schema_version;
+use crate::storage::{fetch_schema_version, Bucket};
 
 const DEFAULT_DATA_URI: &str = "s3://overturemaps-us-west-2";
 const DEFAULT_EXTRAS_URI: &str = "s3://overturemaps-extras-us-west-2";

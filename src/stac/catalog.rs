@@ -16,10 +16,9 @@ use std::collections::BTreeMap;
 use std::path::Path;
 use std::sync::Arc;
 
-use crate::pmtiles;
-use crate::registry;
-use crate::s3::{list_top_level, Bucket};
-use crate::theme::{process_theme, ThemeResult, ITEM_STAC_EXTENSIONS};
+use crate::stac::theme::{process_theme, ThemeResult, ITEM_STAC_EXTENSIONS};
+use crate::stac::{pmtiles, registry};
+use crate::storage::{list_top_level, Bucket};
 use crate::{Error, Result, ResultExt};
 
 pub async fn list_release_ids(bucket: &Bucket, prefix: &str) -> Result<Vec<String>> {
