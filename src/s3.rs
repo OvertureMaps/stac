@@ -37,11 +37,24 @@ impl Bucket {
         let url = Url::parse(uri).with_context(|| format!("parsing URI: {uri}"))?;
         let (store, path) = if url.scheme() == "s3" {
             let region = std::env::var("AWS_REGION").unwrap_or_else(|_| "us-west-2".to_string());
-            parse_url_opts(
-                &url,
-                [("skip_signature", "true"), ("region", region.as_str())],
-            )
-            .with_context(|| format!("initialising object store for {uri}"))?
+            let mut opts: Vec<(String, String)> = vec![("region".into(), region)];
+            let access = std::env::var("AWS_ACCESS_KEY_ID").ok();
+            let secret = std::env::var("AWS_SECRET_ACCESS_KEY").ok();
+            if let (Some(a), Some(s)) = (access.as_ref(), secret.as_ref()) {
+                // Static credentials in env — pass them explicitly so object_store
+                // doesn't fall through its chain to IMDS.
+                opts.push(("access_key_id".into(), a.clone()));
+                opts.push(("secret_access_key".into(), s.clone()));
+                if let Ok(t) = std::env::var("AWS_SESSION_TOKEN") {
+                    opts.push(("token".into(), t));
+                }
+            } else {
+                // No usable credentials in env — assume the bucket is public
+                // (matches the Overture prod buckets, which are readable anon).
+                opts.push(("skip_signature".into(), "true".into()));
+            }
+            parse_url_opts(&url, opts)
+                .with_context(|| format!("initialising object store for {uri}"))?
         } else {
             parse_url(&url).with_context(|| format!("initialising object store for {uri}"))?
         };
