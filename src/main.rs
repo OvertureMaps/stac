@@ -272,11 +272,12 @@ fn release_id_from_href(href: &str) -> Option<String> {
 
 async fn reconcile(args: ReconcileArgs) -> Result<()> {
     let (catalog_bucket, catalog_prefix) = Bucket::from_url_with_prefix(&args.catalog_uri)?;
-    let data_bucket = Bucket::from_url(&args.data_uri)?;
+    let (data_bucket, data_prefix) = Bucket::from_url_with_prefix(&args.data_uri)?;
+    let release_prefix = format!("{data_prefix}release");
 
     let (catalog_ids, bucket_ids) = tokio::try_join!(
         read_catalog_children(&catalog_bucket, &catalog_prefix),
-        list_release_ids(&data_bucket, "release"),
+        list_release_ids(&data_bucket, &release_prefix),
     )?;
     let diff = Diff::compute(&catalog_ids, &bucket_ids);
 
