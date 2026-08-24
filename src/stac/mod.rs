@@ -11,8 +11,13 @@ pub mod catalog;
 pub mod pmtiles;
 pub mod registry;
 pub mod theme;
+pub mod validate;
 
 pub use catalog::{
     build_single_release, build_top_catalog, link_neighbor_releases, list_release_ids,
     save_absolute_published, ReleaseCatalog,
+};
+pub use validate::{
+    validate_catalog, validate_catalog_uri, validate_url, Failure, FailureKind, ValidateOptions,
+    ValidationReport,
 };

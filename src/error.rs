@@ -42,6 +42,9 @@ pub enum Error {
     #[error(transparent)]
     StacIo(#[from] Box<stac_io::Error>),
 
+    #[error(transparent)]
+    StacValidate(#[from] Box<stac_validate::Error>),
+
     // ─── Adds context to another error while keeping the source chain ───────
     #[error("{context}: {source}")]
     Context {
@@ -83,6 +86,15 @@ pub enum Error {
 
     #[error("could not read local dir {0}")]
     ReadDir(PathBuf),
+
+    #[error("root catalog {0} has no rel=self link — cannot derive base URL for link checks")]
+    MissingSelfLink(PathBuf),
+
+    #[error("validation failed ({0} failure(s))")]
+    ValidationFailed(usize),
+
+    #[error("--url must be an http(s) URL (got: {0})")]
+    InvalidValidateUrl(String),
 }
 
 // Boxed From conversions — thiserror only wires up `#[from]` on the boxed types,
@@ -111,6 +123,11 @@ impl From<stac::Error> for Error {
 impl From<stac_io::Error> for Error {
     fn from(e: stac_io::Error) -> Self {
         Error::StacIo(Box::new(e))
+    }
+}
+impl From<stac_validate::Error> for Error {
+    fn from(e: stac_validate::Error) -> Self {
+        Error::StacValidate(Box::new(e))
     }
 }
 

@@ -12,9 +12,78 @@ fn cli() -> Command {
 fn help_lists_subcommands() {
     let assert = cli().arg("--help").assert().success();
     let stdout = String::from_utf8(assert.get_output().stdout.clone()).unwrap();
-    for cmd in ["build", "list-releases", "reconcile"] {
+    for cmd in ["build", "list-releases", "reconcile", "validate"] {
         assert!(stdout.contains(cmd), "help missing subcommand {cmd}");
     }
+}
+
+#[test]
+fn validate_help_lists_expected_flags() {
+    let assert = cli().args(["validate", "--help"]).assert().success();
+    let stdout = String::from_utf8(assert.get_output().stdout.clone()).unwrap();
+    for flag in ["--concurrency", "--json", "--url", "--catalog-uri"] {
+        assert!(stdout.contains(flag), "validate help missing flag {flag}");
+    }
+}
+
+#[test]
+fn validate_requires_a_target() {
+    // None provided — clap's ArgGroup enforces exactly one target.
+    cli().args(["validate"]).assert().failure();
+}
+
+#[test]
+fn validate_url_rejects_bare_hostname_with_clear_message() {
+    cli()
+        .args(["validate", "--url", "stac.overturemaps.org"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("--url must be an http(s) URL"));
+}
+
+#[test]
+fn validate_rejects_multiple_targets() {
+    // Any pair of the three targets should conflict.
+    cli()
+        .args([
+            "validate",
+            "./nowhere",
+            "--url",
+            "https://example.com/catalog.json",
+        ])
+        .assert()
+        .failure();
+    cli()
+        .args([
+            "validate",
+            "--url",
+            "https://example.com/catalog.json",
+            "--catalog-uri",
+            "s3://bucket/",
+        ])
+        .assert()
+        .failure();
+    cli()
+        .args(["validate", "./nowhere", "--catalog-uri", "s3://bucket/"])
+        .assert()
+        .failure();
+}
+
+#[test]
+fn build_and_reconcile_expose_validate_flag() {
+    let build = cli().args(["build", "--help"]).assert().success();
+    let build_out = String::from_utf8(build.get_output().stdout.clone()).unwrap();
+    assert!(
+        build_out.contains("--validate"),
+        "build --help missing --validate"
+    );
+
+    let rec = cli().args(["reconcile", "--help"]).assert().success();
+    let rec_out = String::from_utf8(rec.get_output().stdout.clone()).unwrap();
+    assert!(
+        rec_out.contains("--validate"),
+        "reconcile --help missing --validate"
+    );
 }
 
 #[test]

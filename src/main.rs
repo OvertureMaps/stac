@@ -8,7 +8,8 @@ use tracing_subscriber::EnvFilter;
 use overture_stac::{
     stac::{
         build_single_release, build_top_catalog, link_neighbor_releases, list_release_ids,
-        save_absolute_published,
+        save_absolute_published, validate_catalog, validate_catalog_uri, validate_url,
+        ValidateOptions,
     },
     storage::{delete_prefix, get_json, put_json, upload_directory, Bucket},
     Error, Result, ResultExt,
@@ -36,6 +37,41 @@ enum Command {
     /// Compare the live STAC catalog against the data bucket and report drift.
     /// Read-only; exits non-zero when the catalog is out of sync.
     Reconcile(ReconcileArgs),
+    /// Validate a built STAC catalog on disk (JSON schema, link integrity,
+    /// Overture-specific rules). Exits non-zero on any failure.
+    Validate(ValidateArgs),
+}
+
+#[derive(clap::Args, Debug)]
+#[command(group(clap::ArgGroup::new("target").required(true).args(["dir", "url", "catalog_uri"])))]
+struct ValidateArgs {
+    /// Local directory containing the built catalog (must have catalog.json at
+    /// the root). Mutually exclusive with --url and --catalog-uri.
+    #[arg(value_name = "DIR")]
+    dir: Option<PathBuf>,
+
+    /// Remote catalog root URL to fetch and crawl over HTTP (e.g.
+    /// https://stac.overturemaps.org/catalog.json). Tests what the CDN serves
+    /// to users. Intended for a scheduled prod health check that runs
+    /// independently of publish.
+    #[arg(long)]
+    url: Option<String>,
+
+    /// Object-store URI of the catalog storage (e.g.
+    /// s3://overturemaps-extras-us-west-2/stac/). Tests the source of truth
+    /// in the bucket, independent of CDN cache state. Anonymous S3 access is
+    /// used when no AWS credentials are set in the environment.
+    #[arg(long = "catalog-uri")]
+    catalog_uri: Option<String>,
+
+    /// Concurrent HTTP GETs / object-store GETs (remote/bucket, capped at 16)
+    /// or file-check futures (local mode). Defaults to num_cpus / 2 (min 1).
+    #[arg(long)]
+    concurrency: Option<usize>,
+
+    /// Emit machine-readable JSON summary instead of pretty text.
+    #[arg(long, default_value_t = false)]
+    json: bool,
 }
 
 #[derive(clap::Args, Debug)]
@@ -74,6 +110,12 @@ struct ReconcileArgs {
     /// catalog.json.bak-YYYYMMDD-HHMMSS in the same location.
     #[arg(long = "backup-catalog", default_value_t = false)]
     backup_catalog: bool,
+
+    /// Validate each newly-built release locally before uploading AND run a
+    /// bucket-mode validation of the whole catalog after apply completes
+    /// (covers the mutated root). Fails the run on any failure.
+    #[arg(long, default_value_t = false)]
+    validate: bool,
 
     /// Concurrent theme-processing futures used when building added releases.
     #[arg(long)]
@@ -114,6 +156,10 @@ struct BuildArgs {
     /// 'self' links. Override for staging/testing, e.g. https://staging.overturemaps.org/stac/pr/123.
     #[arg(long = "root-href", default_value = PROD_ROOT_HREF)]
     root_href: String,
+
+    /// Validate the catalog after writing. Fails the run on any failure.
+    #[arg(long, default_value_t = false)]
+    validate: bool,
 }
 
 #[tokio::main(flavor = "multi_thread")]
@@ -143,11 +189,62 @@ async fn run() -> Result<()> {
         Command::Build(args) => build(args).await,
         Command::ListReleases(args) => list_releases(args).await,
         Command::Reconcile(args) => reconcile(args).await,
+        Command::Validate(args) => validate(args).await,
     }
 }
 
 fn default_concurrency() -> usize {
     (num_cpus::get() / 2).max(1)
+}
+
+async fn run_validation(dir: &std::path::Path, json: bool) -> Result<()> {
+    let report = validate_catalog(dir, default_concurrency(), ValidateOptions::default()).await?;
+    report.print(json);
+    if !report.is_ok() {
+        return Err(Error::ValidationFailed(report.failures.len()));
+    }
+    Ok(())
+}
+
+async fn validate(args: ValidateArgs) -> Result<()> {
+    let concurrency = args.concurrency.unwrap_or_else(default_concurrency);
+    let opts = ValidateOptions::default();
+    let report = match (args.url, args.catalog_uri, args.dir) {
+        (Some(url), _, _) => {
+            let normalized = normalize_validate_url(&url)?;
+            validate_url(&normalized, concurrency, opts).await?
+        }
+        (_, Some(uri), _) => validate_catalog_uri(&uri, concurrency, opts).await?,
+        (_, _, Some(dir)) => validate_catalog(&dir, concurrency, opts).await?,
+        (None, None, None) => unreachable!("clap's ArgGroup requires exactly one target"),
+    };
+    report.print(args.json);
+    if !report.is_ok() {
+        return Err(Error::ValidationFailed(report.failures.len()));
+    }
+    Ok(())
+}
+
+/// Normalize a user-supplied `--url` value: require http(s), auto-append
+/// `catalog.json` when the path doesn't already end in `.json`. Rejects bare
+/// hostnames up-front with a clear message instead of letting reqwest fail
+/// deep in the crawler with an opaque "builder error".
+fn normalize_validate_url(input: &str) -> Result<String> {
+    let mut parsed =
+        url::Url::parse(input).map_err(|_| Error::InvalidValidateUrl(input.to_string()))?;
+    if !matches!(parsed.scheme(), "http" | "https") {
+        return Err(Error::InvalidValidateUrl(input.to_string()));
+    }
+    if !parsed.path().ends_with(".json") {
+        let path = parsed.path().to_string();
+        let new_path = if path.ends_with('/') {
+            format!("{path}catalog.json")
+        } else {
+            format!("{path}/catalog.json")
+        };
+        parsed.set_path(&new_path);
+    }
+    Ok(parsed.to_string())
 }
 
 async fn build(args: BuildArgs) -> Result<()> {
@@ -202,6 +299,9 @@ async fn build(args: BuildArgs) -> Result<()> {
 
         let dest = args.output.join(&release);
         save_absolute_published(&catalog, &format!("{root_href}/{release}"), &dest)?;
+        if args.validate {
+            run_validation(&dest, false).await?;
+        }
         return Ok(());
     }
 
@@ -218,6 +318,9 @@ async fn build(args: BuildArgs) -> Result<()> {
     )
     .await?;
     save_absolute_published(&top, &root_href, &args.output)?;
+    if args.validate {
+        run_validation(&args.output, false).await?;
+    }
     Ok(())
 }
 
@@ -340,6 +443,7 @@ async fn reconcile(args: ReconcileArgs) -> Result<()> {
             &diff,
             concurrency,
             args.backup_catalog,
+            args.validate,
         )
         .await?;
         println!();
@@ -348,6 +452,24 @@ async fn reconcile(args: ReconcileArgs) -> Result<()> {
             diff.to_add.len() + diff.to_remove.len(),
             args.catalog_uri
         );
+        if args.validate {
+            // Pre-upload check only covered each new release's temp dir; it
+            // couldn't see the root catalog that apply_diff just mutated. Run
+            // the same three checks against the post-apply bucket state to
+            // close that gap.
+            println!();
+            println!("Validating post-apply bucket state...");
+            let report = validate_catalog_uri(
+                &args.catalog_uri,
+                default_concurrency(),
+                ValidateOptions::default(),
+            )
+            .await?;
+            report.print(false);
+            if !report.is_ok() {
+                return Err(Error::ValidationFailed(report.failures.len()));
+            }
+        }
         Ok(())
     }
 }
@@ -407,6 +529,7 @@ async fn apply_diff(
     diff: &Diff,
     concurrency: usize,
     backup: bool,
+    validate: bool,
 ) -> Result<()> {
     let root_key = format!("{catalog_prefix}catalog.json");
     let existing_root = get_json(catalog_bucket, &root_key).await.ok();
@@ -457,6 +580,12 @@ async fn apply_diff(
             &format!("{root_href}/{release}"),
             &release_dir,
         )?;
+
+        if validate {
+            run_validation(&release_dir, false)
+                .await
+                .with_context(|| format!("validating {release} before upload"))?;
+        }
 
         let uploaded = upload_directory(
             catalog_bucket,
