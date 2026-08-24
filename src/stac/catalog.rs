@@ -41,6 +41,7 @@ pub struct ReleaseCatalog {
     pub extra_child_fields: serde_json::Map<String, Value>,
 }
 
+#[allow(clippy::too_many_arguments)]
 pub async fn build_single_release(
     bucket: &Bucket,
     extras_bucket: Option<&Bucket>,
@@ -187,15 +188,15 @@ async fn process_themes_parallel(
     Ok(results)
 }
 
-fn spawn_theme(
+async fn spawn_theme(
     bucket: Arc<Bucket>,
     theme_path: String,
     release: String,
     debug: bool,
     release_dt: chrono::DateTime<Utc>,
     pmtiles: Arc<BTreeMap<String, String>>,
-) -> impl std::future::Future<Output = Result<ThemeResult>> + Send + 'static {
-    async move { process_theme(&bucket, &theme_path, &release, debug, release_dt, &pmtiles).await }
+) -> Result<ThemeResult> {
+    process_theme(&bucket, &theme_path, &release, debug, release_dt, &pmtiles).await
 }
 
 pub fn link_neighbor_releases(catalog: &mut ReleaseCatalog, all_ids: &[String], root_href: &str) {
@@ -237,7 +238,6 @@ pub fn save_absolute_published(
         .unwrap_or_else(|| release.catalog.id.clone());
     write_release(
         release,
-        &base_url,
         &self_href,
         &self_href,
         &root_title,
@@ -248,7 +248,6 @@ pub fn save_absolute_published(
 
 fn write_release(
     release: &ReleaseCatalog,
-    base_url: &str,
     self_href: &str,
     root_href: &str,
     root_title: &str,
@@ -340,7 +339,6 @@ fn write_release(
         let child_self = format!("{}/{}/catalog.json", strip_last(self_href), c.catalog.id);
         write_release(
             c,
-            base_url,
             &child_self,
             root_href,
             root_title,
@@ -414,6 +412,7 @@ fn write_theme(
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 fn write_collection(
     collection: &Collection,
     items: &[Item],

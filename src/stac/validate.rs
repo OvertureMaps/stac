@@ -285,7 +285,7 @@ pub async fn validate_url(
         .build()
         .context("building HTTP client for remote validate")?;
 
-    let capped = concurrency.max(1).min(REMOTE_MAX_CONCURRENCY);
+    let capped = concurrency.clamp(1, REMOTE_MAX_CONCURRENCY);
     let (fetched, fetch_failures) = crawl_http(&client, &normalized, capped).await?;
     finalize_report(fetched, fetch_failures, &normalized, capped, options).await
 }
@@ -342,7 +342,7 @@ pub async fn validate_catalog_uri(
 
     let root_url = format!("{url_base}catalog.json");
 
-    let capped = concurrency.max(1).min(REMOTE_MAX_CONCURRENCY);
+    let capped = concurrency.clamp(1, REMOTE_MAX_CONCURRENCY);
     let (fetched, fetch_failures) = crawl_bucket(
         &bucket,
         &prefix,
@@ -641,7 +641,7 @@ fn derive_base_url_from_self_link(root: &Value) -> Option<String> {
 }
 
 fn strip_last_segment(url_or_path: &str) -> String {
-    let base = url_or_path.rsplitn(2, '/').nth(1).unwrap_or("");
+    let base = url_or_path.rsplit_once('/').map(|x| x.0).unwrap_or("");
     format!("{base}/")
 }
 

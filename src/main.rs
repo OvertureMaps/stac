@@ -494,7 +494,6 @@ fn print_diff_summary(
 /// then files deleted); additions happen after (files uploaded first, then root updated
 /// last). This keeps the root catalog pointing only at complete releases even mid-run.
 #[allow(clippy::too_many_arguments)]
-#[allow(clippy::too_many_arguments)]
 async fn apply_diff(
     catalog_bucket: &Bucket,
     catalog_prefix: &str,

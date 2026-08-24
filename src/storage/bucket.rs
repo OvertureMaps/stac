@@ -168,12 +168,12 @@ pub async fn list_top_level(bucket: &Bucket, prefix: &str) -> Result<Vec<String>
     .with_context(|| format!("listing {prefix} in {}", bucket.name))?;
     let mut out = Vec::new();
     for pref in result.common_prefixes {
-        if let Some(name) = pref.parts().last() {
+        if let Some(name) = pref.parts().next_back() {
             out.push(name.as_ref().to_string());
         }
     }
     for obj in result.objects {
-        if let Some(name) = obj.location.parts().last() {
+        if let Some(name) = obj.location.parts().next_back() {
             out.push(name.as_ref().to_string());
         }
     }
@@ -216,10 +216,7 @@ pub async fn get_json(bucket: &Bucket, key: &str) -> Result<serde_json::Value> {
 /// All other failures (network, auth, permission, parse) propagate as `Err` — callers
 /// must never conflate "missing" with "unreadable", or they'll silently rebuild state
 /// from scratch on a transient blip.
-pub async fn get_json_optional(
-    bucket: &Bucket,
-    key: &str,
-) -> Result<Option<serde_json::Value>> {
+pub async fn get_json_optional(bucket: &Bucket, key: &str) -> Result<Option<serde_json::Value>> {
     let p = Path::from(key);
     let bytes_result = with_auth_retry(bucket, |store| {
         let p = p.clone();
