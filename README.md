@@ -2,7 +2,7 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-> **Experimental branch.** Rust port of `overture-stac` — CLI + Python bindings.
+> **Experimental branch.** Rust port of `overture-stac`: CLI + Python bindings.
 > The production catalog at `stac.overturemaps.org` is still published by the
 > Python implementation on `main`. See the [TODO](#todo) section for what's
 > pending before this branch can replace `main`.
@@ -27,7 +27,7 @@ cargo run --release -- build \
   --concurrency 6
 ```
 
-Pass `--debug` for a fast run (a few fragments per type). The `build` subcommand reads from the Overture public bucket over `object_store`, which supports `s3://`, `gs://`, `az://`, and `http(s)://` URIs — the CLI defaults to Overture's S3 location, but the underlying core is cloud-agnostic.
+Pass `--debug` for a fast run (a few fragments per type). The `build` subcommand reads from the Overture public bucket over `object_store`, which supports `s3://`, `gs://`, `az://`, and `http(s)://` URIs. The CLI defaults to Overture's S3 location, but the underlying core is cloud-agnostic.
 
 ## Python bindings
 
@@ -50,7 +50,7 @@ uv run maturin develop --release --features python,extension-module
 # or: just py-develop
 ```
 
-The function is async (returns a coroutine) and matches the CLI defaults — `data_uri`, `extras_uri`, `root_href`, `concurrency`, `debug` are all keyword arguments with production defaults. Errors surface as `overture_stac.OvertureStacError`.
+The function is async (returns a coroutine) and matches the CLI defaults: `data_uri`, `extras_uri`, `root_href`, `concurrency`, `debug` are all keyword arguments with production defaults. Errors surface as `overture_stac.OvertureStacError`.
 
 The same module also exposes the CLI's `validate` and `list-releases` operations, so scripts and services can consume the STAC catalog without shelling out:
 
@@ -67,7 +67,7 @@ async def main():
     report = await overture_stac.validate_url("https://stac.overturemaps.org")
     if not report.ok:
         for f in report.failures:
-            print(f"[{f.kind}] {f.location} — {f.message}")
+            print(f"[{f.kind}] {f.location}: {f.message}")
 
 asyncio.run(main())
 ```
@@ -76,7 +76,7 @@ asyncio.run(main())
 
 ### Logging
 
-Rust `tracing`/`log` events forward into Python's `logging` module via `pyo3-log` (installed automatically on module import). Every event lands on the logger whose name matches the Rust module path — `overture_stac.stac.theme`, `object_store.aws.builder`, `reqwest.connect`, etc. Python's root logger defaults to `WARNING`, so **INFO events are silently filtered** unless you configure `logging`:
+Rust `tracing`/`log` events forward into Python's `logging` module via `pyo3-log` (installed automatically on module import). Every event lands on the logger whose name matches the Rust module path (`overture_stac.stac.theme`, `object_store.aws.builder`, `reqwest.connect`, etc.). Python's root logger defaults to `WARNING`, so **INFO events are silently filtered** unless you configure `logging`:
 
 ```python
 import logging
@@ -89,7 +89,7 @@ Route a specific target with the usual `logging.getLogger("overture_stac.stac.th
 
 ## Development
 
-A [`justfile`](./justfile) collects the common commands. Install [just](https://github.com/casey/just) with `brew install just` and run `just` to see recipes. `just check` runs `cargo fmt --check`, `cargo clippy`, and `cargo test` — the same checks CI would run.
+A [`justfile`](./justfile) collects the common commands. Install [just](https://github.com/casey/just) with `brew install just` and run `just` to see recipes. `just check` runs `cargo fmt --check`, `cargo clippy`, and `cargo test`, the same checks CI would run.
 
 ## Parity strategy
 
@@ -98,17 +98,17 @@ Semantic parity with the Python `gen-stac` CLI, not byte-identical. Field order 
 - Catalog/Collection/Item modeled via the `stac` crate (`Catalog`, `Collection`, `Item`, `Link`, `Asset`, `Bbox`, `Extent`).
 - OMF-specific extension fields (`storage:schemes`, `table:columns`, `release:version`, etc.) live in `additional_fields`.
 - `collections.parquet` written via `stac`'s `geoparquet` feature (`ItemCollection::into_geoparquet_path`).
-- Parquet fragment metadata read via `object_store` + `parquet::ParquetMetaDataReader::load_via_suffix_and_finish` — one ranged suffix GET per fragment, no HEAD.
+- Parquet fragment metadata read via `object_store` + `parquet::ParquetMetaDataReader::load_via_suffix_and_finish`: one ranged suffix GET per fragment, no HEAD.
 
 ## Verify against the Python implementation
 
-Check out the Python implementation from `main` in a sibling directory to compare outputs — see the PR that introduced this branch ([#101](https://github.com/OvertureMaps/stac/pull/101)) for the compare harness and results (4.2× faster, 996/996 semantic parity on `2026-07-22.0`).
+Check out the Python implementation from `main` in a sibling directory to compare outputs. See the PR that introduced this branch ([#101](https://github.com/OvertureMaps/stac/pull/101)) for the compare harness and results (4.2× faster, 996/996 semantic parity on `2026-07-22.0`).
 
 ## TODO
 
 Tracking here so we don't lose track of pending work while this branch is experimental.
 
-- **CI on `rust`** — no workflow currently builds Rust or runs tests on this branch. `main`'s CI targets the Python code; nothing verifies changes here. Needed before this can replace `main`.
-- **Wheel distribution** — building locally via `just py-develop` works. Not published anywhere. Once a service wants to `pip install overture-stac`, we need a `publish-pypi.yml` restored for maturin (or an internal index).
-- **Streaming upload** — `output` currently expects a local path. `object_store::multipart` would let `output=s3://…` write the catalog directly to the destination bucket. Would eliminate the intermediate on-disk step, but breaks the current "validate locally, then sync" production pattern. Design first.
-- **Production migration** — `publish-catalog.yaml` on `main` invokes the Python CLI. To retire the Python impl, that workflow needs to install and invoke `overture-stac build` instead.
+- **CI on `rust`**: no workflow currently builds Rust or runs tests on this branch. `main`'s CI targets the Python code; nothing verifies changes here. Needed before this can replace `main`.
+- **Wheel distribution**: building locally via `just py-develop` works. Not published anywhere. Once a service wants to `pip install overture-stac`, we need a `publish-pypi.yml` restored for maturin (or an internal index).
+- **Streaming upload**: `output` currently expects a local path. `object_store::multipart` would let `output=s3://…` write the catalog directly to the destination bucket. Would eliminate the intermediate on-disk step, but breaks the current "validate locally, then sync" production pattern. Design first.
+- **Production migration**: `publish-catalog.yaml` on `main` invokes the Python CLI. To retire the Python impl, that workflow needs to install and invoke `overture-stac build` instead.
