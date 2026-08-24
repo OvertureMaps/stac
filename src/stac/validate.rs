@@ -278,6 +278,7 @@ pub async fn validate_url(
     concurrency: usize,
     options: ValidateOptions,
 ) -> Result<ValidationReport> {
+    let normalized = normalize_root_url(root_url)?;
     let client = reqwest::Client::builder()
         .user_agent(REMOTE_USER_AGENT)
         .timeout(REMOTE_TIMEOUT)
@@ -285,8 +286,30 @@ pub async fn validate_url(
         .context("building HTTP client for remote validate")?;
 
     let capped = concurrency.max(1).min(REMOTE_MAX_CONCURRENCY);
-    let (fetched, fetch_failures) = crawl_http(&client, root_url, capped).await?;
-    finalize_report(fetched, fetch_failures, root_url, capped, options).await
+    let (fetched, fetch_failures) = crawl_http(&client, &normalized, capped).await?;
+    finalize_report(fetched, fetch_failures, &normalized, capped, options).await
+}
+
+/// Accept the convenient forms users type — `https://host`, `https://host/`,
+/// `https://host/catalog.json` — and normalise to a canonical entry URL.
+/// Rejects non-http(s) schemes and un-parseable input up-front, before the
+/// crawler would fail with an opaque "builder error".
+fn normalize_root_url(input: &str) -> Result<String> {
+    let mut parsed =
+        url::Url::parse(input).map_err(|_| Error::InvalidValidateUrl(input.to_string()))?;
+    if !matches!(parsed.scheme(), "http" | "https") {
+        return Err(Error::InvalidValidateUrl(input.to_string()));
+    }
+    if !parsed.path().ends_with(".json") {
+        let path = parsed.path().to_string();
+        let new_path = if path.ends_with('/') {
+            format!("{path}catalog.json")
+        } else {
+            format!("{path}/catalog.json")
+        };
+        parsed.set_path(&new_path);
+    }
+    Ok(parsed.to_string())
 }
 
 /// Fetch a live STAC catalog from an object-store URI (`s3://`, `gs://`, `az://`,

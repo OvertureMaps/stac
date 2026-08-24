@@ -210,10 +210,7 @@ async fn validate(args: ValidateArgs) -> Result<()> {
     let concurrency = args.concurrency.unwrap_or_else(default_concurrency);
     let opts = ValidateOptions::default();
     let report = match (args.url, args.catalog_uri, args.dir) {
-        (Some(url), _, _) => {
-            let normalized = normalize_validate_url(&url)?;
-            validate_url(&normalized, concurrency, opts).await?
-        }
+        (Some(url), _, _) => validate_url(&url, concurrency, opts).await?,
         (_, Some(uri), _) => validate_catalog_uri(&uri, concurrency, opts).await?,
         (_, _, Some(dir)) => validate_catalog(&dir, concurrency, opts).await?,
         (None, None, None) => unreachable!("clap's ArgGroup requires exactly one target"),
@@ -223,28 +220,6 @@ async fn validate(args: ValidateArgs) -> Result<()> {
         return Err(Error::ValidationFailed(report.failures.len()));
     }
     Ok(())
-}
-
-/// Normalize a user-supplied `--url` value: require http(s), auto-append
-/// `catalog.json` when the path doesn't already end in `.json`. Rejects bare
-/// hostnames up-front with a clear message instead of letting reqwest fail
-/// deep in the crawler with an opaque "builder error".
-fn normalize_validate_url(input: &str) -> Result<String> {
-    let mut parsed =
-        url::Url::parse(input).map_err(|_| Error::InvalidValidateUrl(input.to_string()))?;
-    if !matches!(parsed.scheme(), "http" | "https") {
-        return Err(Error::InvalidValidateUrl(input.to_string()));
-    }
-    if !parsed.path().ends_with(".json") {
-        let path = parsed.path().to_string();
-        let new_path = if path.ends_with('/') {
-            format!("{path}catalog.json")
-        } else {
-            format!("{path}/catalog.json")
-        };
-        parsed.set_path(&new_path);
-    }
-    Ok(parsed.to_string())
 }
 
 async fn build(args: BuildArgs) -> Result<()> {

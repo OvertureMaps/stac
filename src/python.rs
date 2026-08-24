@@ -19,6 +19,8 @@ use pyo3::types::PyString;
 
 use crate::stac::{
     build_single_release, link_neighbor_releases, list_release_ids, save_absolute_published,
+    validate_catalog as rust_validate_catalog, validate_catalog_uri as rust_validate_catalog_uri,
+    validate_url as rust_validate_url, Failure, ValidateOptions, ValidationReport,
 };
 use crate::storage::{fetch_schema_version, Bucket};
 
@@ -169,6 +171,215 @@ fn build_catalog<'py>(
     })
 }
 
+// ─── validate ────────────────────────────────────────────────────────────────
+
+/// A single validation finding — location, kind, and human-readable message.
+#[pyclass(
+    name = "Failure",
+    frozen,
+    skip_from_py_object,
+    module = "overture_stac"
+)]
+#[derive(Clone)]
+struct PyFailure {
+    #[pyo3(get)]
+    location: String,
+    /// One of `"schema"`, `"link"`, `"overture-rule"`.
+    #[pyo3(get)]
+    kind: String,
+    #[pyo3(get)]
+    message: String,
+}
+
+#[pymethods]
+impl PyFailure {
+    fn __repr__(&self) -> String {
+        format!(
+            "Failure(kind={:?}, location={:?}, message={:?})",
+            self.kind, self.location, self.message
+        )
+    }
+}
+
+impl From<Failure> for PyFailure {
+    fn from(f: Failure) -> Self {
+        Self {
+            location: f.location,
+            kind: f.kind.to_string(),
+            message: f.message,
+        }
+    }
+}
+
+/// Result of a validation run.
+#[pyclass(name = "ValidationReport", frozen, module = "overture_stac")]
+struct PyValidationReport {
+    #[pyo3(get)]
+    ok: bool,
+    #[pyo3(get)]
+    files_checked: usize,
+    #[pyo3(get)]
+    failures: Vec<PyFailure>,
+}
+
+#[pymethods]
+impl PyValidationReport {
+    fn __repr__(&self) -> String {
+        format!(
+            "ValidationReport(ok={}, files_checked={}, failures=[{} item(s)])",
+            self.ok,
+            self.files_checked,
+            self.failures.len()
+        )
+    }
+}
+
+impl From<ValidationReport> for PyValidationReport {
+    fn from(r: ValidationReport) -> Self {
+        let ok = r.is_ok();
+        Self {
+            ok,
+            files_checked: r.files_checked,
+            failures: r.failures.into_iter().map(PyFailure::from).collect(),
+        }
+    }
+}
+
+fn opts(check_schema: bool, check_links: bool, check_overture_rules: bool) -> ValidateOptions {
+    ValidateOptions {
+        check_schema,
+        check_links,
+        check_overture_rules,
+    }
+}
+
+fn default_concurrency(user: Option<usize>) -> usize {
+    user.unwrap_or_else(|| (num_cpus::get() / 2).max(1))
+}
+
+/// Validate a built STAC catalog on disk. Returns a [`ValidationReport`].
+///
+/// Args:
+///     dir: Directory containing the built catalog (must have catalog.json at the root).
+///     concurrency: Concurrent file-check futures. None = num_cpus / 2 (min 1).
+///     check_schema: JSON-Schema validation via stac-validate (network on first use).
+///     check_links: Every in-base href must resolve to a file on disk.
+///     check_overture_rules: Overture-specific assertions.
+///
+/// Raises:
+///     OvertureStacError: on any I/O or validator initialization error.
+#[pyfunction]
+#[pyo3(signature = (
+    dir,
+    *,
+    concurrency = None,
+    check_schema = true,
+    check_links = true,
+    check_overture_rules = true,
+))]
+fn validate_catalog<'py>(
+    py: Python<'py>,
+    dir: PathBuf,
+    concurrency: Option<usize>,
+    check_schema: bool,
+    check_links: bool,
+    check_overture_rules: bool,
+) -> PyResult<Bound<'py, PyAny>> {
+    let c = default_concurrency(concurrency);
+    let o = opts(check_schema, check_links, check_overture_rules);
+    pyo3_async_runtimes::tokio::future_into_py(py, async move {
+        let report = rust_validate_catalog(&dir, c, o).await.map_err(map_err)?;
+        Ok(PyValidationReport::from(report))
+    })
+}
+
+/// Validate a live catalog over HTTP. Fetches the root URL and crawls
+/// rel=child + rel=item links inside the same base URL. Returns a
+/// [`ValidationReport`]. Concurrency is capped at 16 for CDN politeness.
+///
+/// Args:
+///     url: Root catalog URL (e.g. "https://stac.overturemaps.org/catalog.json").
+///     concurrency: Concurrent HTTP GETs. None = num_cpus / 2 (min 1, cap 16).
+///     check_schema: JSON-Schema validation.
+///     check_links: In-base hrefs must have been reachable via crawl.
+///     check_overture_rules: Overture-specific assertions.
+#[pyfunction]
+#[pyo3(signature = (
+    url,
+    *,
+    concurrency = None,
+    check_schema = true,
+    check_links = true,
+    check_overture_rules = true,
+))]
+fn validate_url<'py>(
+    py: Python<'py>,
+    url: String,
+    concurrency: Option<usize>,
+    check_schema: bool,
+    check_links: bool,
+    check_overture_rules: bool,
+) -> PyResult<Bound<'py, PyAny>> {
+    let c = default_concurrency(concurrency);
+    let o = opts(check_schema, check_links, check_overture_rules);
+    pyo3_async_runtimes::tokio::future_into_py(py, async move {
+        let report = rust_validate_url(&url, c, o).await.map_err(map_err)?;
+        Ok(PyValidationReport::from(report))
+    })
+}
+
+/// Validate a catalog over `object_store` (`s3://`, `gs://`, `az://`,
+/// `file://`). Same crawl semantics as [`validate_url`] but reads bytes
+/// from the bucket instead of the CDN — proves the source of truth,
+/// independent of any HTTP cache.
+///
+/// Args:
+///     catalog_uri: Object-store URI (e.g. "s3://overturemaps-extras-us-west-2/stac/").
+///     concurrency: Concurrent object-store GETs. None = num_cpus / 2 (min 1, cap 16).
+///     check_schema / check_links / check_overture_rules: same as validate_url.
+#[pyfunction]
+#[pyo3(signature = (
+    catalog_uri,
+    *,
+    concurrency = None,
+    check_schema = true,
+    check_links = true,
+    check_overture_rules = true,
+))]
+fn validate_catalog_uri<'py>(
+    py: Python<'py>,
+    catalog_uri: String,
+    concurrency: Option<usize>,
+    check_schema: bool,
+    check_links: bool,
+    check_overture_rules: bool,
+) -> PyResult<Bound<'py, PyAny>> {
+    let c = default_concurrency(concurrency);
+    let o = opts(check_schema, check_links, check_overture_rules);
+    pyo3_async_runtimes::tokio::future_into_py(py, async move {
+        let report = rust_validate_catalog_uri(&catalog_uri, c, o)
+            .await
+            .map_err(map_err)?;
+        Ok(PyValidationReport::from(report))
+    })
+}
+
+// ─── list_releases ───────────────────────────────────────────────────────────
+
+/// List release IDs in the data bucket, newest first.
+///
+/// Args:
+///     data_uri: Object-store URI to the data bucket root. Defaults to
+///         "s3://overturemaps-us-west-2".
+#[pyfunction]
+#[pyo3(signature = (data_uri = DEFAULT_DATA_URI.to_string()))]
+fn list_releases(py: Python<'_>, data_uri: String) -> PyResult<Bound<'_, PyAny>> {
+    pyo3_async_runtimes::tokio::future_into_py(py, async move {
+        let bucket = Bucket::from_url(&data_uri).map_err(map_err)?;
+        list_release_ids(&bucket, "release").await.map_err(map_err)
+    })
+}
+
 #[pymodule]
 fn overture_stac(py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
     // Forward Rust `tracing`/`log` events to Python's `logging` module. Callers control
@@ -178,6 +389,12 @@ fn overture_stac(py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
     // flowing once the missing wiring is identified.
     pyo3_log::init();
     m.add_function(wrap_pyfunction!(build_catalog, m)?)?;
+    m.add_function(wrap_pyfunction!(validate_catalog, m)?)?;
+    m.add_function(wrap_pyfunction!(validate_url, m)?)?;
+    m.add_function(wrap_pyfunction!(validate_catalog_uri, m)?)?;
+    m.add_function(wrap_pyfunction!(list_releases, m)?)?;
+    m.add_class::<PyValidationReport>()?;
+    m.add_class::<PyFailure>()?;
     m.add("OvertureStacError", py.get_type::<OvertureStacError>())?;
     Ok(())
 }

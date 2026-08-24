@@ -1,6 +1,24 @@
 class OvertureStacError(RuntimeError):
     """Raised when the Rust core reports an error."""
 
+class Failure:
+    """A single validation finding."""
+
+    location: str
+    """File path (local mode) or URL (crawl modes) that failed."""
+    kind: str
+    """One of ``"schema"``, ``"link"``, ``"overture-rule"``."""
+    message: str
+
+class ValidationReport:
+    """Result of a validation run."""
+
+    ok: bool
+    """``True`` iff ``failures`` is empty."""
+    files_checked: int
+    """Documents inspected (fetch failures counted in ``failures``, not here)."""
+    failures: list[Failure]
+
 async def build_catalog(
     release_version: str,
     schema_version: str | None = ...,
@@ -42,5 +60,86 @@ async def build_catalog(
 
     Raises:
         OvertureStacError: On any error from the Rust core.
+    """
+    ...
+
+async def validate_catalog(
+    dir: str,
+    *,
+    concurrency: int | None = ...,
+    check_schema: bool = ...,
+    check_links: bool = ...,
+    check_overture_rules: bool = ...,
+) -> ValidationReport:
+    """Validate a built STAC catalog on disk.
+
+    Args:
+        dir: Directory containing the built catalog (must have ``catalog.json``
+            at the root).
+        concurrency: Concurrent file-check futures. ``None`` = ``num_cpus / 2``.
+        check_schema: JSON-Schema validation via ``stac-validate`` (fetches
+            schemas on first use — needs network access).
+        check_links: Every in-base href must resolve to a file on disk.
+        check_overture_rules: Overture-specific assertions (``schema:version``
+            non-null, required assets, license enum, etc.).
+
+    Raises:
+        OvertureStacError: On any I/O or validator initialization error.
+    """
+    ...
+
+async def validate_url(
+    url: str,
+    *,
+    concurrency: int | None = ...,
+    check_schema: bool = ...,
+    check_links: bool = ...,
+    check_overture_rules: bool = ...,
+) -> ValidationReport:
+    """Validate a live catalog over HTTP. Tests what the CDN serves to users.
+
+    Fetches the root URL, crawls ``rel=child`` + ``rel=item`` links inside the
+    same base URL, runs the three checks against every reachable document.
+    Concurrency is capped at 16 for CDN politeness.
+
+    Accepts convenient forms: ``https://host``, ``https://host/``, or
+    ``https://host/catalog.json``. Bare hostnames without ``http(s)://``
+    are rejected with a clear error.
+
+    Args:
+        url: Root catalog URL, e.g. ``"https://stac.overturemaps.org/catalog.json"``.
+        concurrency: Concurrent HTTP GETs. ``None`` = ``num_cpus / 2`` (cap 16).
+        check_schema / check_links / check_overture_rules: same as ``validate_catalog``.
+    """
+    ...
+
+async def validate_catalog_uri(
+    catalog_uri: str,
+    *,
+    concurrency: int | None = ...,
+    check_schema: bool = ...,
+    check_links: bool = ...,
+    check_overture_rules: bool = ...,
+) -> ValidationReport:
+    """Validate a catalog over ``object_store`` — tests the bucket source of truth.
+
+    Same crawl semantics as :func:`validate_url` but reads bytes from the
+    bucket, independent of any CDN cache. Anonymous S3 is used when no AWS
+    credentials are set in the environment.
+
+    Args:
+        catalog_uri: Object-store URI to the catalog root, e.g.
+            ``"s3://overturemaps-extras-us-west-2/stac/"``. Supports ``s3://``,
+            ``gs://``, ``az://``, ``file://``.
+        concurrency / check_*: same as :func:`validate_url`.
+    """
+    ...
+
+async def list_releases(data_uri: str = ...) -> list[str]:
+    """Return release IDs in the data bucket, newest first.
+
+    Args:
+        data_uri: Object-store URI to the data bucket root. Defaults to
+            ``"s3://overturemaps-us-west-2"``.
     """
     ...

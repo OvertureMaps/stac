@@ -52,6 +52,28 @@ uv run maturin develop --release --features python,extension-module
 
 The function is async (returns a coroutine) and matches the CLI defaults — `data_uri`, `extras_uri`, `root_href`, `concurrency`, `debug` are all keyword arguments with production defaults. Errors surface as `overture_stac.OvertureStacError`.
 
+The same module also exposes the CLI's `validate` and `list-releases` operations, so scripts and services can consume the STAC catalog without shelling out:
+
+```python
+import asyncio
+import overture_stac
+
+async def main():
+    ids = await overture_stac.list_releases()
+    print("current releases:", ids)
+
+    # Also: validate_catalog(dir=...) for a local build,
+    #       validate_catalog_uri(catalog_uri="s3://...") for the bucket.
+    report = await overture_stac.validate_url("https://stac.overturemaps.org")
+    if not report.ok:
+        for f in report.failures:
+            print(f"[{f.kind}] {f.location} — {f.message}")
+
+asyncio.run(main())
+```
+
+`validate_url` accepts `https://host`, `https://host/`, or a full `.json` URL. Concurrency is capped at 16 for CDN politeness. `check_schema`, `check_links`, `check_overture_rules` are keyword flags (all `True` by default).
+
 ## Development
 
 A [`justfile`](./justfile) collects the common commands. Install [just](https://github.com/casey/just) with `brew install just` and run `just` to see recipes. `just check` runs `cargo fmt --check`, `cargo clippy`, and `cargo test` — the same checks CI would run.
