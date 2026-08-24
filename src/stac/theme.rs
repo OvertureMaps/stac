@@ -3,7 +3,7 @@
 //! Returns typed `stac` values (Catalog per theme, Collection per type, Item per fragment)
 //! plus the manifest features destined for `manifest.geojson`.
 
-use chrono::{DateTime, SecondsFormat, Utc};
+use chrono::{DateTime, Utc};
 use serde_json::{json, Map as JsonMap, Value};
 use stac::{Bbox, Catalog, Collection, Extent, Item, Link, SpatialExtent, TemporalExtent};
 use std::collections::BTreeMap;
@@ -223,8 +223,7 @@ async fn process_type(
                 },
             }),
         );
-        let iso = release_datetime.to_rfc3339_opts(SecondsFormat::Secs, true);
-        item.properties.datetime = Some(iso.parse().ok().unwrap_or_default());
+        item.properties.datetime = Some(release_datetime);
 
         // Assets
         let mut aws_asset = stac::Asset::new(format!(

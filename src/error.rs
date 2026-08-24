@@ -95,6 +95,9 @@ pub enum Error {
 
     #[error("--url must be an http(s) URL (got: {0})")]
     InvalidValidateUrl(String),
+
+    #[error("malformed catalog JSON: {0}")]
+    MalformedCatalog(String),
 }
 
 // Boxed From conversions — thiserror only wires up `#[from]` on the boxed types,

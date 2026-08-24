@@ -11,7 +11,7 @@ use overture_stac::{
         save_absolute_published, validate_catalog, validate_catalog_uri, validate_url,
         ValidateOptions,
     },
-    storage::{delete_prefix, get_json, put_json, upload_directory, Bucket},
+    storage::{delete_prefix, get_json, get_json_optional, put_json, upload_directory, Bucket},
     Error, Result, ResultExt,
 };
 
@@ -507,7 +507,7 @@ async fn apply_diff(
     validate: bool,
 ) -> Result<()> {
     let root_key = format!("{catalog_prefix}catalog.json");
-    let existing_root = get_json(catalog_bucket, &root_key).await.ok();
+    let existing_root = get_json_optional(catalog_bucket, &root_key).await?;
 
     if backup {
         if let Some(current) = existing_root.as_ref() {
@@ -569,7 +569,7 @@ async fn apply_diff(
         )
         .await?;
 
-        add_child_link(&mut root, release, root_href);
+        add_child_link(&mut root, release, root_href)?;
         put_json(catalog_bucket, &root_key, &root).await?;
         println!("    uploaded {uploaded} object(s) + added child link");
     }
@@ -582,10 +582,10 @@ async fn apply_diff(
     sorted.sort_by(|a, b| b.cmp(a));
     if let Some(latest) = sorted.first() {
         root.as_object_mut()
-            .expect("root is object")
+            .ok_or_else(|| Error::MalformedCatalog("root is not a JSON object".into()))?
             .insert("latest".into(), json!(latest));
     }
-    stamp_vcs(&mut root);
+    stamp_vcs(&mut root)?;
     put_json(catalog_bucket, &root_key, &root).await?;
 
     Ok(())
@@ -593,13 +593,15 @@ async fn apply_diff(
 
 const VCS_EXTENSION_URL: &str = "https://stac-extensions.github.io/vcs/v0.1.0/schema.json";
 
-fn stamp_vcs(root: &mut Value) {
-    let obj = root.as_object_mut().expect("root is object");
+fn stamp_vcs(root: &mut Value) -> Result<()> {
+    let obj = root
+        .as_object_mut()
+        .ok_or_else(|| Error::MalformedCatalog("root is not a JSON object".into()))?;
     let extensions = obj
         .entry("stac_extensions".to_string())
         .or_insert_with(|| json!([]))
         .as_array_mut()
-        .expect("stac_extensions is array");
+        .ok_or_else(|| Error::MalformedCatalog("stac_extensions is not an array".into()))?;
     if !extensions
         .iter()
         .any(|v| v.as_str() == Some(VCS_EXTENSION_URL))
@@ -609,6 +611,7 @@ fn stamp_vcs(root: &mut Value) {
     obj.insert("vcs:type".into(), json!("git"));
     obj.insert("vcs:branch".into(), json!(env!("GIT_BRANCH")));
     obj.insert("vcs:commit".into(), json!(env!("GIT_COMMIT")));
+    Ok(())
 }
 
 fn build_empty_root() -> Value {
@@ -631,13 +634,15 @@ fn remove_child_link(root: &mut Value, release: &str) {
     });
 }
 
-fn add_child_link(root: &mut Value, release: &str, root_href: &str) {
-    let obj = root.as_object_mut().expect("catalog root is a JSON object");
+fn add_child_link(root: &mut Value, release: &str, root_href: &str) -> Result<()> {
+    let obj = root
+        .as_object_mut()
+        .ok_or_else(|| Error::MalformedCatalog("root is not a JSON object".into()))?;
     let links = obj
         .entry("links".to_string())
         .or_insert_with(|| json!([]))
         .as_array_mut()
-        .expect("links is an array");
+        .ok_or_else(|| Error::MalformedCatalog("links is not an array".into()))?;
     // Idempotency: skip if a child link for this release already exists.
     let already_present = links.iter().any(|link| {
         link.get("rel").and_then(|v| v.as_str()) == Some("child")
@@ -649,7 +654,7 @@ fn add_child_link(root: &mut Value, release: &str, root_href: &str) {
                 == Some(release)
     });
     if already_present {
-        return;
+        return Ok(());
     }
     links.push(json!({
         "rel": "child",
@@ -657,4 +662,5 @@ fn add_child_link(root: &mut Value, release: &str, root_href: &str) {
         "type": "application/json",
         "title": format!("{release} Overture Release"),
     }));
+    Ok(())
 }

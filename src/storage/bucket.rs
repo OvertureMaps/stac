@@ -212,6 +212,33 @@ pub async fn get_json(bucket: &Bucket, key: &str) -> Result<serde_json::Value> {
     serde_json::from_slice(&bytes).with_context(|| format!("parsing JSON from {key}"))
 }
 
+/// Fetch and parse a JSON object, returning `Ok(None)` iff the object does not exist.
+/// All other failures (network, auth, permission, parse) propagate as `Err` — callers
+/// must never conflate "missing" with "unreadable", or they'll silently rebuild state
+/// from scratch on a transient blip.
+pub async fn get_json_optional(
+    bucket: &Bucket,
+    key: &str,
+) -> Result<Option<serde_json::Value>> {
+    let p = Path::from(key);
+    let bytes_result = with_auth_retry(bucket, |store| {
+        let p = p.clone();
+        async move { store.get(&p).await?.bytes().await }
+    })
+    .await;
+    let bytes = match bytes_result {
+        Ok(b) => b,
+        Err(object_store::Error::NotFound { .. }) => return Ok(None),
+        Err(e) => {
+            return Err::<_, Error>(e.into())
+                .with_context(|| format!("getting {key} from {}", bucket.name));
+        }
+    };
+    let value =
+        serde_json::from_slice(&bytes).with_context(|| format!("parsing JSON from {key}"))?;
+    Ok(Some(value))
+}
+
 /// Serialize `value` to JSON and PUT it.
 pub async fn put_json(bucket: &Bucket, key: &str, value: &serde_json::Value) -> Result<()> {
     let p = Path::from(key);
@@ -273,7 +300,14 @@ pub async fn upload_directory(
             }
             let rel = path
                 .strip_prefix(local_dir)
-                .expect("descendant of local_dir")
+                .map_err(std::io::Error::other)
+                .with_context(|| {
+                    format!(
+                        "{} is not a descendant of {}",
+                        path.display(),
+                        local_dir.display()
+                    )
+                })?
                 .to_string_lossy()
                 .replace(std::path::MAIN_SEPARATOR, "/");
             let key = format!("{key_prefix}{rel}");

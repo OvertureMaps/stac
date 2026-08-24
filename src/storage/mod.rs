@@ -11,8 +11,8 @@ pub mod http;
 pub mod parquet;
 
 pub use bucket::{
-    delete_prefix, get_json, list_all, list_top_level, put_bytes, put_json, upload_directory,
-    Bucket,
+    delete_prefix, get_json, get_json_optional, list_all, list_top_level, put_bytes, put_json,
+    upload_directory, Bucket,
 };
 pub use http::fetch_schema_version;
 pub use parquet::{read_fragment, FragmentInfo};

@@ -54,11 +54,12 @@ pub async fn build_single_release(
     let out_dir = output.join(release);
     std::fs::create_dir_all(&out_dir).with_context(|| format!("mkdir {}", out_dir.display()))?;
 
-    let release_date = release
+    let date_part = release
         .split('.')
         .next()
-        .and_then(|d| NaiveDate::parse_from_str(d, "%Y-%m-%d").ok())
         .ok_or_else(|| Error::ParseReleaseDate(release.to_string()))?;
+    let release_date = NaiveDate::parse_from_str(date_part, "%Y-%m-%d")
+        .map_err(|_| Error::ParseReleaseDate(release.to_string()))?;
     let release_dt = Utc
         .with_ymd_and_hms(
             release_date.year(),
@@ -69,7 +70,7 @@ pub async fn build_single_release(
             0,
         )
         .single()
-        .expect("valid datetime");
+        .ok_or_else(|| Error::ParseReleaseDate(release.to_string()))?;
 
     let available_pmtiles = match extras_bucket {
         Some(eb) => pmtiles::discover(eb, release).await,
