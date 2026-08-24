@@ -13,6 +13,11 @@ use crate::{Error, Result, ResultExt};
 /// is used by default — matches the public Overture bucket's access model.
 pub struct Bucket {
     pub store: Arc<dyn ObjectStore>,
+    /// Anonymous S3 fallback, populated only when `store` was constructed with
+    /// signed credentials from the environment. Read helpers retry against
+    /// this on auth-flavored errors — the common case is a stale SSO token in
+    /// a developer's shell against the (public) Overture buckets.
+    pub anonymous_fallback: Option<Arc<dyn ObjectStore>>,
     pub name: String,
 }
 
@@ -36,9 +41,10 @@ impl Bucket {
     /// (e.g. `reconcile`) that target a specific sub-tree of a bucket.
     pub fn from_url_with_prefix(uri: &str) -> Result<(Bucket, String)> {
         let url = Url::parse(uri).context(format!("parsing URI: {uri}"))?;
+        let mut anonymous_fallback: Option<Arc<dyn ObjectStore>> = None;
         let (store, path) = if url.scheme() == "s3" {
             let region = std::env::var("AWS_REGION").unwrap_or_else(|_| "us-west-2".to_string());
-            let mut opts: Vec<(String, String)> = vec![("region".into(), region)];
+            let mut opts: Vec<(String, String)> = vec![("region".into(), region.clone())];
             let access = std::env::var("AWS_ACCESS_KEY_ID").ok();
             let secret = std::env::var("AWS_SECRET_ACCESS_KEY").ok();
             if let (Some(a), Some(s)) = (access.as_ref(), secret.as_ref()) {
@@ -49,6 +55,17 @@ impl Bucket {
                 if let Ok(t) = std::env::var("AWS_SESSION_TOKEN") {
                     opts.push(("token".into(), t));
                 }
+                // Also build an anonymous fallback: read helpers retry against
+                // this if the signed request comes back with `ExpiredToken` /
+                // `InvalidAccessKeyId` / etc., which is what a developer with
+                // a stale SSO session hits against the public Overture buckets.
+                let anon_opts: Vec<(String, String)> = vec![
+                    ("region".into(), region),
+                    ("skip_signature".into(), "true".into()),
+                ];
+                let (anon_store, _) = parse_url_opts(&url, anon_opts)
+                    .context(format!("initialising anon fallback for {uri}"))?;
+                anonymous_fallback = Some(Arc::from(anon_store));
             } else {
                 // No usable credentials in env — assume the bucket is public
                 // (matches the Overture prod buckets, which are readable anon).
@@ -66,6 +83,7 @@ impl Bucket {
         Ok((
             Bucket {
                 store: Arc::from(store),
+                anonymous_fallback,
                 name,
             },
             prefix,
@@ -75,8 +93,66 @@ impl Bucket {
     pub fn clone_ref(&self) -> Self {
         Self {
             store: Arc::clone(&self.store),
+            anonymous_fallback: self.anonymous_fallback.clone(),
             name: self.name.clone(),
         }
+    }
+}
+
+/// True if `e` looks like an S3 auth error we can plausibly recover from by
+/// retrying anonymously. Common trigger: a stale SSO token in a developer's
+/// shell env against a public bucket. Not `AccessDenied` — that's usually a
+/// real permission problem, not a stale credential.
+fn is_auth_error(e: &object_store::Error) -> bool {
+    let msg = e.to_string();
+    const MARKERS: &[&str] = &[
+        "ExpiredToken",
+        "InvalidAccessKeyId",
+        "SignatureDoesNotMatch",
+        "TokenRefreshRequired",
+        "InvalidToken",
+        "RequestExpired",
+    ];
+    MARKERS.iter().any(|m| msg.contains(m))
+}
+
+/// Run a read operation against the primary store. If it fails with an
+/// auth-flavored error and the bucket has an anonymous fallback, retry once
+/// against the fallback (and log a warning). Non-auth errors bubble as-is.
+async fn with_auth_retry<T, F, Fut>(
+    bucket: &Bucket,
+    op: F,
+) -> std::result::Result<T, object_store::Error>
+where
+    F: Fn(Arc<dyn ObjectStore>) -> Fut,
+    Fut: std::future::Future<Output = std::result::Result<T, object_store::Error>>,
+{
+    match op(Arc::clone(&bucket.store)).await {
+        Ok(v) => Ok(v),
+        Err(e) if is_auth_error(&e) => {
+            if let Some(anon) = &bucket.anonymous_fallback {
+                tracing::warn!(
+                    "signed S3 request failed with an auth error (stale AWS creds in env?); \
+                     retrying anonymously against the public bucket"
+                );
+                tracing::debug!("original signed-request error: {e}");
+                match op(Arc::clone(anon)).await {
+                    Ok(v) => Ok(v),
+                    Err(retry_err) => {
+                        // Anonymous retry failed too — likely a private bucket.
+                        // Prefer the original auth error: it's actionable
+                        // ("your SSO is stale, run `aws sso login`"), whereas
+                        // the retry error is usually AccessDenied which tells
+                        // the user nothing about how to fix it.
+                        tracing::debug!("anonymous retry also failed: {retry_err}");
+                        Err(e)
+                    }
+                }
+            } else {
+                Err(e)
+            }
+        }
+        Err(e) => Err(e),
     }
 }
 
@@ -84,11 +160,12 @@ impl Bucket {
 /// same shape pyarrow's `FileSelector(prefix)` returns: directories and files immediately under it.
 pub async fn list_top_level(bucket: &Bucket, prefix: &str) -> Result<Vec<String>> {
     let p = Path::from(prefix);
-    let result = bucket
-        .store
-        .list_with_delimiter(Some(&p))
-        .await
-        .with_context(|| format!("listing {prefix} in {}", bucket.name))?;
+    let result = with_auth_retry(bucket, |store| {
+        let p = p.clone();
+        async move { store.list_with_delimiter(Some(&p)).await }
+    })
+    .await
+    .with_context(|| format!("listing {prefix} in {}", bucket.name))?;
     let mut out = Vec::new();
     for pref in result.common_prefixes {
         if let Some(name) = pref.parts().last() {
@@ -107,26 +184,31 @@ pub async fn list_top_level(bucket: &Bucket, prefix: &str) -> Result<Vec<String>
 pub async fn list_all(bucket: &Bucket, prefix: &str) -> Result<Vec<String>> {
     use futures::stream::StreamExt;
     let p = Path::from(prefix);
-    let mut stream = bucket.store.list(Some(&p));
-    let mut out = Vec::new();
-    while let Some(meta) = stream.next().await {
-        let meta = meta.with_context(|| format!("listing {prefix}"))?;
-        out.push(meta.location.to_string());
-    }
+    let out: Vec<String> = with_auth_retry(bucket, |store| {
+        let p = p.clone();
+        async move {
+            let mut stream = store.list(Some(&p));
+            let mut out = Vec::new();
+            while let Some(meta) = stream.next().await {
+                out.push(meta?.location.to_string());
+            }
+            Ok(out)
+        }
+    })
+    .await
+    .with_context(|| format!("listing {prefix}"))?;
     Ok(out)
 }
 
 /// Fetch and parse a JSON object.
 pub async fn get_json(bucket: &Bucket, key: &str) -> Result<serde_json::Value> {
     let p = Path::from(key);
-    let bytes = bucket
-        .store
-        .get(&p)
-        .await
-        .with_context(|| format!("getting {key} from {}", bucket.name))?
-        .bytes()
-        .await
-        .with_context(|| format!("reading body of {key} from {}", bucket.name))?;
+    let bytes = with_auth_retry(bucket, |store| {
+        let p = p.clone();
+        async move { store.get(&p).await?.bytes().await }
+    })
+    .await
+    .with_context(|| format!("getting {key} from {}", bucket.name))?;
     serde_json::from_slice(&bytes).with_context(|| format!("parsing JSON from {key}"))
 }
 
