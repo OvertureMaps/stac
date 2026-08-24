@@ -74,6 +74,19 @@ asyncio.run(main())
 
 `validate_url` accepts `https://host`, `https://host/`, or a full `.json` URL. Concurrency is capped at 16 for CDN politeness. `check_schema`, `check_links`, `check_overture_rules` are keyword flags (all `True` by default).
 
+### Logging
+
+Rust `tracing`/`log` events forward into Python's `logging` module via `pyo3-log` (installed automatically on module import). Every event lands on the logger whose name matches the Rust module path — `overture_stac.stac.theme`, `object_store.aws.builder`, `reqwest.connect`, etc. Python's root logger defaults to `WARNING`, so **INFO events are silently filtered** unless you configure `logging`:
+
+```python
+import logging
+logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
+
+import overture_stac  # events now visible during any call
+```
+
+Route a specific target with the usual `logging.getLogger("overture_stac.stac.theme").setLevel(...)`.
+
 ## Development
 
 A [`justfile`](./justfile) collects the common commands. Install [just](https://github.com/casey/just) with `brew install just` and run `just` to see recipes. `just check` runs `cargo fmt --check`, `cargo clippy`, and `cargo test` — the same checks CI would run.
@@ -98,5 +111,4 @@ Tracking here so we don't lose track of pending work while this branch is experi
 - **CI on `rust`** — no workflow currently builds Rust or runs tests on this branch. `main`'s CI targets the Python code; nothing verifies changes here. Needed before this can replace `main`.
 - **Wheel distribution** — building locally via `just py-develop` works. Not published anywhere. Once a service wants to `pip install overture-stac`, we need a `publish-pypi.yml` restored for maturin (or an internal index).
 - **Streaming upload** — `output` currently expects a local path. `object_store::multipart` would let `output=s3://…` write the catalog directly to the destination bucket. Would eliminate the intermediate on-disk step, but breaks the current "validate locally, then sync" production pattern. Design first.
-- **`pyo3-log` end-to-end** — the bridge is installed (`pyo3_log::init()`) but Rust `tracing`/`log` events aren't reaching Python's `logging` in practice. TODO comment in `src/python.rs`. Non-blocking (CLI logs work fine); annoying for scripts.
 - **Production migration** — `publish-catalog.yaml` on `main` invokes the Python CLI. To retire the Python impl, that workflow needs to install and invoke `overture-stac build` instead.

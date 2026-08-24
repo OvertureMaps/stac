@@ -382,11 +382,8 @@ fn list_releases(py: Python<'_>, data_uri: String) -> PyResult<Bound<'_, PyAny>>
 
 #[pymodule]
 fn overture_stac(py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
-    // Forward Rust `tracing`/`log` events to Python's `logging` module. Callers control
-    // filtering the usual Python way: `logging.getLogger("overture_stac").setLevel(...)`.
-    // TODO(#pyo3-log): install() succeeds but Rust `tracing`/`log` events aren't
-    // currently reaching Python's `logging`. Skeleton kept in place so it starts
-    // flowing once the missing wiring is identified.
+    // Bridge Rust `tracing`/`log` → Python `logging`. Silent under Python's
+    // default WARNING filter — see the README's Logging section.
     pyo3_log::init();
     m.add_function(wrap_pyfunction!(build_catalog, m)?)?;
     m.add_function(wrap_pyfunction!(validate_catalog, m)?)?;
