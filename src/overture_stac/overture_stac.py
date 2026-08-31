@@ -125,6 +125,51 @@ TYPE_LICENSE_MAP: dict[str, str] = {
     "address": "other",
 }
 
+# Human-readable collection titles. Raw type slugs ("land_cover") render as-is
+# in STAC browsers, which reads as an unfinished catalog.
+TYPE_TITLE_MAP: dict[str, str] = {
+    "bathymetry": "Bathymetry",
+    "land_cover": "Land Cover",
+    "infrastructure": "Infrastructure",
+    "land": "Land",
+    "land_use": "Land Use",
+    "water": "Water",
+    "building": "Buildings",
+    "building_part": "Building Parts",
+    "division": "Divisions",
+    "division_area": "Division Areas",
+    "division_boundary": "Division Boundaries",
+    "segment": "Transportation Segments",
+    "connector": "Transportation Connectors",
+    "place": "Places",
+    "address": "Addresses",
+}
+
+PROVIDERS: list[pystac.Provider] = [
+    pystac.Provider(
+        name="Overture Maps Foundation",
+        description=(
+            "Overture Maps Foundation is a collaborative effort of its members to "
+            "build open, interoperable map data. It assembles, conflates, and "
+            "quality-checks the source datasets behind this collection and "
+            "publishes them on a monthly cadence."
+        ),
+        # No "producer" role. STAC defines a producer as the party that
+        # initially captured the source data, which for Overture is the
+        # upstream sources (OpenStreetMap, Esri, Google, Microsoft and
+        # others), not the foundation that conflates them. Modelling those
+        # properly needs a per-theme provider list, since the source mix
+        # differs by theme; the per-feature `sources` column already
+        # records it exactly. See #124.
+        roles=[
+            pystac.ProviderRole.LICENSOR,
+            pystac.ProviderRole.PROCESSOR,
+            pystac.ProviderRole.HOST,
+        ],
+        url="https://overturemaps.org/",
+    )
+]
+
 
 def process_theme_worker(
     theme_path: str,
@@ -324,8 +369,10 @@ def process_theme_worker(
         # Create type collection
         type_collection = pystac.Collection(
             id=type_name,
-            title=type_name,
+            title=TYPE_TITLE_MAP.get(type_name, type_name),
             description=f"Overture's {type_name} collection",
+            providers=PROVIDERS,
+            keywords=["overture", theme_name, type_name],
             extent=pystac.Extent(
                 spatial=pystac.SpatialExtent(
                     bboxes=[i.bbox for i in local_type_collections[type_name]]
@@ -347,6 +394,16 @@ def process_theme_worker(
 
         type_collection.add_items(local_type_collections[type_name])
 
+        # Item links carry no title by default, which STAC best practice and the
+        # Portolan profile both flag. Name each after the partition it points at.
+        item_title = TYPE_TITLE_MAP.get(type_name, type_name)
+        for link in type_collection.get_links(rel="item"):
+            # Links still hold the Item object at this point; hrefs are not
+            # assigned until the catalog is normalized, so read the id.
+            target = link.target
+            if link.title is None and isinstance(target, pystac.Item):
+                link.title = f"{item_title} partition {target.id}"
+
         items = local_type_collections[type_name]
         if items:
             row_counts = [i.properties["num_rows"] for i in items]
@@ -367,7 +424,12 @@ def process_theme_worker(
         ]
         type_collection.extra_fields = {
             "table:columns": (
-                [{"name": name} for name in schema.names] if schema is not None else []
+                [
+                    {"name": name, "type": str(dtype)}
+                    for name, dtype in zip(schema.names, schema.types, strict=True)
+                ]
+                if schema is not None
+                else []
             ),
             "table:primary_geometry": "geometry",
             "table:row_count": total_row_count,
