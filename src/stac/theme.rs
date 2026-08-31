@@ -83,10 +83,13 @@ pub async fn process_theme(
         let theme_key = theme_key_owned.clone();
         async move { process_type(&bucket, &theme_key, &type_key, debug, release_datetime).await }
     });
-    let per_type: Vec<PerType> = futures::stream::iter(type_futs)
+    let mut per_type: Vec<PerType> = futures::stream::iter(type_futs)
         .buffer_unordered(TYPES_PER_THEME)
         .try_collect()
         .await?;
+    // buffer_unordered yields results in completion order — sort by name so the
+    // written catalog is deterministic across builds.
+    per_type.sort_by(|a, b| a.type_name.cmp(&b.type_name));
 
     let mut manifest_items = Vec::new();
     let mut type_collections = Vec::new();

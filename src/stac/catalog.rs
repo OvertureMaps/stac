@@ -512,7 +512,7 @@ pub async fn build_top_catalog(
     bucket: &Bucket,
     extras_bucket: Option<&Bucket>,
     ids: &[String],
-    _root_href: &str,
+    root_href: &str,
     debug: bool,
     concurrency: usize,
     output: &Path,
@@ -535,6 +535,7 @@ pub async fn build_top_catalog(
             output,
         )
         .await?;
+        link_neighbor_releases(&mut child, ids, root_href);
         if idx == 0 {
             child
                 .catalog
