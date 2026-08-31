@@ -2,12 +2,10 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-> **Experimental branch.** Rust port of `overture-stac`: CLI + Python bindings.
-> The production catalog at `stac.overturemaps.org` is still published by the
-> Python implementation on `main`. See the [TODO](#todo) section for what's
-> pending before this branch can replace `main`.
+`overture-stac` generates the STAC catalog for public Overture Maps releases. Rust CLI plus Python bindings backed by the same core.
 
-Rust port of `overture-stac`, the CLI that generates STAC catalogs for public Overture releases. See [`docs/architecture.md`](./docs/architecture.md) for how the production catalog gets built and published.
+- [`docs/architecture.md`](./docs/architecture.md) — how the production catalog gets built and published.
+- [`docs/crate-architecture.md`](./docs/crate-architecture.md) — module tree, data flow, and concurrency model of the crate itself.
 
 **[Browse the catalog](https://radiantearth.github.io/stac-browser/#/external/stac.overturemaps.org/catalog.json?.language=en)**
 
@@ -18,6 +16,15 @@ cargo build --release
 ```
 
 ## Usage
+
+Four subcommands (`overture-stac --help` for full listings):
+
+- `build` — walk the data bucket and write a full STAC catalog to disk. Defaults to all current releases.
+- `list-releases` — print release IDs the data bucket currently exposes, newest first.
+- `reconcile` — compare the live catalog against the data bucket and report drift. `--apply` writes the fix.
+- `validate` — run JSON-schema + link-integrity + Overture-specific checks against a built catalog (local dir, remote URL, or object-store URI).
+
+Typical single-release build:
 
 ```bash
 cargo run --release -- build \
@@ -103,12 +110,3 @@ Semantic parity with the Python `gen-stac` CLI, not byte-identical. Field order 
 ## Verify against the Python implementation
 
 Check out the Python implementation from `main` in a sibling directory to compare outputs. See the PR that introduced this branch ([#101](https://github.com/OvertureMaps/stac/pull/101)) for the compare harness and results (4.2× faster, 996/996 semantic parity on `2026-07-22.0`).
-
-## TODO
-
-Tracking here so we don't lose track of pending work while this branch is experimental.
-
-- **CI on `rust`**: no workflow currently builds Rust or runs tests on this branch. `main`'s CI targets the Python code; nothing verifies changes here. Needed before this can replace `main`.
-- **Wheel distribution**: building locally via `just py-develop` works. Not published anywhere. Once a service wants to `pip install overture-stac`, we need a `publish-pypi.yml` restored for maturin (or an internal index).
-- **Streaming upload**: `output` currently expects a local path. `object_store::multipart` would let `output=s3://…` write the catalog directly to the destination bucket. Would eliminate the intermediate on-disk step, but breaks the current "validate locally, then sync" production pattern. Design first.
-- **Production migration**: `publish-catalog.yaml` on `main` invokes the Python CLI. To retire the Python impl, that workflow needs to install and invoke `overture-stac build` instead.
