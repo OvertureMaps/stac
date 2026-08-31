@@ -282,14 +282,23 @@ async fn process_type(
         items.push(item);
     }
 
-    // Build Collection with extent from item bboxes (matches pystac's SpatialExtent(bboxes=[...])).
+    let item_bboxes: Vec<Bbox> = items
+        .iter()
+        .filter_map(|it| it.bbox.as_ref().cloned())
+        .collect();
+    // Check if we need to prepend the union of all bboxes to the collection extent.
+    let needs_union = item_bboxes.len() > 1;
+    let mut bboxes = Vec::with_capacity(item_bboxes.len() + usize::from(needs_union));
+    if needs_union {
+        let mut union = item_bboxes[0];
+        for b in &item_bboxes[1..] {
+            union.update(*b);
+        }
+        bboxes.push(union);
+    }
+    bboxes.extend(item_bboxes);
     let extent = Extent {
-        spatial: SpatialExtent {
-            bbox: items
-                .iter()
-                .filter_map(|it| it.bbox.as_ref().cloned())
-                .collect(),
-        },
+        spatial: SpatialExtent { bbox: bboxes },
         temporal: TemporalExtent {
             interval: vec![[None, None]],
         },
