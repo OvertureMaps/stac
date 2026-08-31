@@ -154,8 +154,14 @@ PROVIDERS: list[pystac.Provider] = [
             "quality-checks the source datasets behind this collection and "
             "publishes them on a monthly cadence."
         ),
+        # No "producer" role. STAC defines a producer as the party that
+        # initially captured the source data, which for Overture is the
+        # upstream sources (OpenStreetMap, Esri, Google, Microsoft and
+        # others), not the foundation that conflates them. Modelling those
+        # properly needs a per-theme provider list, since the source mix
+        # differs by theme; the per-feature `sources` column already
+        # records it exactly. See #TODO.
         roles=[
-            pystac.ProviderRole.PRODUCER,
             pystac.ProviderRole.LICENSOR,
             pystac.ProviderRole.PROCESSOR,
             pystac.ProviderRole.HOST,
