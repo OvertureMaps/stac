@@ -236,14 +236,7 @@ pub fn save_absolute_published(
         .title
         .clone()
         .unwrap_or_else(|| release.catalog.id.clone());
-    write_release(
-        release,
-        &self_href,
-        &self_href,
-        &root_title,
-        dest,
-        None,
-    )
+    write_release(release, &self_href, &self_href, &root_title, dest, None)
 }
 
 fn write_release(
