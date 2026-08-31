@@ -160,7 +160,7 @@ PROVIDERS: list[pystac.Provider] = [
         # others), not the foundation that conflates them. Modelling those
         # properly needs a per-theme provider list, since the source mix
         # differs by theme; the per-feature `sources` column already
-        # records it exactly. See #TODO.
+        # records it exactly. See #124.
         roles=[
             pystac.ProviderRole.LICENSOR,
             pystac.ProviderRole.PROCESSOR,
