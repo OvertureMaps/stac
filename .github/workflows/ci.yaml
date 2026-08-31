@@ -1,0 +1,71 @@
+name: CI
+
+# Clippy and a release build sanity check.
+on:
+  pull_request:
+    branches: [rust]
+  push:
+    branches: [rust]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: -D warnings
+  RUSTDOCFLAGS: -D warnings
+
+jobs:
+  rust:
+    name: Rust (fmt, clippy, test, build)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: fmt
+        run: cargo fmt --check
+
+      - name: clippy
+        run: cargo clippy --all-targets --all-features
+
+      - name: test
+        run: cargo test --all-features
+
+      - name: doc
+        run: cargo doc --no-deps --all-features
+
+      - name: build (release)
+        run: cargo build --release
+
+  python:
+    name: Python bindings (maturin build + pytest)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: python-bindings
+
+      - uses: astral-sh/setup-uv@v3
+
+      - name: Set up Python
+        run: uv python install 3.11
+
+      - name: Build extension
+        run: uv run maturin develop --release --features python,extension-module
+
+      - name: Smoke test
+        run: uv run python -c "import overture_stac; print(dir(overture_stac))"
+
+      - name: pytest
+        run: uv run pytest

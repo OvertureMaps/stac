@@ -269,7 +269,7 @@ fn collect_json_files(dir: &Path) -> Result<Vec<std::path::PathBuf>> {
 /// Fetch a live STAC catalog over HTTP and run the three checks against every
 /// reachable Catalog / Collection / Item. Starts at `root_url` and follows
 /// `rel=child` + `rel=item` links inside the same base URL. Concurrency is
-/// capped at [`REMOTE_MAX_CONCURRENCY`] to be nice to CDNs.
+/// capped at 16 to be nice to CDNs.
 ///
 /// Broken next/prev/child hrefs surface as [`FailureKind::Link`]: they point
 /// inside the base URL but weren't in the successfully-fetched set.
