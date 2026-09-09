@@ -1,0 +1,48 @@
+{
+  "type": "Catalog",
+  "id": "buildings",
+  "stac_version": "1.1.0",
+  "stac_extensions": [
+    "https://schemas.portolan-sdi.org/portolan/v0.2.0/schema.json"
+  ],
+  "title": "Buildings",
+  "description": "Building footprints and their constituent parts, conflated from OpenStreetMap, Esri Community Maps, Google Open Buildings, Microsoft ML Building Footprints, and other sources. Two collections: [Buildings](building/collection.json) holds the footprints, and [Building Parts](building_part/collection.json) holds sub-features that refine a footprint's shape or height.\n\nRead the [Overture buildings schema reference](https://docs.overturemaps.org/schema/reference/buildings/building/) for the authoritative field definitions.",
+  "links": [
+    {
+      "rel": "root",
+      "href": "../catalog.json",
+      "type": "application/json",
+      "title": "Overture Places and Buildings"
+    },
+    {
+      "rel": "parent",
+      "href": "../catalog.json",
+      "type": "application/json",
+      "title": "Overture Places and Buildings"
+    },
+    {
+      "rel": "describedby",
+      "href": "./README.md",
+      "type": "text/markdown",
+      "title": "README"
+    },
+    {
+      "rel": "agents",
+      "href": "./AGENTS.md",
+      "type": "text/markdown",
+      "title": "Agent guide"
+    },
+    {
+      "rel": "child",
+      "href": "./building/collection.json",
+      "type": "application/json",
+      "title": "Buildings"
+    },
+    {
+      "rel": "child",
+      "href": "./building_part/collection.json",
+      "type": "application/json",
+      "title": "Building Parts"
+    }
+  ]
+}
