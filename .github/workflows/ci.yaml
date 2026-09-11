@@ -1,158 +1,110 @@
 name: CI
 
-on:
-  push:
-    branches: [main]
-  pull_request:
-    branches: [main]
-  workflow_dispatch:
-
 permissions:
   contents: read
 
+# Clippy and a release build sanity check.
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ci-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: -D warnings
+  RUSTDOCFLAGS: -D warnings
+
 jobs:
-  lint:
-    name: Lint and Format Check
+  rust:
+    name: Rust (fmt, clippy, test, build)
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
-      - name: Checkout code
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           persist-credentials: false
 
-      - name: Set up Python
-        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # zizmor: ignore[superfluous-actions,stale-action-refs]
         with:
-          python-version-file: .python-version
+          components: rustfmt, clippy
 
-      - name: Install UV
-        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
 
-      - name: Install dependencies
-        run: |
-          uv pip install --system ruff
+      - name: fmt
+        run: cargo fmt --check
 
-      - name: Run ruff format check
-        run: ruff format --check .
+      - name: clippy
+        run: cargo clippy --all-targets --all-features
 
-      - name: Run ruff linting
-        run: ruff check .
+      - name: test
+        run: cargo test --all-features
 
-  test:
-    name: Test
+      - name: doc
+        run: cargo doc --no-deps --all-features
+
+      - name: build (release)
+        run: cargo build --release
+
+  msrv:
+    name: MSRV (build on declared rust-version)
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        python-version: ["3.11", "3.12", "3.13", "3.14"]
+    permissions:
+      contents: read
     steps:
-      - name: Checkout code
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           persist-credentials: false
 
-      - name: Set up Python
-        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+      - name: Read MSRV from Cargo.toml
+        id: msrv
+        run: echo "version=$(grep -oE '^rust-version = "[^"]+"' Cargo.toml | cut -d'"' -f2)" >> "$GITHUB_OUTPUT"
+
+      - name: Install MSRV toolchain
+        env:
+          MSRV: ${{ steps.msrv.outputs.version }}
+        run: rustup toolchain install "$MSRV" --profile minimal --no-self-update
+
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
         with:
-          python-version: ${{ matrix.python-version }}
+          key: msrv-${{ steps.msrv.outputs.version }}
 
-      - name: Install UV
-        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+      - name: Build on MSRV
+        env:
+          MSRV: ${{ steps.msrv.outputs.version }}
+        run: cargo "+$MSRV" build --locked
 
-      - name: Install dependencies
-        run: |
-          uv sync --all-groups
-
-      - name: Run tests
-        run: |
-          uv run pytest
-
-  test-package-install:
-    name: Test Package Installation
+  python:
+    name: Python bindings (maturin build + pytest)
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
-      - name: Checkout code
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           persist-credentials: false
 
-      - name: Set up Python
-        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # zizmor: ignore[superfluous-actions,stale-action-refs]
+
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
         with:
-          python-version-file: .python-version
+          key: python-bindings
 
-      - name: Install UV
-        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
-
-      - name: Install package
-        run: |
-          uv pip install --system -e .
-
-      - name: Test CLI availability
-        run: |
-          which gen-stac || echo "CLI not found in PATH, checking if it's installed..."
-          python -c "from overture_stac import OvertureRelease, RegistryManifest; print('Package imports successfully')"
-
-      - name: Test imports
-        run: |
-          python -c "from overture_stac.overture_stac import OvertureRelease; print('OvertureRelease imported')"
-          python -c "from overture_stac.registry_manifest import RegistryManifest; print('RegistryManifest imported')"
-
-  stac-validate:
-    name: STAC Validation
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
+      - uses: astral-sh/setup-uv@caf0cab7a618c569241d31dcd442f54681755d39 # v3
 
       - name: Set up Python
-        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
-        with:
-          python-version-file: .python-version
+        run: uv python install 3.11
 
-      - name: Install UV
-        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+      - name: Build extension
+        run: uv run maturin develop --release --features python,extension-module
 
-      - name: Install dependencies
-        run: uv sync --all-groups
+      - name: Smoke test
+        run: uv run python -c "import overture_stac; print(dir(overture_stac))"
 
-      - name: Generate local STAC catalog (debug mode)
-        run: uv run python tests/setup_test_catalog.py --output "$GITHUB_WORKSPACE/tests/data" --workers 2
-
-      - name: Serve STAC catalog locally
-        run: |
-          uv run python tests/setup_test_catalog.py --serve-only --output "$GITHUB_WORKSPACE/tests/data" &
-          echo $! > server.pid
-          for i in $(seq 1 20); do
-            curl -sf http://127.0.0.1:8888/catalog.json > /dev/null && break
-            sleep 0.5
-          done
-
-      - name: Validate root catalog
-        uses: OvertureMaps/stac-check-action@71e219583b4fd87f797bac5840b088c048116765 # v1.1.0
-        with:
-          stac-check-version: "1.14.0"
-          file: http://127.0.0.1:8888/catalog.json
-          recursive: "true"
-          fast-linting: "true"
-          job-summary: "true"
-
-      - name: Stop local server
-        if: always()
-        run: kill $(cat server.pid) 2>/dev/null || true
-
-  all-checks-pass:
-    name: All Checks Pass
-    needs: [lint, test, test-package-install, stac-validate]
-    runs-on: ubuntu-latest
-    if: always()
-    steps:
-      - uses: lowlydba/are-we-good@f506ed6324f55ec5e4ff5d92204a72c7f1c2b4f8 # v1.0.5
-        with:
-          jobs: ${{ toJSON(needs) }}
+      - name: pytest
+        run: uv run pytest
