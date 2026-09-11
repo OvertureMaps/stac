@@ -1,8 +1,5 @@
 name: CI
 
-permissions:
-  contents: read
-
 # Clippy and a release build sanity check.
 on:
   pull_request:
