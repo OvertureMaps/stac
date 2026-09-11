@@ -36,6 +36,10 @@ fmt-check:
 lint:
     cargo clippy --all-targets
 
+# Run the OMF security audit on workflow files (same persona as CI).
+zizmor:
+    zizmor --persona pedantic .github/workflows/
+
 # Run format check and tests. Stops on the first failure.
 check: fmt-check test
 
