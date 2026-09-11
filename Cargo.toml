@@ -2,8 +2,23 @@
 name = "overture-stac"
 version = "0.1.0"
 edition = "2021"
-description = "Overture STAC catalog generator"
+rust-version = "1.85"
+authors = ["Francisco Jiménez <jjcfrank@gmail.com>"]
+description = "Overture Maps STAC catalog generator — CLI and library for building, validating, and reconciling STAC catalogs against the Overture data bucket"
 license = "MIT"
+repository = "https://github.com/OvertureMaps/stac"
+homepage = "https://stac.overturemaps.org"
+documentation = "https://docs.rs/overture-stac"
+readme = "README.md"
+keywords = ["stac", "overture", "geospatial", "catalog", "cli"]
+categories = ["command-line-utilities", "science::geo"]
+include = [
+    "/src/**/*.rs",
+    "/Cargo.toml",
+    "/LICENSE",
+    "/README.md",
+    "/build.rs",
+]
 
 [lib]
 name = "overture_stac"
