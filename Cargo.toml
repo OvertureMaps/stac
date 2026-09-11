@@ -2,7 +2,7 @@
 name = "overture-stac"
 version = "0.1.0"
 edition = "2021"
-rust-version = "1.85"
+rust-version = "1.88"
 authors = ["Francisco Jiménez <jjcfrank@gmail.com>"]
 description = "Overture Maps STAC catalog generator — CLI and library for building, validating, and reconciling STAC catalogs against the Overture data bucket"
 license = "MIT"

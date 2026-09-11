@@ -51,6 +51,34 @@ jobs:
       - name: build (release)
         run: cargo build --release
 
+  msrv:
+    name: MSRV (build on declared rust-version)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+
+      - name: Read MSRV from Cargo.toml
+        id: msrv
+        run: echo "version=$(grep -oE '^rust-version = "[^"]+"' Cargo.toml | cut -d'"' -f2)" >> "$GITHUB_OUTPUT"
+
+      - name: Install MSRV toolchain
+        env:
+          MSRV: ${{ steps.msrv.outputs.version }}
+        run: rustup toolchain install "$MSRV" --profile minimal --no-self-update
+
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+        with:
+          key: msrv-${{ steps.msrv.outputs.version }}
+
+      - name: Build on MSRV
+        env:
+          MSRV: ${{ steps.msrv.outputs.version }}
+        run: cargo "+$MSRV" build --locked
+
   python:
     name: Python bindings (maturin build + pytest)
     runs-on: ubuntu-latest
