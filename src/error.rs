@@ -105,7 +105,7 @@ impl Error {
     /// distinguish broad failure classes without parsing stdout:
     /// `2` config/input, `3` data corruption, `4` validation failure,
     /// `5` transient/infra (retryable). `Context` unwraps to its source.
-    /// 
+    ///
     /// This could be further tweaked in the future to provide more granular exit codes for different error types.
     pub fn exit_code(&self) -> i32 {
         match self {
