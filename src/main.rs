@@ -32,7 +32,7 @@ async fn main() {
             eprintln!("  Caused by: {s}");
             src = s.source();
         }
-        std::process::exit(1);
+        std::process::exit(e.exit_code());
     }
 }
 

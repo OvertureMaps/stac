@@ -113,7 +113,7 @@ pub async fn run(args: ReconcileArgs) -> Result<()> {
                 diff.to_add.len() + diff.to_remove.len()
             );
             println!("Re-run with --apply to fix.");
-            std::process::exit(1);
+            std::process::exit(10);
         }
     } else if diff.is_empty() {
         println!("Catalog is in sync with the bucket. Nothing to apply.");

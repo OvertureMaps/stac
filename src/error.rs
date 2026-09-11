@@ -100,6 +100,45 @@ pub enum Error {
     MalformedCatalog(String),
 }
 
+impl Error {
+    /// Exit-code group for the CLI. Lets shell callers (CI, cron workflow)
+    /// distinguish broad failure classes without parsing stdout:
+    /// `2` config/input, `3` data corruption, `4` validation failure,
+    /// `5` transient/infra (retryable). `Context` unwraps to its source.
+    /// 
+    /// This could be further tweaked in the future to provide more granular exit codes for different error types.
+    pub fn exit_code(&self) -> i32 {
+        match self {
+            Error::Context { source, .. } => source.exit_code(),
+
+            Error::UriHasPath(_)
+            | Error::SchemaVersionRequired
+            | Error::InvalidReleaseVersion(_)
+            | Error::InvalidSchemaVersion(_)
+            | Error::InvalidValidateUrl(_)
+            | Error::UrlParse(_) => 2,
+
+            Error::MalformedCatalog(_)
+            | Error::MissingSelfLink(_)
+            | Error::MissingGeoMetadata(_)
+            | Error::MissingGeometryColumn(_)
+            | Error::MissingBbox(_)
+            | Error::InvalidBboxCoord { .. }
+            | Error::MissingIdStatistics(_)
+            | Error::ParseReleaseDate(_)
+            | Error::ReadDir(_)
+            | Error::Json(_)
+            | Error::Parquet(_)
+            | Error::Stac(_)
+            | Error::StacIo(_) => 3,
+
+            Error::ValidationFailed(_) | Error::StacValidate(_) => 4,
+
+            Error::ObjectStore(_) | Error::Http(_) | Error::Io(_) => 5,
+        }
+    }
+}
+
 // Boxed From conversions — thiserror only wires up `#[from]` on the boxed types,
 // so add manual From impls for the un-boxed originals to keep call-site `?`
 // ergonomics.
