@@ -6,9 +6,9 @@ permissions:
 # Clippy and a release build sanity check.
 on:
   pull_request:
-    branches: [rust]
+    branches: [main]
   push:
-    branches: [rust]
+    branches: [main]
 
 permissions:
   contents: read
