@@ -84,9 +84,3 @@ ignore = [
 [tool.ruff.lint.per-file-ignores]
 "__init__.py" = ["F401"]
 "tests/*" = ["B008"]
-
-[[tool.uv.index]]
-name = "overture"
-url = "https://overture-pypi-763944545891.d.codeartifact.us-west-2.amazonaws.com/pypi/overture/simple/"
-publish-url = "https://overture-pypi-763944545891.d.codeartifact.us-west-2.amazonaws.com/pypi/overture/"
-explicit = true
