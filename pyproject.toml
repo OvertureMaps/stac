@@ -87,6 +87,6 @@ ignore = [
 
 [[tool.uv.index]]
 name = "overture"
-url = "https://overture-pypi-505071440022.d.codeartifact.us-west-2.amazonaws.com/pypi/overture/simple/"
-publish-url = "https://overture-pypi-505071440022.d.codeartifact.us-west-2.amazonaws.com/pypi/overture/"
+url = "https://overture-pypi-763944545891.d.codeartifact.us-west-2.amazonaws.com/pypi/overture/simple/"
+publish-url = "https://overture-pypi-763944545891.d.codeartifact.us-west-2.amazonaws.com/pypi/overture/"
 explicit = true
