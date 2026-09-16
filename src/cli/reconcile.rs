@@ -7,6 +7,7 @@ use std::collections::BTreeSet;
 
 use serde_json::json;
 
+use overture_stac::stac::registry;
 use overture_stac::stac::{add_child_link, build_empty_root, remove_child_link};
 use overture_stac::stac::{
     build_single_release, children_from_root, list_release_ids, read_catalog_children,
@@ -287,9 +288,10 @@ async fn apply_diff(
         println!("    uploaded {uploaded} object(s) + added child link");
     }
 
-    // Post-pass: refresh `latest` from the current set of children and stamp
-    // the VCS extension so anyone reading the catalog can tell which build
-    // wrote it.
+    // Post-pass: refresh `latest`, recompute the registry manifest (registry
+    // parquet files get rewritten on release day, so this belongs on the same
+    // apply that publishes the release), and stamp the VCS extension so anyone
+    // reading the catalog can tell which build wrote it.
     let current_children = children_from_root(&root);
     let mut sorted = current_children.clone();
     sorted.sort_by(|a, b| b.cmp(a));
@@ -298,6 +300,18 @@ async fn apply_diff(
             .ok_or_else(|| Error::MalformedCatalog("root is not a JSON object".into()))?
             .insert("latest".into(), json!(latest));
     }
+    let manifest = registry::create_manifest(data_bucket)
+        .await
+        .context("refreshing registry manifest")?;
+    root.as_object_mut()
+        .ok_or_else(|| Error::MalformedCatalog("root is not a JSON object".into()))?
+        .insert(
+            "registry".into(),
+            json!({
+                "path": "s3://overturemaps-us-west-2/registry",
+                "manifest": manifest,
+            }),
+        );
     stamp_vcs(&mut root)?;
     put_json(catalog_bucket, &root_key, &root).await?;
 
