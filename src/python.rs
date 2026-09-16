@@ -19,7 +19,6 @@ use std::path::PathBuf;
 use pyo3::create_exception;
 use pyo3::exceptions::PyRuntimeError;
 use pyo3::prelude::*;
-use pyo3::types::PyString;
 use serde_json::json;
 
 use crate::stac::registry;
@@ -64,18 +63,6 @@ async fn resolve_schema_version(
     }
 }
 
-/// Extract the schema_version arg into `Option<String>` where:
-///   - Python `None` → `Ok(None)`
-///   - Python `str`  → `Ok(Some(str))`
-///   - anything else → TypeError via extract failure
-fn extract_schema_arg(obj: &Bound<'_, PyAny>) -> PyResult<Option<String>> {
-    if obj.is_none() {
-        Ok(None)
-    } else {
-        Ok(Some(obj.cast::<PyString>()?.to_string()))
-    }
-}
-
 /// Build a STAC sub-catalog for a single Overture release.
 ///
 /// Writes catalog.json / collections.parquet / manifest.geojson under `<output>/<release_version>/`.
@@ -108,7 +95,7 @@ fn extract_schema_arg(obj: &Bound<'_, PyAny>) -> PyResult<Option<String>> {
 #[pyfunction]
 #[pyo3(signature = (
     release_version,
-    schema_version = None,
+    schema_version = Some(AUTO_SENTINEL.to_string()),
     *,
     output = DEFAULT_OUTPUT.to_string(),
     data_uri = DEFAULT_DATA_URI.to_string(),
@@ -121,7 +108,10 @@ fn extract_schema_arg(obj: &Bound<'_, PyAny>) -> PyResult<Option<String>> {
 fn build_release_catalog<'py>(
     py: Python<'py>,
     release_version: String,
-    schema_version: Option<Bound<'py, PyAny>>,
+    // Option<String> extractor + a non-None default lets us tell "user omitted the
+    // arg" (Some(AUTO_SENTINEL)) apart from "user passed None explicitly" (Rust
+    // None). Same-typed default `= None` would collapse both to Rust None.
+    schema_version: Option<String>,
     output: String,
     data_uri: String,
     root_href: String,
@@ -129,12 +119,8 @@ fn build_release_catalog<'py>(
     concurrency: Option<usize>,
     debug: bool,
 ) -> PyResult<Bound<'py, PyAny>> {
-    let schema_input = match schema_version {
-        None => Some(AUTO_SENTINEL.to_string()),
-        Some(obj) => extract_schema_arg(&obj)?,
-    };
     tracing::info!(
-        "build_release_catalog: release={release_version} schema={schema_input:?} data_uri={data_uri}"
+        "build_release_catalog: release={release_version} schema={schema_version:?} data_uri={data_uri}"
     );
     pyo3_async_runtimes::tokio::future_into_py(py, async move {
         let root_href = root_href.trim_end_matches('/').to_string();
@@ -143,7 +129,7 @@ fn build_release_catalog<'py>(
             OvertureStacError::new_err(format!("creating output dir {output}: {e}"))
         })?;
 
-        let resolved_schema = resolve_schema_version(schema_input, &root_href, &release_version)
+        let resolved_schema = resolve_schema_version(schema_version, &root_href, &release_version)
             .await
             .map_err(map_err)?;
 
