@@ -1,0 +1,66 @@
+name: Reconcile STAC catalog
+description: >
+  Runs `overture-stac reconcile --apply --validate` with retry-on-transient
+  (exit 5) and structured exit-code handling (2/3/4/5 → alert, 0 → success).
+  Emits `exit_code` and `applied` outputs and appends a per-run summary to
+  `$GITHUB_STEP_SUMMARY`. AWS credentials must already be configured by the
+  caller — this action does no auth of its own.
+
+inputs:
+  binary:
+    description: Path to the overture-stac binary.
+    required: false
+    default: ./target/release/overture-stac
+
+outputs:
+  exit_code:
+    description: Final exit code from the CLI (0 on success, 2/3/4/5/* on failure).
+    value: ${{ steps.reconcile.outputs.exit_code }}
+  applied:
+    description: '"true" iff the CLI actually applied a change, else "false".'
+    value: ${{ steps.reconcile.outputs.applied }}
+
+runs:
+  using: composite
+  steps:
+    - name: Reconcile
+      id: reconcile
+      shell: bash
+      env:
+        OVERTURE_STAC_BIN: ${{ inputs.binary }}
+      run: |
+        set +e
+        : > reconcile.log
+        for attempt in 1 2 3; do
+          "$OVERTURE_STAC_BIN" reconcile --apply --validate 2>&1 | tee -a reconcile.log
+          code=${PIPESTATUS[0]}
+          # Retry only on 5 (network/infra). Skip the sleep after the last attempt.
+          if [ "$code" != 5 ] || [ "$attempt" -eq 3 ]; then
+            break
+          fi
+          echo "::warning::attempt ${attempt} exited 5 (network/infra); backing off"
+          sleep $((attempt * 30))
+        done
+
+        if grep -qE "^Applied [0-9]+ change" reconcile.log; then
+          applied=true
+        else
+          applied=false
+        fi
+        echo "exit_code=${code}" >> "$GITHUB_OUTPUT"
+        echo "applied=${applied}" >> "$GITHUB_OUTPUT"
+
+        {
+          echo "### Reconcile summary"
+          echo ""
+          echo "- Exit code: \`${code}\`"
+          echo "- Applied changes: \`${applied}\`"
+        } >> "$GITHUB_STEP_SUMMARY"
+
+        case "${code}" in
+          0)   exit 0 ;;
+          2|3) echo "::error::bad config or bad data (exit ${code})"; exit "${code}" ;;
+          4)   echo "::error::post-apply validation failed (exit ${code})"; exit "${code}" ;;
+          5)   echo "::error::network/infra failure after retries (exit ${code})"; exit "${code}" ;;
+          *)   echo "::error::unexpected exit ${code}"; exit "${code}" ;;
+        esac

@@ -71,42 +71,7 @@ jobs:
 
       - name: Reconcile
         id: reconcile
-        run: |
-          set +e
-          : > reconcile.log
-          for attempt in 1 2 3; do
-            ./target/release/overture-stac reconcile --apply --validate 2>&1 | tee -a reconcile.log
-            code=${PIPESTATUS[0]}
-            # Retry only on 5 (network/infra). Skip the sleep after the last attempt.
-            if [ "$code" != 5 ] || [ "$attempt" -eq 3 ]; then
-              break
-            fi
-            echo "::warning::attempt ${attempt} exited 5 (network/infra); backing off"
-            sleep $((attempt * 30))
-          done
-
-          if grep -qE "^Applied [0-9]+ change" reconcile.log; then
-            applied=true
-          else
-            applied=false
-          fi
-          echo "exit_code=${code}" >> "$GITHUB_OUTPUT"
-          echo "applied=${applied}" >> "$GITHUB_OUTPUT"
-
-          {
-            echo "### Reconcile summary"
-            echo ""
-            echo "- Exit code: \`${code}\`"
-            echo "- Applied changes: \`${applied}\`"
-          } >> "$GITHUB_STEP_SUMMARY"
-
-          case "${code}" in
-            0)   exit 0 ;;
-            2|3) echo "::error::bad config or bad data (exit ${code})"; exit "${code}" ;;
-            4)   echo "::error::post-apply validation failed (exit ${code})"; exit "${code}" ;;
-            5)   echo "::error::network/infra failure after retries (exit ${code})"; exit "${code}" ;;
-            *)   echo "::error::unexpected exit ${code}"; exit "${code}" ;;
-          esac
+        uses: ./.github/actions/reconcile
 
       - name: Configure AWS credentials (CloudFront invalidation, cross-account)
         if: steps.reconcile.outputs.applied == 'true'
