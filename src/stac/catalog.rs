@@ -592,8 +592,8 @@ pub async fn build_top_catalog(
 
 fn write_collections_parquet(path: &Path, items: Vec<Item>) -> Result<()> {
     if items.is_empty() {
-        // Match pystac behavior: emit an empty parquet placeholder so directory shape holds.
-        std::fs::write(path, b"")?;
+        // Skip: a zero-byte placeholder isn't valid Parquet, and the file is
+        // not referenced as a STAC asset so its absence is safe.
         return Ok(());
     }
     let coll: ItemCollection = items.into();
