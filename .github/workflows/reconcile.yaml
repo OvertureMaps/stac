@@ -71,7 +71,7 @@ jobs:
 
       - name: Reconcile
         id: reconcile
-        uses: ./.github/actions/reconcile
+        uses: ./.github/actions/reconcile # zizmor: ignore[self-repository] $/... syntax not yet accepted by local actionlint/zizmor
 
       - name: Configure AWS credentials (CloudFront invalidation, cross-account)
         if: steps.reconcile.outputs.applied == 'true'
