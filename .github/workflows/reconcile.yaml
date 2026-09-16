@@ -35,6 +35,12 @@ env:
 jobs:
   reconcile:
     name: Reconcile
+    # Refuse to run against anything except main. `workflow_dispatch` lets a
+    # user pick a branch, and this job wields production S3 write + CloudFront
+    # roles — running from a feature branch would let that branch's code push
+    # to prod. Scheduled runs always fire from the default branch, which is
+    # main, so this only bites manual dispatches from elsewhere.
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     permissions:
@@ -43,6 +49,9 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
+          # Belt-and-braces with the job-level `if:` above — pin the checked-out
+          # code to main so the built binary can never come from a feature branch.
+          ref: main
           persist-credentials: false
 
       - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # zizmor: ignore[superfluous-actions,stale-action-refs]
