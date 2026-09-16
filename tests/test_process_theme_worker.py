@@ -33,6 +33,7 @@ def make_mock_fragment(path: str, num_rows: int = 100, num_row_groups: int = 2):
     schema = MagicMock()
     schema.metadata = {b"geo": geo_metadata}
     schema.names = ["id", "geometry", "name"]
+    schema.types = ["string", "binary", "string"]
 
     metadata = MagicMock()
     metadata.num_rows = num_rows
@@ -197,9 +198,9 @@ class TestProcessThemeWorker:
         extra = collection.extra_fields
 
         assert extra["table:columns"] == [
-            {"name": "id"},
-            {"name": "geometry"},
-            {"name": "name"},
+            {"name": "id", "type": "string"},
+            {"name": "geometry", "type": "binary"},
+            {"name": "name", "type": "string"},
         ]
         assert extra["table:primary_geometry"] == "geometry"
         assert extra["table:row_count"] == 3000
@@ -440,7 +441,7 @@ class TestProcessThemeWorker:
         # Verify collection has a title
         collections = list(theme_catalog.get_children())
         assert collections[0].title is not None
-        assert collections[0].title == "place"
+        assert collections[0].title == "Places"
 
 
 class TestBuildReleaseCatalog:
