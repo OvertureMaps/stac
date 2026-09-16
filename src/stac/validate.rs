@@ -326,9 +326,11 @@ pub async fn validate_catalog_uri(
     concurrency: usize,
     options: ValidateOptions,
 ) -> Result<ValidationReport> {
-    let (bucket, prefix) = Bucket::from_url_with_prefix(catalog_uri)?;
-    let root_key = format!("{prefix}catalog.json");
-    let root_value = get_json(&bucket, &root_key)
+    // Bucket is constructed with any URI path baked into a PrefixStore, so
+    // subsequent reads use catalog-relative keys.
+    let bucket = Bucket::from_url(catalog_uri)?;
+    let root_key = "catalog.json";
+    let root_value = get_json(&bucket, root_key)
         .await
         .with_context(|| format!("reading {root_key} from {catalog_uri}"))?;
 
@@ -343,15 +345,8 @@ pub async fn validate_catalog_uri(
     let root_url = format!("{url_base}catalog.json");
 
     let capped = concurrency.clamp(1, REMOTE_MAX_CONCURRENCY);
-    let (fetched, fetch_failures) = crawl_bucket(
-        &bucket,
-        &prefix,
-        &url_base,
-        root_url.clone(),
-        root_value,
-        capped,
-    )
-    .await?;
+    let (fetched, fetch_failures) =
+        crawl_bucket(&bucket, &url_base, root_url.clone(), root_value, capped).await?;
     finalize_report(fetched, fetch_failures, &root_url, capped, options).await
 }
 
@@ -516,7 +511,6 @@ async fn fetch_bytes(
 /// place) and passed in.
 async fn crawl_bucket(
     bucket: &Bucket,
-    prefix: &str,
     url_base: &str,
     root_url: String,
     root_value: Value,
@@ -544,7 +538,6 @@ async fn crawl_bucket(
         let results: Vec<(String, std::result::Result<Value, String>)> =
             futures::stream::iter(batch.into_iter().map(|u| {
                 let bucket = bucket.clone_ref();
-                let prefix = prefix.to_string();
                 let url_base = url_base.to_string();
                 async move {
                     let Some(rel) = u.strip_prefix(&url_base) else {
@@ -553,8 +546,7 @@ async fn crawl_bucket(
                             Err("frontier url outside base — internal bug".to_string()),
                         );
                     };
-                    let key = format!("{prefix}{rel}");
-                    let r = get_json(&bucket, &key).await.map_err(|e| format!("{e}"));
+                    let r = get_json(&bucket, rel).await.map_err(|e| format!("{e}"));
                     (u, r)
                 }
             }))

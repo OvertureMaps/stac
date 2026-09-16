@@ -1,6 +1,8 @@
 //! Cloud-agnostic object store handle via `object_store::parse_url`.
 
-use object_store::{parse_url, parse_url_opts, path::Path, ObjectStore, ObjectStoreExt};
+use object_store::{
+    parse_url, parse_url_opts, path::Path, prefix::PrefixStore, ObjectStore, ObjectStoreExt,
+};
 use std::sync::Arc;
 use url::Url;
 
@@ -9,8 +11,13 @@ use crate::{Error, Result, ResultExt};
 /// Handle to a single object-store-backed bucket.
 ///
 /// Constructed via [`Bucket::from_url`]; supports any scheme `object_store` recognises
-/// (`s3://`, `gs://`, `az://`, `http(s)://`, `file://`). For `s3://`, anonymous access
-/// is used by default — matches the public Overture bucket's access model.
+/// (`s3://`, `gs://`, `az://`, `http(s)://`, `file://`). When the URI includes a path,
+/// the store is wrapped in a [`PrefixStore`] so every subsequent key is resolved
+/// relative to that path — callers pass release-layout keys like `"release/<id>"`
+/// unchanged whether the URI targets the bucket root or a sub-directory.
+///
+/// For `s3://`, anonymous access is used by default — matches the public Overture
+/// bucket's access model.
 pub struct Bucket {
     pub store: Arc<dyn ObjectStore>,
     /// Anonymous S3 fallback, populated only when `store` was constructed with
@@ -22,24 +29,15 @@ pub struct Bucket {
 }
 
 impl Bucket {
-    /// Build a bucket handle from an object-store URI. The URI must point at the bucket root
-    /// (no path segment); internal code uses fixed prefixes on top. See
-    /// [`Bucket::from_url_with_prefix`] for URIs that include a path.
+    /// Build a bucket handle from an object-store URI. If the URI includes a path,
+    /// the returned store is wrapped in a [`PrefixStore`] rooted at that path, so
+    /// callers can use the same key layout regardless of whether the URI targets
+    /// the bucket root or a sub-directory (e.g. a test fixture at `file:///tmp/x`
+    /// or a mirror at `s3://my-mirror/copies/`).
     ///
     /// For `s3://` URIs, region is read from `AWS_REGION` (defaults to `us-west-2` — matches
     /// where the public Overture buckets live). Access is anonymous by default.
     pub fn from_url(uri: &str) -> Result<Bucket> {
-        let (bucket, path) = Self::from_url_with_prefix(uri)?;
-        if !path.is_empty() {
-            return Err(Error::UriHasPath(uri.to_string()));
-        }
-        Ok(bucket)
-    }
-
-    /// Same as [`Bucket::from_url`] but also returns the URI's path portion (with a trailing
-    /// `/` normalised in), so callers can prepend it to their own keys. Used by commands
-    /// (e.g. `reconcile`) that target a specific sub-tree of a bucket.
-    pub fn from_url_with_prefix(uri: &str) -> Result<(Bucket, String)> {
         let url = Url::parse(uri).context(format!("parsing URI: {uri}"))?;
         let mut anonymous_fallback: Option<Arc<dyn ObjectStore>> = None;
         let (store, path) = if url.scheme() == "s3" {
@@ -76,18 +74,27 @@ impl Bucket {
             parse_url(&url).context(format!("initialising object store for {uri}"))?
         };
         let name = url.host_str().unwrap_or(uri).to_string();
-        let mut prefix = path.as_ref().to_string();
-        if !prefix.is_empty() && !prefix.ends_with('/') {
-            prefix.push('/');
-        }
-        Ok((
-            Bucket {
-                store: Arc::from(store),
-                anonymous_fallback,
-                name,
-            },
-            prefix,
-        ))
+        let prefix = path.as_ref().trim_matches('/').to_string();
+        // Non-empty URI path → wrap the store (and anonymous fallback) in a
+        // PrefixStore so keys stay layout-relative. Empty prefix → passthrough.
+        let store_arc: Arc<dyn ObjectStore> = Arc::from(store);
+        let store: Arc<dyn ObjectStore> = if prefix.is_empty() {
+            store_arc
+        } else {
+            Arc::new(PrefixStore::new(store_arc, prefix.clone()))
+        };
+        let anonymous_fallback = anonymous_fallback.map(|anon| -> Arc<dyn ObjectStore> {
+            if prefix.is_empty() {
+                anon
+            } else {
+                Arc::new(PrefixStore::new(anon, prefix.clone()))
+            }
+        });
+        Ok(Bucket {
+            store,
+            anonymous_fallback,
+            name,
+        })
     }
 
     pub fn clone_ref(&self) -> Self {

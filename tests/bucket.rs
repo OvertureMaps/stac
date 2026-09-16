@@ -23,12 +23,13 @@ fn s3_bucket_root_trailing_slash_ok() {
 }
 
 #[test]
-fn s3_with_path_rejected() {
-    let msg = err_msg(Bucket::from_url("s3://overturemaps-us-west-2/release/"));
-    assert!(
-        msg.contains("URI must point at bucket root"),
-        "unexpected error: {msg}"
-    );
+fn s3_with_path_ok() {
+    // A URI path is legal now — it gets baked into a PrefixStore so callers
+    // pass layout-relative keys regardless of whether the URI targets the
+    // bucket root or a sub-directory.
+    let b =
+        Bucket::from_url("s3://overturemaps-us-west-2/release/").expect("parse s3 URI with path");
+    assert_eq!(b.name, "overturemaps-us-west-2");
 }
 
 #[test]

@@ -10,13 +10,10 @@ use crate::{Error, Result};
 const VCS_EXTENSION_URL: &str = "https://stac-extensions.github.io/vcs/v0.1.0/schema.json";
 
 /// Read the root `catalog.json` from a catalog bucket and extract release IDs
-/// from its `rel: child` links.
-pub async fn read_catalog_children(
-    catalog_bucket: &Bucket,
-    catalog_prefix: &str,
-) -> Result<Vec<String>> {
-    let key = format!("{catalog_prefix}catalog.json");
-    let root = get_json(catalog_bucket, &key).await?;
+/// from its `rel: child` links. Assumes the bucket handle is rooted at the
+/// catalog prefix (see [`Bucket::from_url`][crate::storage::Bucket::from_url]).
+pub async fn read_catalog_children(catalog_bucket: &Bucket) -> Result<Vec<String>> {
+    let root = get_json(catalog_bucket, "catalog.json").await?;
     Ok(children_from_root(&root))
 }
 
