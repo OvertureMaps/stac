@@ -54,9 +54,6 @@ pub enum Error {
     },
 
     // ─── Domain-specific variants ───────────────────────────────────────────
-    #[error("URI must point at bucket root (no path segment): {0}")]
-    UriHasPath(String),
-
     #[error("--schema-version is required when --release-version is provided")]
     SchemaVersionRequired,
 
@@ -111,8 +108,7 @@ impl Error {
         match self {
             Error::Context { source, .. } => source.exit_code(),
 
-            Error::UriHasPath(_)
-            | Error::SchemaVersionRequired
+            Error::SchemaVersionRequired
             | Error::InvalidReleaseVersion(_)
             | Error::InvalidSchemaVersion(_)
             | Error::InvalidValidateUrl(_)

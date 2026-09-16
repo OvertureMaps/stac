@@ -6,7 +6,7 @@ use regex::Regex;
 
 use overture_stac::stac::{
     build_single_release, build_top_catalog, link_neighbor_releases, list_release_ids,
-    save_absolute_published,
+    save_absolute_published, validate_release_id,
 };
 use overture_stac::storage::Bucket;
 use overture_stac::{Error, Result, ResultExt};
@@ -62,10 +62,7 @@ pub async fn run(args: BuildArgs) -> Result<()> {
     }
 
     if let Some(r) = &args.release_version {
-        let re = Regex::new(r"^\d{4}-\d{2}-\d{2}\.\d+$").unwrap();
-        if !re.is_match(r) {
-            return Err(Error::InvalidReleaseVersion(r.clone()));
-        }
+        validate_release_id(r)?;
     }
     if let Some(s) = &args.schema_version {
         let re = Regex::new(r"^\d+\.\d+\.\d+$").unwrap();

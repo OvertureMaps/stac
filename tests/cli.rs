@@ -136,6 +136,26 @@ fn malformed_release_is_rejected() {
 }
 
 #[test]
+fn path_traversal_release_is_rejected() {
+    // Guards the public library boundary in build_single_release. Regex must
+    // reject anything containing `..` or path separators before out_dir is
+    // constructed.
+    cli()
+        .args([
+            "build",
+            "--release-version",
+            "2026-01-01.0/../../evil",
+            "--schema-version",
+            "1.18.0",
+        ])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "--release-version must be in format",
+        ));
+}
+
+#[test]
 fn list_releases_help_lists_data_uri() {
     cli()
         .args(["list-releases", "--help"])

@@ -8,13 +8,14 @@
 //! `stac::geoparquet` through the `ItemCollection::into_geoparquet_path` helper.
 
 use chrono::{Datelike, NaiveDate, TimeZone, Utc};
+use regex::Regex;
 use serde_json::{json, Value};
 use stac::geoparquet::WriterOptions;
 use stac::{Catalog, Collection, Item, ItemCollection, Link};
 use stac_io::IntoGeoparquetPath;
 use std::collections::BTreeMap;
 use std::path::Path;
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 
 use crate::stac::theme::{process_theme, ThemeResult, ITEM_STAC_EXTENSIONS};
 use crate::stac::{pmtiles, registry};
@@ -23,8 +24,26 @@ use crate::{Error, Result, ResultExt};
 
 pub async fn list_release_ids(bucket: &Bucket, prefix: &str) -> Result<Vec<String>> {
     let mut ids = list_top_level(bucket, prefix).await?;
+    ids.retain(|id| release_id_re().is_match(id));
     ids.sort_by(|a, b| b.cmp(a));
     Ok(ids)
+}
+
+/// Reject anything that isn't a canonical Overture release ID (`YYYY-MM-DD.N`).
+/// Guards the public API — any caller (Python, an in-process user) that reaches
+/// [`build_single_release`] gets the same path-traversal check the CLI applies
+/// up front, so `output.join(release)` can never escape `output`.
+pub fn validate_release_id(release: &str) -> Result<()> {
+    if release_id_re().is_match(release) {
+        Ok(())
+    } else {
+        Err(Error::InvalidReleaseVersion(release.to_string()))
+    }
+}
+
+fn release_id_re() -> &'static Regex {
+    static RE: OnceLock<Regex> = OnceLock::new();
+    RE.get_or_init(|| Regex::new(r"^\d{4}-\d{2}-\d{2}\.\d+$").unwrap())
 }
 
 /// Handle to a fully-assembled release, ready to save. Carries typed stac values plus
@@ -52,6 +71,7 @@ pub async fn build_single_release(
     concurrency: usize,
     output: &Path,
 ) -> Result<ReleaseCatalog> {
+    validate_release_id(release)?;
     let out_dir = output.join(release);
     std::fs::create_dir_all(&out_dir).with_context(|| format!("mkdir {}", out_dir.display()))?;
 
@@ -553,7 +573,9 @@ pub async fn build_top_catalog(
     if let Some(latest) = ids.first() {
         top.additional_fields.insert("latest".into(), json!(latest));
     }
-    let manifest = registry::create_manifest(bucket).await.unwrap_or(json!([]));
+    let manifest = registry::create_manifest(bucket)
+        .await
+        .context("scanning registry manifest")?;
     top.additional_fields.insert(
         "registry".into(),
         json!({"path": "s3://overturemaps-us-west-2/registry", "manifest": manifest}),
@@ -570,8 +592,8 @@ pub async fn build_top_catalog(
 
 fn write_collections_parquet(path: &Path, items: Vec<Item>) -> Result<()> {
     if items.is_empty() {
-        // Match pystac behavior: emit an empty parquet placeholder so directory shape holds.
-        std::fs::write(path, b"")?;
+        // Skip: a zero-byte placeholder isn't valid Parquet, and the file is
+        // not referenced as a STAC asset so its absence is safe.
         return Ok(());
     }
     let coll: ItemCollection = items.into();

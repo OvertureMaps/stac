@@ -7,6 +7,7 @@ use std::collections::BTreeSet;
 
 use serde_json::json;
 
+use overture_stac::stac::registry;
 use overture_stac::stac::{add_child_link, build_empty_root, remove_child_link};
 use overture_stac::stac::{
     build_single_release, children_from_root, list_release_ids, read_catalog_children,
@@ -85,13 +86,14 @@ impl Diff {
 }
 
 pub async fn run(args: ReconcileArgs) -> Result<()> {
-    let (catalog_bucket, catalog_prefix) = Bucket::from_url_with_prefix(&args.catalog_uri)?;
-    let (data_bucket, data_prefix) = Bucket::from_url_with_prefix(&args.data_uri)?;
-    let release_prefix = format!("{data_prefix}release");
+    // Both buckets are constructed with any URI path baked into a PrefixStore,
+    // so downstream keys ("release/<id>", "catalog.json") stay layout-relative.
+    let catalog_bucket = Bucket::from_url(&args.catalog_uri)?;
+    let data_bucket = Bucket::from_url(&args.data_uri)?;
 
     let (catalog_ids, bucket_ids) = tokio::try_join!(
-        read_catalog_children(&catalog_bucket, &catalog_prefix),
-        list_release_ids(&data_bucket, &release_prefix),
+        read_catalog_children(&catalog_bucket),
+        list_release_ids(&data_bucket, "release"),
     )?;
     let diff = Diff::compute(&catalog_ids, &bucket_ids);
 
@@ -128,7 +130,6 @@ pub async fn run(args: ReconcileArgs) -> Result<()> {
         let root_href = args.root_href.trim_end_matches('/').to_string();
         apply_diff(
             &catalog_bucket,
-            &catalog_prefix,
             &data_bucket,
             extras_bucket.as_ref(),
             &root_href,
@@ -210,7 +211,6 @@ fn print_diff_summary(
 #[allow(clippy::too_many_arguments)]
 async fn apply_diff(
     catalog_bucket: &Bucket,
-    catalog_prefix: &str,
     data_bucket: &Bucket,
     extras_bucket: Option<&Bucket>,
     root_href: &str,
@@ -219,13 +219,13 @@ async fn apply_diff(
     backup: bool,
     validate: bool,
 ) -> Result<()> {
-    let root_key = format!("{catalog_prefix}catalog.json");
-    let existing_root = get_json_optional(catalog_bucket, &root_key).await?;
+    let root_key = "catalog.json";
+    let existing_root = get_json_optional(catalog_bucket, root_key).await?;
 
     if backup {
         if let Some(current) = existing_root.as_ref() {
             let ts = chrono::Utc::now().format("%Y%m%d-%H%M%S");
-            let backup_key = format!("{catalog_prefix}catalog.json.bak-{ts}");
+            let backup_key = format!("catalog.json.bak-{ts}");
             put_json(catalog_bucket, &backup_key, current).await?;
             println!("Backed up existing root → {backup_key}");
         } else {
@@ -239,8 +239,8 @@ async fn apply_diff(
     for release in &diff.to_remove {
         println!("- removing {release}");
         remove_child_link(&mut root, release);
-        put_json(catalog_bucket, &root_key, &root).await?;
-        let deleted = delete_prefix(catalog_bucket, &format!("{catalog_prefix}{release}/")).await?;
+        put_json(catalog_bucket, root_key, &root).await?;
+        let deleted = delete_prefix(catalog_bucket, &format!("{release}/")).await?;
         println!("    dropped child link + deleted {deleted} object(s)");
     }
 
@@ -275,21 +275,18 @@ async fn apply_diff(
                 .with_context(|| format!("validating {release} before upload"))?;
         }
 
-        let uploaded = upload_directory(
-            catalog_bucket,
-            &format!("{catalog_prefix}{release}/"),
-            &release_dir,
-        )
-        .await?;
+        let uploaded =
+            upload_directory(catalog_bucket, &format!("{release}/"), &release_dir).await?;
 
         add_child_link(&mut root, release, root_href)?;
-        put_json(catalog_bucket, &root_key, &root).await?;
+        put_json(catalog_bucket, root_key, &root).await?;
         println!("    uploaded {uploaded} object(s) + added child link");
     }
 
-    // Post-pass: refresh `latest` from the current set of children and stamp
-    // the VCS extension so anyone reading the catalog can tell which build
-    // wrote it.
+    // Post-pass: refresh `latest`, recompute the registry manifest (registry
+    // parquet files get rewritten on release day, so this belongs on the same
+    // apply that publishes the release), and stamp the VCS extension so anyone
+    // reading the catalog can tell which build wrote it.
     let current_children = children_from_root(&root);
     let mut sorted = current_children.clone();
     sorted.sort_by(|a, b| b.cmp(a));
@@ -298,8 +295,20 @@ async fn apply_diff(
             .ok_or_else(|| Error::MalformedCatalog("root is not a JSON object".into()))?
             .insert("latest".into(), json!(latest));
     }
+    let manifest = registry::create_manifest(data_bucket)
+        .await
+        .context("refreshing registry manifest")?;
+    root.as_object_mut()
+        .ok_or_else(|| Error::MalformedCatalog("root is not a JSON object".into()))?
+        .insert(
+            "registry".into(),
+            json!({
+                "path": "s3://overturemaps-us-west-2/registry",
+                "manifest": manifest,
+            }),
+        );
     stamp_vcs(&mut root)?;
-    put_json(catalog_bucket, &root_key, &root).await?;
+    put_json(catalog_bucket, root_key, &root).await?;
 
     Ok(())
 }
