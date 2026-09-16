@@ -7,16 +7,17 @@
 
 use bytes::Bytes;
 use futures::future::{BoxFuture, FutureExt};
-use object_store::{path::Path as ObjPath, GetOptions, GetRange, ObjectStore};
+use object_store::{path::Path as ObjPath, GetOptions, GetRange};
 use parquet::arrow::async_reader::{MetadataFetch, MetadataSuffixFetch};
 use parquet::arrow::parquet_to_arrow_schema;
 use parquet::errors::{ParquetError, Result as ParquetResult};
 use parquet::file::metadata::ParquetMetaDataReader;
 use serde_json::Value;
 use std::ops::Range;
-use std::sync::{Arc, OnceLock};
+use std::sync::OnceLock;
 use tokio::sync::Semaphore;
 
+use crate::storage::Bucket;
 use crate::{Error, Result, ResultExt};
 
 /// Cap total concurrent parquet metadata GETs across the whole process. Combined with
@@ -37,16 +38,13 @@ pub struct FragmentInfo {
     pub geoparquet_version: Option<String>,
 }
 
-pub async fn read_fragment(store: Arc<dyn ObjectStore>, key: &str) -> Result<FragmentInfo> {
+pub async fn read_fragment(bucket: &Bucket, key: &str) -> Result<FragmentInfo> {
     let _permit = parquet_limit()
         .acquire()
         .await
         .expect("global parquet semaphore poisoned");
     let path = ObjPath::from(key);
-    let mut fetch = SuffixFetch {
-        store: &store,
-        path,
-    };
+    let mut fetch = SuffixFetch { bucket, path };
     let meta = ParquetMetaDataReader::new()
         .load_via_suffix_and_finish(&mut fetch)
         .await
@@ -107,21 +105,25 @@ pub async fn read_fragment(store: Arc<dyn ObjectStore>, key: &str) -> Result<Fra
     })
 }
 
+/// Ranged/suffix GETs route through [`Bucket::get_opts`] so they inherit the
+/// same anonymous-auth retry as everything else in `storage::bucket` — stale
+/// SSO creds against the public Overture bucket fall back cleanly instead of
+/// aborting the build mid-fragment.
 struct SuffixFetch<'a> {
-    store: &'a Arc<dyn ObjectStore>,
+    bucket: &'a Bucket,
     path: ObjPath,
 }
 
 impl<'a> MetadataFetch for &mut SuffixFetch<'a> {
     fn fetch(&mut self, range: Range<u64>) -> BoxFuture<'_, ParquetResult<Bytes>> {
-        let store = self.store;
+        let bucket = self.bucket;
         let path = self.path.clone();
         async move {
             let opts = GetOptions {
                 range: Some(GetRange::Bounded(range)),
                 ..GetOptions::default()
             };
-            let resp = store
+            let resp = bucket
                 .get_opts(&path, opts)
                 .await
                 .map_err(|e| ParquetError::General(format!("object_store bounded GET: {e}")))?;
@@ -135,14 +137,14 @@ impl<'a> MetadataFetch for &mut SuffixFetch<'a> {
 
 impl<'a> MetadataSuffixFetch for &mut SuffixFetch<'a> {
     fn fetch_suffix(&mut self, suffix: usize) -> BoxFuture<'_, ParquetResult<Bytes>> {
-        let store = self.store;
+        let bucket = self.bucket;
         let path = self.path.clone();
         async move {
             let opts = GetOptions {
                 range: Some(GetRange::Suffix(suffix as u64)),
                 ..GetOptions::default()
             };
-            let resp = store
+            let resp = bucket
                 .get_opts(&path, opts)
                 .await
                 .map_err(|e| ParquetError::General(format!("object_store suffix GET: {e}")))?;

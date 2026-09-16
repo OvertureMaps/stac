@@ -1,7 +1,8 @@
 //! Cloud-agnostic object store handle via `object_store::parse_url`.
 
 use object_store::{
-    parse_url, parse_url_opts, path::Path, prefix::PrefixStore, ObjectStore, ObjectStoreExt,
+    parse_url, parse_url_opts, path::Path, prefix::PrefixStore, GetOptions, GetResult, ObjectStore,
+    ObjectStoreExt,
 };
 use std::sync::Arc;
 use url::Url;
@@ -103,6 +104,18 @@ impl Bucket {
             anonymous_fallback: self.anonymous_fallback.clone(),
             name: self.name.clone(),
         }
+    }
+
+    /// `store.get_opts` with anonymous-auth retry — same fallback logic as
+    /// [`get_json`] / [`list_all`]. Ranged/suffix reads (e.g. Parquet metadata)
+    /// route through here so they don't bypass the retry.
+    pub async fn get_opts(&self, path: &Path, opts: GetOptions) -> object_store::Result<GetResult> {
+        with_auth_retry(self, |store| {
+            let path = path.clone();
+            let opts = opts.clone();
+            async move { store.get_opts(&path, opts).await }
+        })
+        .await
     }
 }
 

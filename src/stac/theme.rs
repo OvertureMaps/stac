@@ -145,17 +145,13 @@ async fn process_type(
     // Concurrent fragment metadata reads, bounded to keep S3 fanout in check.
     use futures::stream::{StreamExt, TryStreamExt};
     const FRAGMENT_CONCURRENCY: usize = 32;
-    let store_arc = bucket.store.clone();
     let fragment_futs: Vec<_> = full_keys
         .clone()
         .into_iter()
         .enumerate()
-        .map(|(idx, key)| {
-            let store = Arc::clone(&store_arc);
-            async move {
-                let info = read_fragment(store, &key).await?;
-                Ok::<(usize, FragmentInfo), Error>((idx, info))
-            }
+        .map(|(idx, key)| async move {
+            let info = read_fragment(bucket, &key).await?;
+            Ok::<(usize, FragmentInfo), Error>((idx, info))
         })
         .collect();
     let mut fragments: Vec<(usize, FragmentInfo)> = futures::stream::iter(fragment_futs)
