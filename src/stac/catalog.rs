@@ -573,7 +573,9 @@ pub async fn build_top_catalog(
     if let Some(latest) = ids.first() {
         top.additional_fields.insert("latest".into(), json!(latest));
     }
-    let manifest = registry::create_manifest(bucket).await.unwrap_or(json!([]));
+    let manifest = registry::create_manifest(bucket)
+        .await
+        .context("scanning registry manifest")?;
     top.additional_fields.insert(
         "registry".into(),
         json!({"path": "s3://overturemaps-us-west-2/registry", "manifest": manifest}),
