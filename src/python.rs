@@ -1,11 +1,15 @@
 //! Python bindings for the Overture STAC catalog builder.
 //!
-//! Single-layer PyO3 module: the pymodule IS the whole Python surface. Users:
+//! Single-layer PyO3 module: the pymodule IS the whole Python surface. To build a
+//! full catalog from scratch, compose `list_releases` + `build_release_catalog` +
+//! `build_root_catalog`:
 //! ```python
-//! import asyncio
-//! import overture_stac
-//!
-//! asyncio.run(overture_stac.build_catalog("2026-07-22.0"))
+//! import asyncio, overture_stac
+//! async def main():
+//!     for r in await overture_stac.list_releases():
+//!         await overture_stac.build_release_catalog(r)
+//!     await overture_stac.build_root_catalog()
+//! asyncio.run(main())
 //! ```
 //!
 //! Errors from Rust surface as `overture_stac.OvertureStacError` (subclass of `RuntimeError`).
@@ -16,9 +20,12 @@ use pyo3::create_exception;
 use pyo3::exceptions::PyRuntimeError;
 use pyo3::prelude::*;
 use pyo3::types::PyString;
+use serde_json::json;
 
+use crate::stac::registry;
 use crate::stac::{
-    build_single_release, link_neighbor_releases, list_release_ids, save_absolute_published,
+    add_child_link, build_empty_root, build_single_release, link_neighbor_releases,
+    list_release_ids, save_absolute_published, stamp_vcs,
     validate_catalog as rust_validate_catalog, validate_catalog_uri as rust_validate_catalog_uri,
     validate_url as rust_validate_url, Failure, ValidateOptions, ValidationReport,
 };
@@ -69,9 +76,11 @@ fn extract_schema_arg(obj: &Bound<'_, PyAny>) -> PyResult<Option<String>> {
     }
 }
 
-/// Build a STAC catalog for a single Overture release.
+/// Build a STAC sub-catalog for a single Overture release.
 ///
 /// Writes catalog.json / collections.parquet / manifest.geojson under `<output>/<release_version>/`.
+/// Doesn't touch `<output>/catalog.json` (the root) — call `build_root_catalog`
+/// after building each release to assemble the umbrella.
 /// Returns None; the interesting output is on the filesystem.
 ///
 /// Args:
@@ -109,7 +118,7 @@ fn extract_schema_arg(obj: &Bound<'_, PyAny>) -> PyResult<Option<String>> {
     debug = false,
 ))]
 #[allow(clippy::too_many_arguments)]
-fn build_catalog<'py>(
+fn build_release_catalog<'py>(
     py: Python<'py>,
     release_version: String,
     schema_version: Option<Bound<'py, PyAny>>,
@@ -125,7 +134,7 @@ fn build_catalog<'py>(
         Some(obj) => extract_schema_arg(&obj)?,
     };
     tracing::info!(
-        "build_catalog: release={release_version} schema={schema_input:?} data_uri={data_uri}"
+        "build_release_catalog: release={release_version} schema={schema_input:?} data_uri={data_uri}"
     );
     pyo3_async_runtimes::tokio::future_into_py(py, async move {
         let root_href = root_href.trim_end_matches('/').to_string();
@@ -166,6 +175,81 @@ fn build_catalog<'py>(
         let dest = output_path.join(&release_version);
         save_absolute_published(&catalog, &format!("{root_href}/{release_version}"), &dest)
             .map_err(map_err)?;
+
+        Ok(())
+    })
+}
+
+/// Build (or refresh) the root STAC catalog at `<output>/catalog.json`.
+///
+/// Lists the releases currently in `data_uri`, assembles a root Catalog with a
+/// `rel: child` link per release, `latest` set to the newest, an embedded registry
+/// manifest, and a VCS provenance stamp. Doesn't touch release sub-directories —
+/// call `build_release_catalog` first for each release you want to include.
+///
+/// Args:
+///     output: Local output directory. Defaults to "./public_releases/".
+///     data_uri: Object-store URI to the data bucket. Defaults to
+///         "s3://overturemaps-us-west-2".
+///     root_href: Public URL prefix baked into absolute child hrefs. Defaults
+///         to "https://stac.overturemaps.org".
+///
+/// Raises:
+///     OvertureStacError: on any error from the Rust core.
+#[pyfunction]
+#[pyo3(signature = (
+    *,
+    output = DEFAULT_OUTPUT.to_string(),
+    data_uri = DEFAULT_DATA_URI.to_string(),
+    root_href = DEFAULT_ROOT_HREF.to_string(),
+))]
+fn build_root_catalog<'py>(
+    py: Python<'py>,
+    output: String,
+    data_uri: String,
+    root_href: String,
+) -> PyResult<Bound<'py, PyAny>> {
+    pyo3_async_runtimes::tokio::future_into_py(py, async move {
+        let root_href = root_href.trim_end_matches('/').to_string();
+        let output_path = PathBuf::from(&output);
+        std::fs::create_dir_all(&output_path).map_err(|e| {
+            OvertureStacError::new_err(format!("creating output dir {output}: {e}"))
+        })?;
+
+        let bucket = Bucket::from_url(&data_uri).map_err(map_err)?;
+        let mut ids = list_release_ids(&bucket, "release")
+            .await
+            .map_err(map_err)?;
+        // Newest first — determines `latest` and matches child_link ordering.
+        ids.sort_by(|a, b| b.cmp(a));
+
+        let mut root = build_empty_root();
+        for id in &ids {
+            add_child_link(&mut root, id, &root_href).map_err(map_err)?;
+        }
+        if let Some(latest) = ids.first() {
+            root.as_object_mut()
+                .expect("build_empty_root returns an object")
+                .insert("latest".into(), json!(latest));
+        }
+        let manifest = registry::create_manifest(&bucket).await.map_err(map_err)?;
+        root.as_object_mut()
+            .expect("build_empty_root returns an object")
+            .insert(
+                "registry".into(),
+                json!({
+                    "path": format!("{data_uri}/registry"),
+                    "manifest": manifest,
+                }),
+            );
+        stamp_vcs(&mut root).map_err(map_err)?;
+
+        let root_path = output_path.join("catalog.json");
+        let body = serde_json::to_vec_pretty(&root)
+            .map_err(|e| OvertureStacError::new_err(format!("serializing root catalog: {e}")))?;
+        std::fs::write(&root_path, body).map_err(|e| {
+            OvertureStacError::new_err(format!("writing {}: {e}", root_path.display()))
+        })?;
 
         Ok(())
     })
@@ -385,7 +469,8 @@ fn overture_stac(py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
     // Bridge Rust `tracing`/`log` → Python `logging`. Silent under Python's
     // default WARNING filter — see the README's Logging section.
     pyo3_log::init();
-    m.add_function(wrap_pyfunction!(build_catalog, m)?)?;
+    m.add_function(wrap_pyfunction!(build_release_catalog, m)?)?;
+    m.add_function(wrap_pyfunction!(build_root_catalog, m)?)?;
     m.add_function(wrap_pyfunction!(validate_catalog, m)?)?;
     m.add_function(wrap_pyfunction!(validate_url, m)?)?;
     m.add_function(wrap_pyfunction!(validate_catalog_uri, m)?)?;

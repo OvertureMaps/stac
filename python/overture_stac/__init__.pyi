@@ -19,7 +19,7 @@ class ValidationReport:
     """Documents inspected (fetch failures counted in ``failures``, not here)."""
     failures: list[Failure]
 
-async def build_catalog(
+async def build_release_catalog(
     release_version: str,
     schema_version: str | None = ...,
     *,
@@ -30,11 +30,13 @@ async def build_catalog(
     concurrency: int | None = ...,
     debug: bool = ...,
 ) -> None:
-    """Build a STAC catalog for a single Overture release.
+    """Build a STAC sub-catalog for a single Overture release.
 
     Writes ``catalog.json`` / ``collections.parquet`` / ``manifest.geojson`` under
-    ``<output>/<release_version>/``. Returns ``None``; the interesting output is on
-    the filesystem.
+    ``<output>/<release_version>/``. Doesn't touch ``<output>/catalog.json`` (the
+    root) — call :func:`build_root_catalog` after building each release to
+    assemble the umbrella. Returns ``None``; the interesting output is on the
+    filesystem.
 
     Args:
         release_version: Release identifier, e.g. ``"2026-07-22.0"``.
@@ -57,6 +59,32 @@ async def build_catalog(
         concurrency: Number of theme-processing futures to run concurrently.
             ``None`` = autodetect (``num_cpus / 2``, minimum 1).
         debug: When ``True``, samples 1 item per collection for fast iteration.
+
+    Raises:
+        OvertureStacError: On any error from the Rust core.
+    """
+    ...
+
+async def build_root_catalog(
+    *,
+    output: str = ...,
+    data_uri: str = ...,
+    root_href: str = ...,
+) -> None:
+    """Build (or refresh) the root STAC catalog at ``<output>/catalog.json``.
+
+    Lists releases currently in ``data_uri``, assembles a Catalog with a
+    ``rel: child`` link per release, ``latest`` set to the newest, an embedded
+    registry manifest, and a VCS provenance stamp. Doesn't touch release
+    sub-directories — call :func:`build_release_catalog` first for each release
+    you want included.
+
+    Args:
+        output: Local output directory. Defaults to ``"./public_releases/"``.
+        data_uri: Object-store URI to the data bucket. Defaults to
+            ``"s3://overturemaps-us-west-2"``.
+        root_href: Public URL prefix baked into absolute child hrefs. Defaults
+            to ``"https://stac.overturemaps.org"``.
 
     Raises:
         OvertureStacError: On any error from the Rust core.
