@@ -73,8 +73,9 @@ jobs:
         id: reconcile
         run: |
           set +e
+          : > reconcile.log
           for attempt in 1 2 3; do
-            ./target/release/overture-stac reconcile --apply --validate 2>&1 | tee reconcile.log
+            ./target/release/overture-stac reconcile --apply --validate 2>&1 | tee -a reconcile.log
             code=${PIPESTATUS[0]}
             # Retry only on 5 (network/infra). Skip the sleep after the last attempt.
             if [ "$code" != 5 ] || [ "$attempt" -eq 3 ]; then
