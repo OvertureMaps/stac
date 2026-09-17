@@ -31,8 +31,6 @@ jobs:
           persist-credentials: false
 
       - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # zizmor: ignore[superfluous-actions,stale-action-refs]
-        with:
-          components: rustfmt, clippy
 
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
 
@@ -116,15 +114,27 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
       - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # zizmor: ignore[superfluous-actions,stale-action-refs]
 
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           key: stac-validate
 
       - name: Build sample catalog and validate
         run: cargo run --release -- build --debug --output tmp/ --validate
+
+  all-checks-pass:
+    name: All Checks Pass
+    needs: [rust, msrv, python, stac-validate]
+    runs-on: ubuntu-latest
+    if: always()
+    permissions:
+      contents: read
+    steps:
+      - uses: lowlydba/are-we-good@0f90ea9fa5e47188fcb69d9306fb8b3abb656018 # v1.2.0
+        with:
+          jobs: ${{ toJSON(needs) }}
