@@ -1,157 +1,170 @@
 name: CI
 
-on:
-  push:
-    branches: [main]
-  pull_request:
-    branches: [main]
-  workflow_dispatch:
-
 permissions:
   contents: read
 
+# Clippy and a release build sanity check.
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ci-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: -D warnings
+  RUSTDOCFLAGS: -D warnings
+
 jobs:
-  lint:
-    name: Lint and Format Check
+  rust:
+    name: Rust (fmt, clippy, test, build)
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
-      - name: Checkout code
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
-      - name: Set up Python
-        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
-        with:
-          python-version-file: .python-version
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
 
-      - name: Install UV
-        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+      - name: fmt
+        run: cargo fmt --check
 
-      - name: Install dependencies
-        run: |
-          uv pip install --system ruff
+      - name: clippy
+        run: cargo clippy --all-targets --all-features
 
-      - name: Run ruff format check
-        run: ruff format --check .
+      - name: test
+        run: cargo test --all-features
 
-      - name: Run ruff linting
-        run: ruff check .
+      - name: doc
+        run: cargo doc --no-deps --all-features
 
-  test:
-    name: Test
+      - name: build (release)
+        run: cargo build --release
+
+  msrv:
+    name: MSRV (build on declared rust-version)
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        python-version: ["3.11", "3.12", "3.13", "3.14"]
+    permissions:
+      contents: read
     steps:
-      - name: Checkout code
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
-      - name: Set up Python
-        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+      - name: Read MSRV from Cargo.toml
+        id: msrv
+        run: echo "version=$(grep -oE '^rust-version = "[^"]+"' Cargo.toml | cut -d'"' -f2)" >> "$GITHUB_OUTPUT"
+
+      - name: Install MSRV toolchain
+        env:
+          MSRV: ${{ steps.msrv.outputs.version }}
+        run: rustup toolchain install "$MSRV" --profile minimal --no-self-update
+
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
-          python-version: ${{ matrix.python-version }}
+          key: msrv-${{ steps.msrv.outputs.version }}
 
-      - name: Install UV
-        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+      - name: Build on MSRV
+        env:
+          MSRV: ${{ steps.msrv.outputs.version }}
+        run: cargo "+$MSRV" build --locked
 
-      - name: Install dependencies
-        run: |
-          uv sync --all-groups
-
-      - name: Run tests
-        run: |
-          uv run pytest
-
-  test-package-install:
-    name: Test Package Installation
+  python:
+    name: Python bindings (maturin build + pytest)
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
-      - name: Checkout code
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
-      - name: Set up Python
-        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
-          python-version-file: .python-version
+          key: python-bindings
 
-      - name: Install UV
-        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
 
-      - name: Install package
-        run: |
-          uv pip install --system -e .
+      - name: Set up Python
+        run: uv python install 3.11
 
-      - name: Test CLI availability
-        run: |
-          which gen-stac || echo "CLI not found in PATH, checking if it's installed..."
-          python -c "from overture_stac import OvertureRelease, RegistryManifest; print('Package imports successfully')"
+      - name: Build extension
+        run: uv run maturin develop --release --features python,extension-module
 
-      - name: Test imports
-        run: |
-          python -c "from overture_stac.overture_stac import OvertureRelease; print('OvertureRelease imported')"
-          python -c "from overture_stac.registry_manifest import RegistryManifest; print('RegistryManifest imported')"
+      - name: Smoke test
+        run: uv run python -c "import overture_stac; print(dir(overture_stac))"
+
+      - name: pytest
+        run: uv run pytest
 
   stac-validate:
-    name: STAC Validation
+    name: STAC validation (build + validate against public bucket)
     runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
     steps:
-      - name: Checkout code
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
-      - name: Set up Python
-        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
-          python-version-file: .python-version
+          key: stac-validate
 
-      - name: Install UV
-        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+      - name: Build sample catalog and validate
+        run: cargo run --release -- build --debug --output tmp/ --validate
 
-      - name: Install dependencies
-        run: uv sync --all-groups
+  stac-validate-offline:
+    name: STAC validation (fabricated fixture in Garage)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
-      - name: Generate local STAC catalog (debug mode)
-        run: uv run python tests/setup_test_catalog.py --output "$GITHUB_WORKSPACE/tests/data" --workers 2
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          key: stac-validate-offline
 
-      - name: Serve STAC catalog locally
+      - uses: lowlydba/setup-garage@4541bf2220810f325afe59324046f8278a1b477a # v1.0.0
+        with:
+          bucket: overture-test
+
+      - name: Generate fixture
+        run: cargo run --example gen_fixture --release -- /tmp/fixture
+
+      - name: Upload fixture to Garage
+        run: aws s3 sync /tmp/fixture s3://overture-test/ --endpoint-url "$AWS_ENDPOINT_URL"
+
+      - name: Build against Garage bucket
         run: |
-          uv run python tests/setup_test_catalog.py --serve-only --output "$GITHUB_WORKSPACE/tests/data" &
-          echo $! > server.pid
-          for i in $(seq 1 20); do
-            curl -sf http://127.0.0.1:8888/catalog.json > /dev/null && break
-            sleep 0.5
-          done
+          cargo run --release -- build \
+            --data-uri s3://overture-test \
+            --extras-uri "" \
+            --root-href https://example.com/stac \
+            --output /tmp/out
 
-      - name: Validate root catalog
-        uses: OvertureMaps/stac-check-action@71e219583b4fd87f797bac5840b088c048116765 # v1.1.0
-        with:
-          stac-check-version: "1.14.0"
-          file: http://127.0.0.1:8888/catalog.json
-          recursive: "true"
-          fast-linting: "true"
-          job-summary: "true"
-
-      - name: Stop local server
-        if: always()
-        run: kill $(cat server.pid) 2>/dev/null || true
+      - name: Validate (schema + links only)
+        run: |
+          cargo run --release -- validate /tmp/out --no-overture-rules
 
   all-checks-pass:
     name: All Checks Pass
-    needs: [lint, test, test-package-install, stac-validate]
+    needs: [rust, msrv, python, stac-validate, stac-validate-offline]
     runs-on: ubuntu-latest
     if: always()
+    permissions:
+      contents: read
     steps:
       - uses: lowlydba/are-we-good@0f90ea9fa5e47188fcb69d9306fb8b3abb656018 # v1.2.0
         with:
