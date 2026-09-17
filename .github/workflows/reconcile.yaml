@@ -74,7 +74,7 @@ jobs:
         uses: $/.github/actions/reconcile
 
       - name: Configure AWS credentials (CloudFront invalidation, cross-account)
-        if: steps.reconcile.outputs.applied == 'true'
+        if: always() && steps.reconcile.outputs.applied == 'true'
         uses: aws-actions/configure-aws-credentials@cbe3b392738ccf3f987d68400dafcf4b0624a56c # v6.2.4
         with:
           role-to-assume: ${{ env.CLOUDFRONT_INVALIDATOR_ROLE_ARN }}
