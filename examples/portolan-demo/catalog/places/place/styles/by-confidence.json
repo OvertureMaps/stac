@@ -1,0 +1,50 @@
+{
+  "version": 8,
+  "name": "Places by confidence",
+  "sources": {
+    "overture": {
+      "type": "vector",
+      "url": "pmtiles://https://tiles.overturemaps.org/2026-08-19.0/places.pmtiles"
+    }
+  },
+  "layers": [
+    {
+      "id": "places-confidence",
+      "type": "circle",
+      "source": "overture",
+      "source-layer": "place",
+      "paint": {
+        "circle-radius": [
+          "interpolate",
+          [
+            "linear"
+          ],
+          [
+            "zoom"
+          ],
+          4,
+          1.2,
+          12,
+          4
+        ],
+        "circle-color": [
+          "step",
+          [
+            "get",
+            "confidence"
+          ],
+          "#d73027",
+          0.4,
+          "#fc8d59",
+          0.6,
+          "#fee08b",
+          0.8,
+          "#91cf60",
+          0.9,
+          "#1a9850"
+        ],
+        "circle-opacity": 0.8
+      }
+    }
+  ]
+}

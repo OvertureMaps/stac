@@ -1,0 +1,120 @@
+{
+  "type": "Feature",
+  "stac_version": "1.1.0",
+  "stac_extensions": [
+    "https://stac-extensions.github.io/storage/v2.0.0/schema.json",
+    "https://stac-extensions.github.io/alternate-assets/v1.2.0/schema.json"
+  ],
+  "id": "00000",
+  "geometry": {
+    "type": "Polygon",
+    "coordinates": [
+      [
+        [
+          -180.0,
+          -84.29460906982422
+        ],
+        [
+          -86.84698486328125,
+          -84.29460906982422
+        ],
+        [
+          -86.84698486328125,
+          14.345832824707031
+        ],
+        [
+          -180.0,
+          14.345832824707031
+        ],
+        [
+          -180.0,
+          -84.29460906982422
+        ]
+      ]
+    ]
+  },
+  "bbox": [
+    -180.0,
+    -84.29460906982422,
+    -86.84698486328125,
+    14.345832824707031
+  ],
+  "properties": {
+    "num_rows": 5007414,
+    "num_row_groups": 256,
+    "storage:schemes": {
+      "aws": {
+        "type": "aws-s3",
+        "platform": "https://{bucket}.s3.{region}.amazonaws.com",
+        "bucket": "overturemaps-us-west-2",
+        "region": "us-west-2",
+        "requester_pays": false
+      },
+      "azure": {
+        "type": "ms-azure",
+        "platform": "https://{account}.blob.core.windows.net",
+        "account": "overturemapswestus2",
+        "requester_pays": false
+      }
+    },
+    "datetime": "2026-08-19T00:00:00Z"
+  },
+  "links": [
+    {
+      "rel": "root",
+      "href": "../../../catalog.json",
+      "type": "application/json",
+      "title": "Overture Places and Buildings"
+    },
+    {
+      "rel": "parent",
+      "href": "../collection.json",
+      "type": "application/json",
+      "title": "Buildings"
+    },
+    {
+      "rel": "collection",
+      "href": "../collection.json",
+      "type": "application/json",
+      "title": "Buildings"
+    }
+  ],
+  "assets": {
+    "aws": {
+      "href": "https://overturemaps-us-west-2.s3.us-west-2.amazonaws.com/release/2026-08-19.0/theme=buildings/type=building/part-00000-66390f89-3dae-58d7-a8f9-dd8538b7141a-c000.zstd.parquet",
+      "type": "application/vnd.apache.parquet",
+      "title": "GeoParquet on AWS S3",
+      "description": "Zstd-compressed GeoParquet in the overturemaps-us-west-2 bucket, served over HTTPS.",
+      "storage:refs": [
+        "aws"
+      ],
+      "alternate:name": "HTTPS",
+      "alternate": {
+        "s3": {
+          "href": "s3://overturemaps-us-west-2/release/2026-08-19.0/theme=buildings/type=building/part-00000-66390f89-3dae-58d7-a8f9-dd8538b7141a-c000.zstd.parquet",
+          "alternate:name": "S3",
+          "description": "Access the files via regular Amazon AWS S3 tooling.",
+          "roles": [
+            "data"
+          ]
+        }
+      },
+      "roles": [
+        "data"
+      ]
+    },
+    "azure": {
+      "href": "https://overturemapswestus2.blob.core.windows.net/release/2026-08-19.0/theme=buildings/type=building/part-00000-66390f89-3dae-58d7-a8f9-dd8538b7141a-c000.zstd.parquet",
+      "type": "application/vnd.apache.parquet",
+      "title": "GeoParquet on Azure Blob Storage",
+      "description": "Zstd-compressed GeoParquet in the overturemapswestus2 storage account (West US 2), served over HTTPS.",
+      "storage:refs": [
+        "azure"
+      ],
+      "roles": [
+        "data"
+      ]
+    }
+  },
+  "collection": "building"
+}
