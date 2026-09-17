@@ -202,7 +202,6 @@ async fn process_type(
         });
 
         let mut item = Item::new(&item_id);
-        item.extensions = ITEM_STAC_EXTENSIONS.iter().map(|s| s.to_string()).collect();
         item.geometry = Some(serde_json::from_value(geojson_bbox.clone())?);
         item.bbox = Some(Bbox::new(xmin, ymin, xmax, ymax));
 
@@ -245,6 +244,11 @@ async fn process_type(
         }
         if !schemes.is_empty() {
             props.insert("storage:schemes".into(), Value::Object(schemes));
+            // Only declare the storage/alternate-assets extensions when we're
+            // actually emitting their fields. Declaring them without
+            // `storage:schemes` puts the doc outside the extension's oneOf and
+            // fails strict validators.
+            item.extensions = ITEM_STAC_EXTENSIONS.iter().map(|s| s.to_string()).collect();
         }
         item.properties.datetime = Some(release_datetime);
 

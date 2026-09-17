@@ -127,9 +127,48 @@ jobs:
       - name: Build sample catalog and validate
         run: cargo run --release -- build --debug --output tmp/ --validate
 
+  stac-validate-offline:
+    name: STAC validation (fabricated fixture in Garage)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # zizmor: ignore[superfluous-actions,stale-action-refs]
+
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          key: stac-validate-offline
+
+      - uses: lowlydba/setup-garage@4541bf2220810f325afe59324046f8278a1b477a # v1.0.0
+        with:
+          bucket: overture-test
+
+      - name: Generate fixture
+        run: cargo run --example gen_fixture --release -- /tmp/fixture
+
+      - name: Upload fixture to Garage
+        run: aws s3 sync /tmp/fixture s3://overture-test/ --endpoint-url "$AWS_ENDPOINT_URL"
+
+      - name: Build against Garage bucket
+        run: |
+          cargo run --release -- build \
+            --data-uri s3://overture-test \
+            --extras-uri "" \
+            --root-href https://example.com/stac \
+            --output /tmp/out
+
+      - name: Validate (schema + links only)
+        run: |
+          cargo run --release -- validate /tmp/out --no-overture-rules
+
   all-checks-pass:
     name: All Checks Pass
-    needs: [rust, msrv, python, stac-validate]
+    needs: [rust, msrv, python, stac-validate, stac-validate-offline]
     runs-on: ubuntu-latest
     if: always()
     permissions:

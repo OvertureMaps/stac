@@ -60,5 +60,15 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 url = "2"
 
 [dev-dependencies]
+arrow-array = "59"
+arrow-schema = "59"
 assert_cmd = "2"
 predicates = "3"
+
+# Fixture generator for the offline stac-validate CI job. Writes a minimal
+# Overture-shaped tree (one release / one theme / one type / one parquet, plus
+# a registry parquet) that `setup-garage` uploads and `overture-stac build`
+# reads. Not part of the shipped CLI.
+[[example]]
+name = "gen_fixture"
+path = "examples/gen_fixture.rs"

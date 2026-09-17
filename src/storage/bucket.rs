@@ -76,6 +76,14 @@ impl Bucket {
                 // (matches the Overture prod buckets, which are readable anon).
                 opts.push(("skip_signature".into(), "true".into()));
             }
+            // `AWS_ENDPOINT_URL` is honored by `AmazonS3Builder::from_env`,
+            // but `parse_url_opts` starts from `Default::default()` and only
+            // reads what we hand it — so plumb it through explicitly. Enables
+            // pointing at a local S3-compatible endpoint (e.g. Garage) in CI.
+            if let Ok(endpoint) = std::env::var("AWS_ENDPOINT_URL") {
+                opts.push(("endpoint".into(), endpoint));
+                opts.push(("allow_http".into(), "true".into()));
+            }
             parse_url_opts(&url, opts).context(format!("initialising object store for {uri}"))?
         } else {
             parse_url(&url).context(format!("initialising object store for {uri}"))?

@@ -38,11 +38,21 @@ pub struct ValidateArgs {
     /// Emit machine-readable JSON summary instead of pretty text.
     #[arg(long, default_value_t = false)]
     json: bool,
+
+    /// Skip Overture-specific rules (required `aws`/`azure` assets, license enum,
+    /// PMTiles media type, bbox sanity). Useful when validating an offline
+    /// fixture that doesn't have prod-shaped assets. Schema + link checks
+    /// still run.
+    #[arg(long = "no-overture-rules", default_value_t = false)]
+    no_overture_rules: bool,
 }
 
 pub async fn run(args: ValidateArgs) -> Result<()> {
     let concurrency = args.concurrency.unwrap_or_else(default_concurrency);
-    let opts = ValidateOptions::default();
+    let opts = ValidateOptions {
+        check_overture_rules: !args.no_overture_rules,
+        ..ValidateOptions::default()
+    };
     let report = match (args.url, args.catalog_uri, args.dir) {
         (Some(url), _, _) => validate_url(&url, concurrency, opts).await?,
         (_, Some(uri), _) => validate_catalog_uri(&uri, concurrency, opts).await?,
