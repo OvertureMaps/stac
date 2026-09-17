@@ -1,0 +1,87 @@
+---
+# Runs `overture-stac reconcile --apply --validate` on a schedule against the
+# production STAC catalog. Compares the release bucket against the published
+# catalog, applies any diff to s3://overturemaps-extras-us-west-2/stac/, and
+# busts CloudFront only when a change was actually applied.
+#
+# Exit-code driven per OvertureMaps/stac#134:
+#   0        in sync (nothing to do) or apply succeeded
+#   2 / 3    bad config / bad data — alert, don't retry
+#   4        post-apply validation failed — alert, don't retry
+#   5        network/infra glitch — retry with backoff, alert if persistent
+#   *        anything else — alert
+name: Reconcile
+run-name: Reconcile STAC catalog
+
+on:
+  schedule:
+    - cron: "0 * * * *"
+  workflow_dispatch:
+
+permissions: {}
+
+# One apply at a time. `cancel-in-progress: false` lets an in-flight apply
+# finish before the next tick fires, so two runs can never race on catalog.json.
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+env:
+  AWS_REGION: us-west-2
+  STAC_PUBLISH_ROLE_ARN: arn:aws:iam::913550007193:role/stac-publish-oidc-overturemaps
+  CLOUDFRONT_INVALIDATOR_ROLE_ARN: arn:aws:iam::763944545891:role/cloudfront-invalidator
+  CLOUDFRONT_DISTRIBUTION_ID: E209PEWSOCNO5D
+
+jobs:
+  reconcile:
+    name: Reconcile
+    # Refuse to run against anything except main. `workflow_dispatch` lets a
+    # user pick a branch, and this job wields production S3 write + CloudFront
+    # roles — running from a feature branch would let that branch's code push
+    # to prod. Scheduled runs always fire from the default branch, which is
+    # main, so this only bites manual dispatches from elsewhere.
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      id-token: write # OIDC token exchange with AWS
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          # Belt-and-braces with the job-level `if:` above — pin the checked-out
+          # code to main so the built binary can never come from a feature branch.
+          ref: main
+          persist-credentials: false
+
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # zizmor: ignore[superfluous-actions,stale-action-refs]
+
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+        with:
+          key: reconcile
+
+      - name: Build overture-stac
+        run: cargo build --release --bin overture-stac
+
+      - name: Configure AWS credentials (bucket write)
+        uses: aws-actions/configure-aws-credentials@cbe3b392738ccf3f987d68400dafcf4b0624a56c # v6.2.4
+        with:
+          role-to-assume: ${{ env.STAC_PUBLISH_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Reconcile
+        id: reconcile
+        uses: $/.github/actions/reconcile
+
+      - name: Configure AWS credentials (CloudFront invalidation, cross-account)
+        if: always() && steps.reconcile.outputs.applied == 'true'
+        uses: aws-actions/configure-aws-credentials@cbe3b392738ccf3f987d68400dafcf4b0624a56c # v6.2.4
+        with:
+          role-to-assume: ${{ env.CLOUDFRONT_INVALIDATOR_ROLE_ARN }}
+          role-chaining: true
+          role-skip-session-tagging: true # stac-publish-oidc-overturemaps lacks sts:TagSession on cloudfront-invalidator; nothing consumes session tags here
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Bust CloudFront cache
+        if: steps.reconcile.outputs.applied == 'true'
+        run: aws cloudfront create-invalidation --distribution-id "$CLOUDFRONT_DISTRIBUTION_ID" --paths "/*"
