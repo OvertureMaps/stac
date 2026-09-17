@@ -11,6 +11,10 @@ inputs:
     description: Path to the overture-stac binary.
     required: false
     default: ./target/release/overture-stac
+  catalog_uri:
+    description: Catalog URI to reconcile and validate.
+    required: false
+    default: s3://overturemaps-extras-us-west-2/stac/
 
 outputs:
   exit_code:
@@ -28,12 +32,21 @@ runs:
       shell: bash
       env:
         OVERTURE_STAC_BIN: ${{ inputs.binary }}
+        OVERTURE_STAC_CATALOG_URI: ${{ inputs.catalog_uri }}
       run: |
         set +e
         : > reconcile.log
+        applied=false
+        needs_post_retry_validate=false
         for attempt in 1 2 3; do
-          "$OVERTURE_STAC_BIN" reconcile --apply --validate 2>&1 | tee -a reconcile.log
+          "$OVERTURE_STAC_BIN" reconcile --apply --validate --catalog-uri "$OVERTURE_STAC_CATALOG_URI" 2>&1 | tee -a reconcile.log
           code=${PIPESTATUS[0]}
+          if grep -qE "^Applied [0-9]+ change" reconcile.log; then
+            applied=true
+          fi
+          if [ "$code" = 5 ] && [ "$applied" = true ]; then
+            needs_post_retry_validate=true
+          fi
           # Retry only on 5 (network/infra). Skip the sleep after the last attempt.
           if [ "$code" != 5 ] || [ "$attempt" -eq 3 ]; then
             break
@@ -42,11 +55,18 @@ runs:
           sleep $((attempt * 30))
         done
 
-        if grep -qE "^Applied [0-9]+ change" reconcile.log; then
-          applied=true
-        else
-          applied=false
+        if [ "$code" = 0 ] && [ "$needs_post_retry_validate" = true ]; then
+          for attempt in 1 2 3; do
+            "$OVERTURE_STAC_BIN" validate --catalog-uri "$OVERTURE_STAC_CATALOG_URI" 2>&1 | tee -a reconcile.log
+            code=${PIPESTATUS[0]}
+            if [ "$code" != 5 ] || [ "$attempt" -eq 3 ]; then
+              break
+            fi
+            echo "::warning::post-apply validate attempt ${attempt} exited 5 (network/infra); backing off"
+            sleep $((attempt * 30))
+          done
         fi
+
         echo "exit_code=${code}" >> "$GITHUB_OUTPUT"
         echo "applied=${applied}" >> "$GITHUB_OUTPUT"
 
