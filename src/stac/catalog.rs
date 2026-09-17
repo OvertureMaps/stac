@@ -581,9 +581,13 @@ pub async fn build_top_catalog(
     let manifest = registry::create_manifest(bucket)
         .await
         .context("scanning registry manifest")?;
+    let registry_path = bucket
+        .as_s3()
+        .map(|name| format!("s3://{name}/registry"))
+        .unwrap_or_else(|| format!("{}/registry", bucket.name));
     top.additional_fields.insert(
         "registry".into(),
-        json!({"path": "s3://overturemaps-us-west-2/registry", "manifest": manifest}),
+        json!({"path": registry_path, "manifest": manifest}),
     );
 
     Ok(ReleaseCatalog {

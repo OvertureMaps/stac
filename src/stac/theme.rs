@@ -19,6 +19,12 @@ pub const ITEM_STAC_EXTENSIONS: &[&str] = &[
 
 pub const TABLE_EXTENSION: &str = "https://stac-extensions.github.io/table/v1.2.0/schema.json";
 
+/// Overture's Azure mirror is only maintained for the canonical prod S3
+/// bucket. We only emit `azure`-flavored assets/schemes when the CLI is
+/// running against that specific bucket; otherwise the mirror doesn't exist.
+const PROD_S3_BUCKET: &str = "overturemaps-us-west-2";
+const PROD_AZURE_ACCOUNT: &str = "overturemapswestus2";
+
 pub fn type_license(type_name: &str) -> Option<&'static str> {
     match type_name {
         "bathymetry" => Some("CC0-1.0"),
@@ -204,69 +210,90 @@ async fn process_type(
         let props = &mut item.properties.additional_fields;
         props.insert("num_rows".into(), json!(fragment.num_rows));
         props.insert("num_row_groups".into(), json!(fragment.num_row_groups));
-        props.insert(
-            "storage:schemes".into(),
-            json!({
-                "aws": {
+
+        // Storage schemes + cloud-specific assets are derived from the data
+        // bucket URI so a non-prod `--data-uri` produces coherent hrefs. Azure
+        // is a separate mirror only maintained for the prod S3 bucket — emit
+        // it only when we're running against that specific bucket.
+        let s3_bucket = bucket.as_s3();
+        let is_prod_s3 = s3_bucket == Some(PROD_S3_BUCKET);
+        let region = std::env::var("AWS_REGION").unwrap_or_else(|_| "us-west-2".to_string());
+
+        let mut schemes = JsonMap::new();
+        if let Some(bucket_name) = s3_bucket {
+            schemes.insert(
+                "aws".into(),
+                json!({
                     "type": "aws-s3",
                     "platform": "https://{bucket}.s3.{region}.amazonaws.com",
-                    "bucket": "overturemaps-us-west-2",
-                    "region": "us-west-2",
+                    "bucket": bucket_name,
+                    "region": region,
                     "requester_pays": false,
-                },
-                "azure": {
+                }),
+            );
+        }
+        if is_prod_s3 {
+            schemes.insert(
+                "azure".into(),
+                json!({
                     "type": "ms-azure",
                     "platform": "https://{account}.blob.core.windows.net",
-                    "account": "overturemapswestus2",
+                    "account": PROD_AZURE_ACCOUNT,
                     "requester_pays": false,
-                },
-            }),
-        );
+                }),
+            );
+        }
+        if !schemes.is_empty() {
+            props.insert("storage:schemes".into(), Value::Object(schemes));
+        }
         item.properties.datetime = Some(release_datetime);
 
-        // Assets
-        let mut aws_asset = stac::Asset::new(format!(
-            "https://overturemaps-us-west-2.s3.us-west-2.amazonaws.com/{rel_path}"
-        ));
-        aws_asset.r#type = Some("application/vnd.apache.parquet".into());
-        aws_asset.title = Some("GeoParquet on AWS S3".into());
-        aws_asset.description = Some(
-            "Zstd-compressed GeoParquet in the overturemaps-us-west-2 bucket, served over HTTPS."
-                .into(),
-        );
-        aws_asset.roles = vec!["data".into()];
-        aws_asset
-            .additional_fields
-            .insert("storage:refs".into(), json!(["aws"]));
-        aws_asset
-            .additional_fields
-            .insert("alternate:name".into(), json!("HTTPS"));
-        aws_asset.additional_fields.insert(
-            "alternate".into(),
-            json!({
-                "s3": {
-                    "href": format!("s3://overturemaps-us-west-2/{}", fragment.path),
-                    "alternate:name": "S3",
-                    "description": "Access the files via regular Amazon AWS S3 tooling.",
-                    "roles": ["data"],
-                }
-            }),
-        );
-        item.assets.insert("aws".into(), aws_asset);
+        // Assets — aws for any s3 bucket, azure only for the prod mirror.
+        if let Some(bucket_name) = s3_bucket {
+            let mut aws_asset = stac::Asset::new(format!(
+                "https://{bucket_name}.s3.{region}.amazonaws.com/{rel_path}"
+            ));
+            aws_asset.r#type = Some("application/vnd.apache.parquet".into());
+            aws_asset.title = Some("GeoParquet on AWS S3".into());
+            aws_asset.description = Some(format!(
+                "Zstd-compressed GeoParquet in the {bucket_name} bucket, served over HTTPS."
+            ));
+            aws_asset.roles = vec!["data".into()];
+            aws_asset
+                .additional_fields
+                .insert("storage:refs".into(), json!(["aws"]));
+            aws_asset
+                .additional_fields
+                .insert("alternate:name".into(), json!("HTTPS"));
+            aws_asset.additional_fields.insert(
+                "alternate".into(),
+                json!({
+                    "s3": {
+                        "href": format!("s3://{bucket_name}/{}", fragment.path),
+                        "alternate:name": "S3",
+                        "description": "Access the files via regular Amazon AWS S3 tooling.",
+                        "roles": ["data"],
+                    }
+                }),
+            );
+            item.assets.insert("aws".into(), aws_asset);
+        }
 
-        let mut azure_asset = stac::Asset::new(format!(
-            "https://overturemapswestus2.blob.core.windows.net/{rel_path}"
-        ));
-        azure_asset.r#type = Some("application/vnd.apache.parquet".into());
-        azure_asset.title = Some("GeoParquet on Azure Blob Storage".into());
-        azure_asset.description = Some(
-            "Zstd-compressed GeoParquet in the overturemapswestus2 storage account (West US 2), served over HTTPS.".into(),
-        );
-        azure_asset.roles = vec!["data".into()];
-        azure_asset
-            .additional_fields
-            .insert("storage:refs".into(), json!(["azure"]));
-        item.assets.insert("azure".into(), azure_asset);
+        if is_prod_s3 {
+            let mut azure_asset = stac::Asset::new(format!(
+                "https://{PROD_AZURE_ACCOUNT}.blob.core.windows.net/{rel_path}"
+            ));
+            azure_asset.r#type = Some("application/vnd.apache.parquet".into());
+            azure_asset.title = Some("GeoParquet on Azure Blob Storage".into());
+            azure_asset.description = Some(format!(
+                "Zstd-compressed GeoParquet in the {PROD_AZURE_ACCOUNT} storage account (West US 2), served over HTTPS."
+            ));
+            azure_asset.roles = vec!["data".into()];
+            azure_asset
+                .additional_fields
+                .insert("storage:refs".into(), json!(["azure"]));
+            item.assets.insert("azure".into(), azure_asset);
+        }
 
         manifest_items.push(json!({
             "type": "Feature",

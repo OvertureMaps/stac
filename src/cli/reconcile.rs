@@ -298,12 +298,19 @@ async fn apply_diff(
     let manifest = registry::create_manifest(data_bucket)
         .await
         .context("refreshing registry manifest")?;
+    let registry_path = format!(
+        "{}/registry",
+        data_bucket
+            .as_s3()
+            .map(|name| format!("s3://{name}"))
+            .unwrap_or_else(|| data_bucket.name.clone())
+    );
     root.as_object_mut()
         .ok_or_else(|| Error::MalformedCatalog("root is not a JSON object".into()))?
         .insert(
             "registry".into(),
             json!({
-                "path": "s3://overturemaps-us-west-2/registry",
+                "path": registry_path,
                 "manifest": manifest,
             }),
         );

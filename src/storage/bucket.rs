@@ -26,6 +26,12 @@ pub struct Bucket {
     /// this on auth-flavored errors — the common case is a stale SSO token in
     /// a developer's shell against the (public) Overture buckets.
     pub anonymous_fallback: Option<Arc<dyn ObjectStore>>,
+    /// URI scheme (`s3`, `gs`, `az`, `file`, ...). Used to route asset-href
+    /// emission — an `s3://` bucket gets aws-flavored hrefs, everything else
+    /// skips cloud-specific asset URLs.
+    pub scheme: String,
+    /// Bucket name / host portion of the URI. For `s3://foo` this is `"foo"`.
+    /// For `file:///tmp/x` this falls back to the full URI (host is empty).
     pub name: String,
 }
 
@@ -94,6 +100,7 @@ impl Bucket {
         Ok(Bucket {
             store,
             anonymous_fallback,
+            scheme: url.scheme().to_string(),
             name,
         })
     }
@@ -102,7 +109,19 @@ impl Bucket {
         Self {
             store: Arc::clone(&self.store),
             anonymous_fallback: self.anonymous_fallback.clone(),
+            scheme: self.scheme.clone(),
             name: self.name.clone(),
+        }
+    }
+
+    /// Bucket name if this is an `s3://` bucket, else `None`. Callers that emit
+    /// aws-flavored asset hrefs use this to skip cleanly when the CLI runs
+    /// against a non-S3 URI (`file://`, `gs://`, ...).
+    pub fn as_s3(&self) -> Option<&str> {
+        if self.scheme == "s3" {
+            Some(&self.name)
+        } else {
+            None
         }
     }
 
