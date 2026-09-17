@@ -17,7 +17,7 @@ use std::collections::BTreeMap;
 use std::path::Path;
 use std::sync::{Arc, OnceLock};
 
-use crate::stac::theme::{process_theme, ThemeResult, ITEM_STAC_EXTENSIONS};
+use crate::stac::theme::{process_theme, ThemeResult};
 use crate::stac::{pmtiles, registry};
 use crate::storage::{list_top_level, Bucket};
 use crate::{Error, Result, ResultExt};
@@ -142,7 +142,10 @@ pub async fn build_single_release(
         format!("Geoparquet data released in the Overture {release} release"),
     );
     catalog.title = Some(title.to_string());
-    catalog.extensions = ITEM_STAC_EXTENSIONS.iter().map(|s| s.to_string()).collect();
+    // No stac_extensions here: storage/alternate-assets fields are only used at
+    // the item level, and declaring them on this Catalog without also carrying
+    // e.g. `storage:schemes` puts the doc outside the extension's Catalog oneOf
+    // branch. Extensions belong where their fields actually appear.
     catalog
         .additional_fields
         .insert("release:version".into(), json!(release));
@@ -557,10 +560,12 @@ pub async fn build_top_catalog(
         .await?;
         link_neighbor_releases(&mut child, ids, root_href);
         if idx == 0 {
-            child
-                .catalog
-                .additional_fields
-                .insert("latest".into(), json!(true));
+            // Signal "this is the latest release" only on the parent's rel:child
+            // link — clients scanning the root's links can filter by this. Do NOT
+            // stamp `latest: true` on the child catalog's own top-level: that's
+            // redundant (the client already asked for this specific release) and
+            // not defined by any STAC extension we declare, so strict validators
+            // reject it.
             child
                 .extra_child_fields
                 .insert("latest".into(), json!(true));
