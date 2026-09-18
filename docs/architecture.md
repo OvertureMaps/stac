@@ -22,8 +22,6 @@ A run has three stages, always in this order:
 
 The build stage runs unauthenticated: it only reads public data and needs no AWS credentials. Publishing is where the workflow needs to touch two separate AWS accounts, which is the part worth understanding before changing anything here.
 
-For a map of the crate itself (modules, data flow inside `build`, concurrency), see [`crate-architecture.md`](./crate-architecture.md).
-
 ## Why two AWS accounts
 
 The bucket that serves `stac.overturemaps.org` and the CloudFront distribution in front of it live in different AWS accounts, split along Overture's existing account boundaries rather than anything specific to this workflow:

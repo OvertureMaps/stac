@@ -5,7 +5,6 @@
 `overture-stac` generates, validates, and reconciles the STAC catalog for public [Overture Maps](https://overturemaps.org) releases. It ships as a Rust CLI, with Python bindings for calling the same core from Python.
 
 - [`docs/architecture.md`](./docs/architecture.md) — how the production catalog gets built and published.
-- [`docs/crate-architecture.md`](./docs/crate-architecture.md) — module tree, data flow, and concurrency model of the crate itself.
 
 **[Browse the catalog](https://radiantearth.github.io/stac-browser/#/external/stac.overturemaps.org/catalog.json?.language=en)**
 
