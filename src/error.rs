@@ -54,9 +54,6 @@ pub enum Error {
     },
 
     // ─── Domain-specific variants ───────────────────────────────────────────
-    #[error("--schema-version is required when --release-version is provided")]
-    SchemaVersionRequired,
-
     #[error("--release-version must be in format YYYY-MM-DD.N (got: {0})")]
     InvalidReleaseVersion(String),
 
@@ -108,8 +105,7 @@ impl Error {
         match self {
             Error::Context { source, .. } => source.exit_code(),
 
-            Error::SchemaVersionRequired
-            | Error::InvalidReleaseVersion(_)
+            Error::InvalidReleaseVersion(_)
             | Error::InvalidSchemaVersion(_)
             | Error::InvalidValidateUrl(_)
             | Error::UrlParse(_) => 2,

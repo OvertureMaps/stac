@@ -110,15 +110,6 @@ fn build_help_lists_all_flags() {
 }
 
 #[test]
-fn release_without_schema_is_rejected() {
-    cli()
-        .args(["build", "--release-version", "2026-07-22.0"])
-        .assert()
-        .failure()
-        .stderr(predicate::str::contains("--schema-version is required"));
-}
-
-#[test]
 fn malformed_release_is_rejected() {
     cli()
         .args([
