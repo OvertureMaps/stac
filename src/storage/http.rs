@@ -54,9 +54,7 @@ pub async fn fetch_schema_version(
 /// Resolve `schema:version` by finding the `v<semver>` tag
 /// that is currently coupled with the `data-<release_id>` tag on GitHub.
 /// This allows to map a schema version to the corresponding release version
-pub async fn resolve_schema_version_from_github(
-    release_id: &str,
-) -> Result<Option<String>> {
+pub async fn resolve_schema_version_from_github(release_id: &str) -> Result<Option<String>> {
     let tags = fetch_all_schema_tags().await?;
 
     let data_tag = format!("data-{release_id}");

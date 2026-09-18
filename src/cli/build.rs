@@ -134,11 +134,7 @@ pub async fn run(args: BuildArgs) -> Result<()> {
 
 /// Regenerate the root `catalog.json` from the release dirs currently in
 /// `output`, plus the registry manifest from `bucket`. Idempotent.
-async fn write_root(
-    output: &std::path::Path,
-    root_href: &str,
-    bucket: &Bucket,
-) -> Result<()> {
+async fn write_root(output: &std::path::Path, root_href: &str, bucket: &Bucket) -> Result<()> {
     // YYYY-MM-DD.N sorts lexicographically = chronologically, newest first.
     let mut releases: Vec<String> = std::fs::read_dir(output)
         .with_context(|| format!("listing {}", output.display()))?

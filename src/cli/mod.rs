@@ -63,15 +63,17 @@ pub(crate) async fn run_validation(dir: &std::path::Path, json: bool) -> Result<
 
 /// Primary: parquet fragment metadata. Fallback: sibling tag on
 /// OvertureMaps/schema. Returns `""` if both miss.
-pub(crate) async fn resolve_release_schema_version(
-    release: &str,
-) -> String {
+pub(crate) async fn resolve_release_schema_version(release: &str) -> String {
     // TODO: prefer parquet metadata to obtain the schema:version once available.
     // Fallback to GitHub tag lookup.
     resolve_schema_version_from_github(release)
         .await
         .unwrap_or_else(|err| {
-            tracing::warn!(release, ?err, "GitHub schema:version lookup failed; leaving null");
+            tracing::warn!(
+                release,
+                ?err,
+                "GitHub schema:version lookup failed; leaving null"
+            );
             None
         })
         .unwrap_or_default()
