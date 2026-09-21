@@ -70,7 +70,7 @@ jobs:
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Sync release to S3
-        uses: OvertureMaps/workflows/.github/actions/s5cmd@main
+        uses: OvertureMaps/workflows/.github/actions/s5cmd@main # zizmor: ignore[unpinned-uses]
         with:
           command: sync
           flags: --delete
