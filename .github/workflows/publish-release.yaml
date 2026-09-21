@@ -1,0 +1,90 @@
+---
+# Publishes a single Overture release to the production STAC catalog. Builds the
+# catalog for the requested release, syncs it to s3://overturemaps-extras-us-west-2/stac/<release>/,
+# and invalidates CloudFront for that release path only. Top-level catalog nav is left to the
+# hourly reconcile workflow.
+name: Publish Release
+run-name: Publish ${{ inputs.release_version }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_version:
+        description: Release identifier (YYYY-MM-DD.N, e.g. 2026-07-22.0).
+        required: true
+        type: string
+      schema_version:
+        description: Overture schema version for this release (e.g. 1.17.0). Leave blank to omit.
+        required: false
+        type: string
+
+permissions: {}
+
+env:
+  AWS_REGION: us-west-2
+  STAC_PUBLISH_ROLE_ARN: arn:aws:iam::913550007193:role/stac-publish-oidc-overturemaps
+  CLOUDFRONT_INVALIDATOR_ROLE_ARN: arn:aws:iam::763944545891:role/cloudfront-invalidator
+  CLOUDFRONT_DISTRIBUTION_ID: E209PEWSOCNO5D
+  CATALOG_OUTPUT_DIR: public_releases
+  S3_DEST: s3://overturemaps-extras-us-west-2/stac
+
+jobs:
+  publish:
+    name: Publish
+    if: github.ref == 'refs/heads/main'
+    environment: manual-publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: main
+          persist-credentials: false
+
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+        with:
+          key: publish-release
+
+      - name: Build STAC catalog for release
+        env:
+          RELEASE_VERSION: ${{ inputs.release_version }}
+          SCHEMA_VERSION: ${{ inputs.schema_version }}
+        run: |
+          args=(build --release-version "$RELEASE_VERSION" --validate --output "$CATALOG_OUTPUT_DIR")
+          if [ -n "$SCHEMA_VERSION" ]; then
+            args+=(--schema-version "$SCHEMA_VERSION")
+          fi
+          cargo run --release -- "${args[@]}"
+
+      - name: Configure AWS credentials (bucket write)
+        uses: aws-actions/configure-aws-credentials@cbe3b392738ccf3f987d68400dafcf4b0624a56c # v6.2.4
+        with:
+          role-to-assume: ${{ env.STAC_PUBLISH_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Sync release to S3
+        uses: OvertureMaps/workflows/.github/actions/s5cmd@main # zizmor: ignore[unpinned-uses] intentionally track main
+        with:
+          command: sync
+          flags: --delete
+          source: ${{ env.CATALOG_OUTPUT_DIR }}/${{ inputs.release_version }}/
+          destination: ${{ env.S3_DEST }}/${{ inputs.release_version }}/
+
+      - name: Configure AWS credentials (CloudFront invalidation, cross-account)
+        uses: aws-actions/configure-aws-credentials@cbe3b392738ccf3f987d68400dafcf4b0624a56c # v6.2.4
+        with:
+          role-to-assume: ${{ env.CLOUDFRONT_INVALIDATOR_ROLE_ARN }}
+          role-chaining: true
+          role-skip-session-tagging: true # stac-publish-oidc-overturemaps lacks sts:TagSession on cloudfront-invalidator; nothing consumes session tags here
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Bust CloudFront cache for release path
+        env:
+          RELEASE_VERSION: ${{ inputs.release_version }}
+        run: |
+          aws cloudfront create-invalidation \
+            --distribution-id "$CLOUDFRONT_DISTRIBUTION_ID" \
+            --paths "/${RELEASE_VERSION}/*"
