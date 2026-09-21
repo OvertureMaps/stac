@@ -28,6 +28,10 @@ env:
   CATALOG_OUTPUT_DIR: public_releases
   S3_DEST: s3://overturemaps-extras-us-west-2/stac
 
+concurrency:
+  group: publish-release-${{ inputs.release_version }}
+  cancel-in-progress: false
+
 jobs:
   publish:
     name: Publish
