@@ -19,8 +19,8 @@ use overture_stac::storage::{
 use overture_stac::{Error, Result, ResultExt};
 
 use super::{
-    default_concurrency, run_validation, PROD_CATALOG_URI, PROD_DATA_URI, PROD_EXTRAS_URI,
-    PROD_ROOT_HREF,
+    default_concurrency, resolve_release_schema_version, run_validation, PROD_CATALOG_URI,
+    PROD_DATA_URI, PROD_EXTRAS_URI, PROD_ROOT_HREF,
 };
 
 #[derive(clap::Args, Debug)]
@@ -249,11 +249,12 @@ async fn apply_diff(
         println!("+ adding {release}");
         let temp = tempfile::tempdir().context("creating temp dir for release build")?;
         let title = format!("{release} Overture Release");
+        let schema_version = resolve_release_schema_version(release).await;
         let release_catalog = build_single_release(
             data_bucket,
             extras_bucket,
             release,
-            "",
+            &schema_version,
             &title,
             false,
             concurrency,

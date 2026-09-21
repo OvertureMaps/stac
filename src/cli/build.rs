@@ -5,13 +5,16 @@ use std::path::PathBuf;
 use regex::Regex;
 
 use overture_stac::stac::{
-    build_single_release, build_top_catalog, link_neighbor_releases, list_release_ids,
-    save_absolute_published, validate_release_id,
+    build_single_release, build_top_catalog, link_neighbor_releases, list_release_ids, registry,
+    save_absolute_published, stamp_vcs, validate_release_id,
 };
 use overture_stac::storage::Bucket;
 use overture_stac::{Error, Result, ResultExt};
 
-use super::{default_concurrency, run_validation, PROD_DATA_URI, PROD_EXTRAS_URI, PROD_ROOT_HREF};
+use super::{
+    default_concurrency, resolve_release_schema_version, run_validation, PROD_DATA_URI,
+    PROD_EXTRAS_URI, PROD_ROOT_HREF,
+};
 
 #[derive(clap::Args, Debug)]
 pub struct BuildArgs {
@@ -39,7 +42,9 @@ pub struct BuildArgs {
     #[arg(long = "release-version")]
     release_version: Option<String>,
 
-    /// Schema version for the release (e.g. 1.17.0). Required when --release-version is provided.
+    /// Schema version for the release (e.g. 1.17.0). Optional; when omitted,
+    /// resolved from parquet metadata (once stamped) or a paired tag on
+    /// OvertureMaps/schema. Left null when neither source has a match.
     #[arg(long = "schema-version")]
     schema_version: Option<String>,
 
@@ -56,10 +61,6 @@ pub struct BuildArgs {
 pub async fn run(args: BuildArgs) -> Result<()> {
     let root_href = args.root_href.trim_end_matches('/').to_string();
     let concurrency = args.concurrency.unwrap_or_else(default_concurrency);
-
-    if args.release_version.is_some() && args.schema_version.is_none() {
-        return Err(Error::SchemaVersionRequired);
-    }
 
     if let Some(r) = &args.release_version {
         validate_release_id(r)?;
@@ -82,7 +83,10 @@ pub async fn run(args: BuildArgs) -> Result<()> {
     };
 
     if let Some(release) = args.release_version {
-        let schema = args.schema_version.unwrap();
+        let schema = match args.schema_version {
+            Some(s) => s,
+            None => resolve_release_schema_version(&release).await,
+        };
         let title = format!("{release} Overture Release");
 
         let mut catalog = build_single_release(
@@ -105,6 +109,7 @@ pub async fn run(args: BuildArgs) -> Result<()> {
         if args.validate {
             run_validation(&dest, false).await?;
         }
+        write_root(&args.output, &root_href, &bucket).await?;
         return Ok(());
     }
 
@@ -124,5 +129,84 @@ pub async fn run(args: BuildArgs) -> Result<()> {
     if args.validate {
         run_validation(&args.output, false).await?;
     }
+    Ok(())
+}
+
+/// Regenerate the root `catalog.json` from the release dirs currently in
+/// `output`, plus the registry manifest from `bucket`. Idempotent.
+async fn write_root(output: &std::path::Path, root_href: &str, bucket: &Bucket) -> Result<()> {
+    // YYYY-MM-DD.N sorts lexicographically = chronologically, newest first.
+    let mut releases: Vec<String> = std::fs::read_dir(output)
+        .with_context(|| format!("listing {}", output.display()))?
+        .filter_map(|e| e.ok())
+        .filter(|e| e.file_type().map(|t| t.is_dir()).unwrap_or(false))
+        .map(|e| e.file_name().to_string_lossy().into_owned())
+        .filter(|n| validate_release_id(n).is_ok())
+        .collect();
+    releases.sort_by(|a, b| b.cmp(a));
+
+    let self_href = format!("{root_href}/catalog.json");
+    let mut links = vec![serde_json::json!({
+        "rel": "root",
+        "href": self_href,
+        "type": "application/json",
+        "title": "Overture Releases",
+    })];
+    for (idx, r) in releases.iter().enumerate() {
+        let mut link = serde_json::json!({
+            "rel": "child",
+            "href": format!("{root_href}/{r}/catalog.json"),
+            "type": "application/json",
+            "title": if idx == 0 {
+                "Latest Overture Release".to_string()
+            } else {
+                format!("{r} Overture Release")
+            },
+        });
+        if idx == 0 {
+            link.as_object_mut()
+                .expect("json literal")
+                .insert("latest".into(), serde_json::json!(true));
+        }
+        links.push(link);
+    }
+    links.push(serde_json::json!({
+        "rel": "self",
+        "href": self_href,
+        "type": "application/json",
+    }));
+
+    let mut root = serde_json::json!({
+        "type": "Catalog",
+        "id": "Overture Releases",
+        "title": "Overture Releases",
+        "description": "All Overture Releases",
+        "stac_version": "1.1.0",
+        "links": links,
+    });
+    if let Some(latest) = releases.first() {
+        root.as_object_mut()
+            .expect("json literal")
+            .insert("latest".into(), serde_json::json!(latest));
+    }
+
+    let manifest = registry::create_manifest(bucket)
+        .await
+        .context("scanning registry manifest")?;
+    let registry_path = bucket
+        .as_s3()
+        .map(|name| format!("s3://{name}/registry"))
+        .unwrap_or_else(|| format!("{}/registry", bucket.name));
+    root.as_object_mut().expect("json literal").insert(
+        "registry".into(),
+        serde_json::json!({ "path": registry_path, "manifest": manifest }),
+    );
+
+    stamp_vcs(&mut root)?;
+
+    let root_path = output.join("catalog.json");
+    let bytes = serde_json::to_vec_pretty(&root).context("serializing root catalog")?;
+    std::fs::write(&root_path, bytes)
+        .with_context(|| format!("writing {}", root_path.display()))?;
     Ok(())
 }
