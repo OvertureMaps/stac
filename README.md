@@ -1,6 +1,7 @@
 # Overture STAC
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Publish Release](https://github.com/OvertureMaps/stac/actions/workflows/publish-release.yaml/badge.svg)](https://github.com/OvertureMaps/stac/actions/workflows/publish-release.yaml)
 
 `overture-stac` generates, validates, and reconciles the STAC catalog for public [Overture Maps](https://overturemaps.org) releases. It ships as a Rust CLI, with Python bindings for calling the same core from Python.
 
