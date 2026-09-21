@@ -55,7 +55,10 @@ pub async fn fetch_schema_version(
 /// that is currently coupled with the `data-<release_id>` tag on GitHub.
 /// This allows to map a schema version to the corresponding release version
 pub async fn resolve_schema_version_from_github(release_id: &str) -> Result<Option<String>> {
-    let tags = fetch_all_schema_tags().await?;
+    static TAG_CACHE: LazyLock<tokio::sync::OnceCell<HashMap<String, String>>> =
+        LazyLock::new(tokio::sync::OnceCell::new);
+
+    let tags = TAG_CACHE.get_or_try_init(fetch_all_schema_tags).await?;
 
     let data_tag = format!("data-{release_id}");
     let Some(data_sha) = tags.get(&data_tag) else {
