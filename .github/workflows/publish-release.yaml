@@ -6,7 +6,7 @@
 name: Publish Release
 run-name: Publish ${{ inputs.release_version }}
 
-on:
+on: # zizmor: ignore[concurrency-limits] single monthly caller with no collision surface
   workflow_dispatch:
     inputs:
       release_version:
@@ -37,7 +37,7 @@ jobs:
     timeout-minutes: 45
     permissions:
       contents: read
-      id-token: write
+      id-token: write # OIDC token exchange with AWS
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
