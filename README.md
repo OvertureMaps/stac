@@ -1,11 +1,10 @@
-# Overture STAC (Rust)
+# Overture STAC
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-`overture-stac` generates the STAC catalog for public Overture Maps releases. Rust CLI plus Python bindings backed by the same core.
+`overture-stac` generates, validates, and reconciles the STAC catalog for public [Overture Maps](https://overturemaps.org) releases. It ships as a Rust CLI, with Python bindings for calling the same core from Python.
 
 - [`docs/architecture.md`](./docs/architecture.md) — how the production catalog gets built and published.
-- [`docs/crate-architecture.md`](./docs/crate-architecture.md) — module tree, data flow, and concurrency model of the crate itself.
 
 **[Browse the catalog](https://radiantearth.github.io/stac-browser/#/external/stac.overturemaps.org/catalog.json?.language=en)**
 
@@ -97,16 +96,3 @@ Route a specific target with the usual `logging.getLogger("overture_stac.stac.th
 ## Development
 
 A [`justfile`](./justfile) collects the common commands. Install [just](https://github.com/casey/just) with `brew install just` and run `just` to see recipes. `just check` runs `cargo fmt --check`, `cargo clippy`, and `cargo test`, the same checks CI would run.
-
-## Parity strategy
-
-Semantic parity with the Python `gen-stac` CLI, not byte-identical. Field order and whitespace follow the `stac` crate's Serialize impls, which differ from `pystac`'s output. Content matches: same catalog/collection/item structure, same items, same asset hrefs, same extension fields.
-
-- Catalog/Collection/Item modeled via the `stac` crate (`Catalog`, `Collection`, `Item`, `Link`, `Asset`, `Bbox`, `Extent`).
-- OMF-specific extension fields (`storage:schemes`, `table:columns`, `release:version`, etc.) live in `additional_fields`.
-- `collections.parquet` written via `stac`'s `geoparquet` feature (`ItemCollection::into_geoparquet_path`).
-- Parquet fragment metadata read via `object_store` + `parquet::ParquetMetaDataReader::load_via_suffix_and_finish`: one ranged suffix GET per fragment, no HEAD.
-
-## Verify against the Python implementation
-
-Check out the Python implementation from `main` in a sibling directory to compare outputs. See the PR that introduced this branch ([#101](https://github.com/OvertureMaps/stac/pull/101)) for the compare harness and results (4.2× faster, 996/996 semantic parity on `2026-07-22.0`).
