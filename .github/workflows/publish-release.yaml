@@ -66,7 +66,7 @@ jobs:
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Sync release to S3
-        uses: OvertureMaps/workflows/.github/actions/s5cmd@main # zizmor: ignore[unpinned-uses] intentionally track main
+        uses: OvertureMaps/workflows/.github/actions/s5cmd@ddc42be1d93c397f4ed87198424727637ed0d777 # main @ 2026-09-15 — pinned so a compromised main can't run with prod bucket-write creds
         with:
           command: sync
           flags: --delete
