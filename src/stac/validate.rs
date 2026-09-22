@@ -189,12 +189,16 @@ pub async fn validate_catalog(
     use futures::stream::{StreamExt, TryStreamExt};
     let dir_owned = dir.to_path_buf();
     let base_arc = Arc::new(base_url);
+    let root_arc = Arc::new(root_path);
 
     let per_file: Vec<Vec<Failure>> = futures::stream::iter(files.into_iter().map(|file| {
         let validator = validator.clone();
         let dir = dir_owned.clone();
         let base = Arc::clone(&base_arc);
-        async move { check_local_file(&file, validator.as_deref(), &dir, &base, options).await }
+        let root = Arc::clone(&root_arc);
+        async move {
+            check_local_file(&file, validator.as_deref(), &dir, &base, &root, options).await
+        }
     }))
     .buffer_unordered(concurrency.max(1))
     .try_collect()
@@ -212,6 +216,7 @@ async fn check_local_file(
     validator: Option<&Mutex<Validator>>,
     root_dir: &Path,
     base_url: &str,
+    root_file: &Path,
     options: ValidateOptions,
 ) -> Result<Vec<Failure>> {
     let bytes = std::fs::read(file).with_context(|| format!("reading {}", file.display()))?;
@@ -222,7 +227,9 @@ async fn check_local_file(
     let mut out = Vec::new();
 
     if let (true, Some(v)) = (options.check_schema, validator) {
-        out.extend(run_schema_check(&location, &value, v).await);
+        if file != root_file {
+            out.extend(run_schema_check(&location, &value, v).await);
+        }
     }
     if options.check_links {
         for href in all_hrefs(&value) {
@@ -375,8 +382,10 @@ async fn finalize_report(
             let validator = validator.clone();
             let base = Arc::clone(&base_arc);
             let seen = Arc::clone(&seen_arc);
+            let is_root = url == root_url;
             async move {
-                check_remote_doc(url, value, validator.as_deref(), &base, &seen, options).await
+                check_remote_doc(url, value, validator.as_deref(), &base, &seen, is_root, options)
+                    .await
             }
         }))
         .buffer_unordered(concurrency)
@@ -399,12 +408,15 @@ async fn check_remote_doc(
     validator: Option<&Mutex<Validator>>,
     base_url: &str,
     seen: &HashSet<String>,
+    is_root: bool,
     options: ValidateOptions,
 ) -> Result<Vec<Failure>> {
     let mut out = Vec::new();
 
     if let (true, Some(v)) = (options.check_schema, validator) {
-        out.extend(run_schema_check(&url, &value, v).await);
+        if !is_root {
+            out.extend(run_schema_check(&url, &value, v).await);
+        }
     }
     if options.check_links {
         for href in all_hrefs(&value) {
