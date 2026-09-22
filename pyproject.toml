@@ -41,6 +41,6 @@ strip = true
 [dependency-groups]
 dev = [
     "maturin>=1.15.0,<2.0",
-    "pytest>=8",
+    "pytest>=9.1.1",
     "pytest-asyncio>=1.4.0",
 ]
