@@ -222,26 +222,32 @@ async fn spawn_theme(
     process_theme(&bucket, &theme_path, &release, debug, release_dt, &pmtiles).await
 }
 
-pub fn link_neighbor_releases(catalog: &mut ReleaseCatalog, all_ids: &[String], root_href: &str) {
-    let id = catalog.catalog.id.clone();
-    let Some(idx) = all_ids.iter().position(|x| *x == id) else {
-        return;
+/// `all_ids` must be newest-first (per `list_release_ids`).
+pub fn compute_neighbor_links(id: &str, all_ids: &[String], root_href: &str) -> Vec<Link> {
+    let Some(idx) = all_ids.iter().position(|x| x == id) else {
+        return Vec::new();
     };
-    let root = root_href.trim_end_matches('/').to_string();
+    let root = root_href.trim_end_matches('/');
+    let mut out = Vec::new();
     if idx > 0 {
         let newer = &all_ids[idx - 1];
         let mut l = Link::new(format!("{root}/{newer}/catalog.json"), "next");
         l.r#type = Some("application/json".into());
         l.title = Some(format!("{newer} Overture Release"));
-        catalog.neighbor_links.push(l);
+        out.push(l);
     }
     if idx < all_ids.len() - 1 {
         let older = &all_ids[idx + 1];
         let mut l = Link::new(format!("{root}/{older}/catalog.json"), "prev");
         l.r#type = Some("application/json".into());
         l.title = Some(format!("{older} Overture Release"));
-        catalog.neighbor_links.push(l);
+        out.push(l);
     }
+    out
+}
+
+pub fn link_neighbor_releases(catalog: &mut ReleaseCatalog, all_ids: &[String], root_href: &str) {
+    catalog.neighbor_links = compute_neighbor_links(&catalog.catalog.id, all_ids, root_href);
 }
 
 /// Save a ReleaseCatalog (or top-level Overture Releases catalog) under `dest`, using

@@ -16,8 +16,8 @@ pub mod theme;
 pub mod validate;
 
 pub use catalog::{
-    build_single_release, build_top_catalog, link_neighbor_releases, list_release_ids,
-    save_absolute_published, validate_release_id, ReleaseCatalog,
+    build_single_release, build_top_catalog, compute_neighbor_links, link_neighbor_releases,
+    list_release_ids, save_absolute_published, validate_release_id, ReleaseCatalog,
 };
 pub use root::{
     add_child_link, build_empty_root, children_from_root, read_catalog_children,

@@ -10,11 +10,12 @@ use serde_json::json;
 use overture_stac::stac::registry;
 use overture_stac::stac::{add_child_link, build_empty_root, remove_child_link};
 use overture_stac::stac::{
-    build_single_release, children_from_root, list_release_ids, read_catalog_children,
-    save_absolute_published, stamp_vcs, validate_catalog_uri, ValidateOptions,
+    build_single_release, children_from_root, compute_neighbor_links, list_release_ids,
+    read_catalog_children, save_absolute_published, stamp_vcs, validate_catalog_uri,
+    ValidateOptions,
 };
 use overture_stac::storage::{
-    delete_prefix, get_json_optional, put_json, upload_directory, Bucket,
+    delete_prefix, get_json, get_json_optional, put_json, upload_directory, Bucket,
 };
 use overture_stac::{Error, Result, ResultExt};
 
@@ -106,19 +107,39 @@ pub async fn run(args: ReconcileArgs) -> Result<()> {
     );
 
     if !args.apply {
-        if diff.is_empty() {
+        // A to-add release has no catalog.json yet, so scan only existing catalogs.
+        let root_href = args.root_href.trim_end_matches('/').to_string();
+        let scan_ids = sort_release_ids(&catalog_ids);
+        let expected_ids = sort_release_ids(&bucket_ids);
+        let stale =
+            find_stale_neighbors(&catalog_bucket, &scan_ids, &expected_ids, &root_href).await?;
+        for s in &stale {
+            println!("~ {} has stale prev/next links", s.release_id);
+        }
+
+        if diff.is_empty() && stale.is_empty() {
             println!("Catalog is in sync with the bucket.");
             Ok(())
         } else {
-            println!(
-                "Catalog drift: {} release(s) differ.",
-                diff.to_add.len() + diff.to_remove.len()
-            );
-            println!("Re-run with --apply to fix.");
+            let total = diff.to_add.len() + diff.to_remove.len() + stale.len();
+            println!("Catalog drift: {total} item(s) differ. Re-run with --apply to fix.");
             std::process::exit(10);
         }
     } else if diff.is_empty() {
-        println!("Catalog is in sync with the bucket. Nothing to apply.");
+        // Past purges may still have left stale prev/next; re-check even when in sync.
+        let root_href = args.root_href.trim_end_matches('/').to_string();
+        let sorted = sort_release_ids(&bucket_ids);
+        let stale = find_stale_neighbors(&catalog_bucket, &sorted, &sorted, &root_href).await?;
+        let mutated = !stale.is_empty();
+        if mutated {
+            apply_stale_neighbors(&catalog_bucket, stale).await?;
+            println!("Patched stale neighbour links.");
+        } else {
+            println!("Catalog is in sync with the bucket. Nothing to apply.");
+        }
+        if mutated && args.validate {
+            run_post_apply_validation(&args.catalog_uri).await?;
+        }
         Ok(())
     } else {
         let extras_bucket = if args.extras_uri.is_empty() {
@@ -146,25 +167,27 @@ pub async fn run(args: ReconcileArgs) -> Result<()> {
             args.catalog_uri
         );
         if args.validate {
-            // Pre-upload check only covered each new release's temp dir; it
-            // couldn't see the root catalog that apply_diff just mutated. Run
-            // the same three checks against the post-apply bucket state to
-            // close that gap.
-            println!();
-            println!("Validating post-apply bucket state...");
-            let report = validate_catalog_uri(
-                &args.catalog_uri,
-                default_concurrency(),
-                ValidateOptions::default(),
-            )
-            .await?;
-            report.print(false);
-            if !report.is_ok() {
-                return Err(Error::ValidationFailed(report.failures.len()));
-            }
+            run_post_apply_validation(&args.catalog_uri).await?;
         }
         Ok(())
     }
+}
+
+/// Bucket-mode check after mutation; pre-upload validation misses the mutated files.
+async fn run_post_apply_validation(catalog_uri: &str) -> Result<()> {
+    println!();
+    println!("Validating post-apply bucket state...");
+    let report = validate_catalog_uri(
+        catalog_uri,
+        default_concurrency(),
+        ValidateOptions::default(),
+    )
+    .await?;
+    report.print(false);
+    if !report.is_ok() {
+        return Err(Error::ValidationFailed(report.failures.len()));
+    }
+    Ok(())
 }
 
 fn print_diff_summary(
@@ -284,13 +307,16 @@ async fn apply_diff(
         println!("    uploaded {uploaded} object(s) + added child link");
     }
 
+    let current_children = children_from_root(&root);
+    let sorted = sort_release_ids(&current_children);
+
+    // Any add/remove shifts the surviving releases' prev/next.
+    reconcile_neighbor_links(catalog_bucket, &sorted, root_href).await?;
+
     // Post-pass: refresh `latest`, recompute the registry manifest (registry
     // parquet files get rewritten on release day, so this belongs on the same
     // apply that publishes the release), and stamp the VCS extension so anyone
     // reading the catalog can tell which build wrote it.
-    let current_children = children_from_root(&root);
-    let mut sorted = current_children.clone();
-    sorted.sort_by(|a, b| b.cmp(a));
     if let Some(latest) = sorted.first() {
         root.as_object_mut()
             .ok_or_else(|| Error::MalformedCatalog("root is not a JSON object".into()))?
@@ -318,5 +344,111 @@ async fn apply_diff(
     stamp_vcs(&mut root)?;
     put_json(catalog_bucket, root_key, &root).await?;
 
+    Ok(())
+}
+
+/// Reverse alphabetical works for `YYYY-MM-DD.N` release IDs.
+fn sort_release_ids(ids: &[String]) -> Vec<String> {
+    let mut out = ids.to_vec();
+    out.sort_by(|a, b| b.cmp(a));
+    out
+}
+
+struct StaleNeighbor {
+    release_id: String,
+    doc: serde_json::Value,
+    expected: Vec<stac::Link>,
+}
+
+/// `scan_ids` are what we read; `expected_ids` is what neighbours are computed against.
+async fn find_stale_neighbors(
+    catalog_bucket: &Bucket,
+    scan_ids: &[String],
+    expected_ids: &[String],
+    root_href: &str,
+) -> Result<Vec<StaleNeighbor>> {
+    let mut out = Vec::new();
+    for id in scan_ids {
+        let key = format!("{id}/catalog.json");
+        let doc = get_json(catalog_bucket, &key)
+            .await
+            .with_context(|| format!("reading {key} for neighbour-link check"))?;
+        let expected = compute_neighbor_links(id, expected_ids, root_href);
+        let actual = extract_neighbor_links(&doc);
+        if !links_equivalent(actual.as_deref(), &expected) {
+            out.push(StaleNeighbor {
+                release_id: id.clone(),
+                doc,
+                expected,
+            });
+        }
+    }
+    Ok(out)
+}
+
+async fn apply_stale_neighbors(catalog_bucket: &Bucket, stale: Vec<StaleNeighbor>) -> Result<()> {
+    for mut s in stale {
+        replace_neighbor_links(&mut s.doc, &s.expected)?;
+        let key = format!("{}/catalog.json", s.release_id);
+        put_json(catalog_bucket, &key, &s.doc)
+            .await
+            .with_context(|| format!("writing patched {key}"))?;
+        println!("~ patched neighbour links on {}", s.release_id);
+    }
+    Ok(())
+}
+
+async fn reconcile_neighbor_links(
+    catalog_bucket: &Bucket,
+    current_ids: &[String],
+    root_href: &str,
+) -> Result<()> {
+    let stale = find_stale_neighbors(catalog_bucket, current_ids, current_ids, root_href).await?;
+    apply_stale_neighbors(catalog_bucket, stale).await
+}
+
+/// `None` if any prev/next entry fails to deserialize (forces a rewrite).
+fn extract_neighbor_links(doc: &serde_json::Value) -> Option<Vec<stac::Link>> {
+    let Some(links) = doc.get("links").and_then(|v| v.as_array()) else {
+        return Some(Vec::new());
+    };
+    let mut out = Vec::new();
+    for raw in links {
+        let rel = raw.get("rel").and_then(|v| v.as_str());
+        if !matches!(rel, Some("prev") | Some("next")) {
+            continue;
+        }
+        out.push(serde_json::from_value::<stac::Link>(raw.clone()).ok()?);
+    }
+    Some(out)
+}
+
+/// Order-insensitive full-field equality (rel, href, type, title, ...).
+fn links_equivalent(actual: Option<&[stac::Link]>, expected: &[stac::Link]) -> bool {
+    let Some(actual) = actual else { return false };
+    if actual.len() != expected.len() {
+        return false;
+    }
+    actual.iter().all(|a| expected.iter().any(|e| e == a))
+}
+
+/// Preserves every non-prev/next link.
+fn replace_neighbor_links(doc: &mut serde_json::Value, new_links: &[stac::Link]) -> Result<()> {
+    let obj = doc
+        .as_object_mut()
+        .ok_or_else(|| Error::MalformedCatalog("release catalog is not a JSON object".into()))?;
+    let entry = obj.entry("links").or_insert_with(|| json!([]));
+    let arr = entry
+        .as_array_mut()
+        .ok_or_else(|| Error::MalformedCatalog("links is not a JSON array".into()))?;
+    arr.retain(|l| {
+        l.get("rel")
+            .and_then(|v| v.as_str())
+            .map(|r| r != "prev" && r != "next")
+            .unwrap_or(true)
+    });
+    for l in new_links {
+        arr.push(serde_json::to_value(l).map_err(Error::from)?);
+    }
     Ok(())
 }
