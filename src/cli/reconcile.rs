@@ -371,10 +371,7 @@ async fn find_stale_neighbors(
     Ok(out)
 }
 
-async fn apply_stale_neighbors(
-    catalog_bucket: &Bucket,
-    stale: Vec<StaleNeighbor>,
-) -> Result<()> {
+async fn apply_stale_neighbors(catalog_bucket: &Bucket, stale: Vec<StaleNeighbor>) -> Result<()> {
     for mut s in stale {
         replace_neighbor_links(&mut s.doc, &s.expected)?;
         let key = format!("{}/catalog.json", s.release_id);
@@ -413,10 +410,7 @@ fn extract_neighbor_links(doc: &serde_json::Value) -> Vec<(String, String)> {
 }
 
 /// Order-insensitive.
-fn links_equivalent(
-    actual: &[(String, String)],
-    expected: &[stac::Link],
-) -> bool {
+fn links_equivalent(actual: &[(String, String)], expected: &[stac::Link]) -> bool {
     if actual.len() != expected.len() {
         return false;
     }
@@ -438,7 +432,10 @@ fn replace_neighbor_links(doc: &mut serde_json::Value, new_links: &[stac::Link])
         .as_array_mut()
         .ok_or_else(|| Error::MalformedCatalog("links is not a JSON array".into()))?;
     arr.retain(|l| {
-        l.get("rel").and_then(|v| v.as_str()).map(|r| r != "prev" && r != "next").unwrap_or(true)
+        l.get("rel")
+            .and_then(|v| v.as_str())
+            .map(|r| r != "prev" && r != "next")
+            .unwrap_or(true)
     });
     for l in new_links {
         arr.push(serde_json::to_value(l).map_err(Error::from)?);

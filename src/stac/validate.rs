@@ -191,18 +191,19 @@ pub async fn validate_catalog(
     let base_arc = Arc::new(base_url);
     let root_arc = Arc::new(root_path);
 
-    let per_file: Vec<Vec<Failure>> = futures::stream::iter(files.into_iter().map(|file| {
-        let validator = validator.clone();
-        let dir = dir_owned.clone();
-        let base = Arc::clone(&base_arc);
-        let root = Arc::clone(&root_arc);
-        async move {
-            check_local_file(&file, validator.as_deref(), &dir, &base, &root, options).await
-        }
-    }))
-    .buffer_unordered(concurrency.max(1))
-    .try_collect()
-    .await?;
+    let per_file: Vec<Vec<Failure>> =
+        futures::stream::iter(files.into_iter().map(|file| {
+            let validator = validator.clone();
+            let dir = dir_owned.clone();
+            let base = Arc::clone(&base_arc);
+            let root = Arc::clone(&root_arc);
+            async move {
+                check_local_file(&file, validator.as_deref(), &dir, &base, &root, options).await
+            }
+        }))
+        .buffer_unordered(concurrency.max(1))
+        .try_collect()
+        .await?;
 
     let failures: Vec<Failure> = per_file.into_iter().flatten().collect();
     Ok(ValidationReport {
@@ -384,8 +385,16 @@ async fn finalize_report(
             let seen = Arc::clone(&seen_arc);
             let is_root = url == root_url;
             async move {
-                check_remote_doc(url, value, validator.as_deref(), &base, &seen, is_root, options)
-                    .await
+                check_remote_doc(
+                    url,
+                    value,
+                    validator.as_deref(),
+                    &base,
+                    &seen,
+                    is_root,
+                    options,
+                )
+                .await
             }
         }))
         .buffer_unordered(concurrency)
