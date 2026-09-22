@@ -122,8 +122,7 @@ pub async fn run(args: ReconcileArgs) -> Result<()> {
             Ok(())
         } else {
             let total = diff.to_add.len() + diff.to_remove.len() + stale.len();
-            println!("Catalog drift: {total} item(s) differ.");
-            println!("Re-run with --apply to fix.");
+            println!("Catalog drift: {total} item(s) differ. Re-run with --apply to fix.");
             std::process::exit(10);
         }
     } else if diff.is_empty() {
@@ -376,7 +375,7 @@ async fn find_stale_neighbors(
             .with_context(|| format!("reading {key} for neighbour-link check"))?;
         let expected = compute_neighbor_links(id, expected_ids, root_href);
         let actual = extract_neighbor_links(&doc);
-        if !links_equivalent(&actual, &expected) {
+        if !links_equivalent(actual.as_deref(), &expected) {
             out.push(StaleNeighbor {
                 release_id: id.clone(),
                 doc,
@@ -408,34 +407,29 @@ async fn reconcile_neighbor_links(
     apply_stale_neighbors(catalog_bucket, stale).await
 }
 
-fn extract_neighbor_links(doc: &serde_json::Value) -> Vec<(String, String)> {
+/// `None` if any prev/next entry fails to deserialize (forces a rewrite).
+fn extract_neighbor_links(doc: &serde_json::Value) -> Option<Vec<stac::Link>> {
     let Some(links) = doc.get("links").and_then(|v| v.as_array()) else {
-        return Vec::new();
+        return Some(Vec::new());
     };
-    links
-        .iter()
-        .filter_map(|l| {
-            let rel = l.get("rel").and_then(|v| v.as_str())?;
-            if rel != "prev" && rel != "next" {
-                return None;
-            }
-            let href = l.get("href").and_then(|v| v.as_str())?;
-            Some((rel.to_string(), href.to_string()))
-        })
-        .collect()
+    let mut out = Vec::new();
+    for raw in links {
+        let rel = raw.get("rel").and_then(|v| v.as_str());
+        if !matches!(rel, Some("prev") | Some("next")) {
+            continue;
+        }
+        out.push(serde_json::from_value::<stac::Link>(raw.clone()).ok()?);
+    }
+    Some(out)
 }
 
-/// Order-insensitive.
-fn links_equivalent(actual: &[(String, String)], expected: &[stac::Link]) -> bool {
+/// Order-insensitive full-field equality (rel, href, type, title, ...).
+fn links_equivalent(actual: Option<&[stac::Link]>, expected: &[stac::Link]) -> bool {
+    let Some(actual) = actual else { return false };
     if actual.len() != expected.len() {
         return false;
     }
-    let actual: BTreeSet<_> = actual.iter().cloned().collect();
-    let expected: BTreeSet<_> = expected
-        .iter()
-        .map(|l| (l.rel.clone(), l.href.clone()))
-        .collect();
-    actual == expected
+    actual.iter().all(|a| expected.iter().any(|e| e == a))
 }
 
 /// Preserves every non-prev/next link.
