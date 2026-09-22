@@ -64,7 +64,7 @@ jobs:
         run: cargo build --release --bin overture-stac
 
       - name: Configure AWS credentials (bucket write)
-        uses: aws-actions/configure-aws-credentials@cbe3b392738ccf3f987d68400dafcf4b0624a56c # v6.2.4
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
         with:
           role-to-assume: ${{ env.STAC_PUBLISH_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
@@ -75,7 +75,7 @@ jobs:
 
       - name: Configure AWS credentials (CloudFront invalidation, cross-account)
         if: always() && steps.reconcile.outputs.applied == 'true'
-        uses: aws-actions/configure-aws-credentials@cbe3b392738ccf3f987d68400dafcf4b0624a56c # v6.2.4
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
         with:
           role-to-assume: ${{ env.CLOUDFRONT_INVALIDATOR_ROLE_ARN }}
           role-chaining: true
