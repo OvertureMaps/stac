@@ -224,16 +224,21 @@ async fn check_local_file(
         serde_json::from_slice(&bytes).with_context(|| format!("parsing {}", file.display()))?;
 
     let location = file.display().to_string();
-    Ok(check_document(&location, &value, validator, is_root, options, |href| {
-        let rel = href.strip_prefix(base_url)?;
-        let candidate = root_dir.join(rel);
-        if candidate.exists() {
-            None
-        } else {
-            Some(format!("href {href} → {} does not exist", candidate.display()))
-        }
-    })
-    .await)
+    Ok(
+        check_document(&location, &value, validator, is_root, options, |href| {
+            let rel = href.strip_prefix(base_url)?;
+            let candidate = root_dir.join(rel);
+            if candidate.exists() {
+                None
+            } else {
+                Some(format!(
+                    "href {href} → {} does not exist",
+                    candidate.display()
+                ))
+            }
+        })
+        .await,
+    )
 }
 
 fn collect_json_files(dir: &Path) -> Result<Vec<std::path::PathBuf>> {
@@ -403,14 +408,18 @@ async fn check_remote_doc(
     is_root: bool,
     options: ValidateOptions,
 ) -> Result<Vec<Failure>> {
-    Ok(check_document(&url, &value, validator, is_root, options, |href| {
-        if href.starts_with(base_url) && !seen.contains(href) {
-            Some(format!("href {href} points inside catalog base but wasn't reachable"))
-        } else {
-            None
-        }
-    })
-    .await)
+    Ok(
+        check_document(&url, &value, validator, is_root, options, |href| {
+            if href.starts_with(base_url) && !seen.contains(href) {
+                Some(format!(
+                    "href {href} points inside catalog base but wasn't reachable"
+                ))
+            } else {
+                None
+            }
+        })
+        .await,
+    )
 }
 
 /// Runs the three-axis validation on one doc; caller supplies the in-base
