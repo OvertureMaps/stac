@@ -107,9 +107,12 @@ pub async fn run(args: ReconcileArgs) -> Result<()> {
     );
 
     if !args.apply {
+        // A to-add release has no catalog.json yet, so scan only existing catalogs.
         let root_href = args.root_href.trim_end_matches('/').to_string();
-        let sorted = newest_first(&bucket_ids);
-        let stale = find_stale_neighbors(&catalog_bucket, &sorted, &root_href).await?;
+        let scan_ids = newest_first(&catalog_ids);
+        let expected_ids = newest_first(&bucket_ids);
+        let stale =
+            find_stale_neighbors(&catalog_bucket, &scan_ids, &expected_ids, &root_href).await?;
         for s in &stale {
             println!("~ {} has stale prev/next links", s.release_id);
         }
@@ -124,11 +127,20 @@ pub async fn run(args: ReconcileArgs) -> Result<()> {
             std::process::exit(10);
         }
     } else if diff.is_empty() {
-        // Past purges may still have left stale prev/next — re-check even when in sync.
+        // Past purges may still have left stale prev/next; re-check even when in sync.
         let root_href = args.root_href.trim_end_matches('/').to_string();
         let sorted = newest_first(&bucket_ids);
-        reconcile_neighbor_links(&catalog_bucket, &sorted, &root_href).await?;
-        println!("Catalog is in sync with the bucket. Nothing to apply.");
+        let stale = find_stale_neighbors(&catalog_bucket, &sorted, &sorted, &root_href).await?;
+        let mutated = !stale.is_empty();
+        if mutated {
+            apply_stale_neighbors(&catalog_bucket, stale).await?;
+            println!("Patched stale neighbour links.");
+        } else {
+            println!("Catalog is in sync with the bucket. Nothing to apply.");
+        }
+        if mutated && args.validate {
+            run_post_apply_validation(&args.catalog_uri).await?;
+        }
         Ok(())
     } else {
         let extras_bucket = if args.extras_uri.is_empty() {
@@ -156,25 +168,27 @@ pub async fn run(args: ReconcileArgs) -> Result<()> {
             args.catalog_uri
         );
         if args.validate {
-            // Pre-upload check only covered each new release's temp dir; it
-            // couldn't see the root catalog that apply_diff just mutated. Run
-            // the same three checks against the post-apply bucket state to
-            // close that gap.
-            println!();
-            println!("Validating post-apply bucket state...");
-            let report = validate_catalog_uri(
-                &args.catalog_uri,
-                default_concurrency(),
-                ValidateOptions::default(),
-            )
-            .await?;
-            report.print(false);
-            if !report.is_ok() {
-                return Err(Error::ValidationFailed(report.failures.len()));
-            }
+            run_post_apply_validation(&args.catalog_uri).await?;
         }
         Ok(())
     }
+}
+
+/// Bucket-mode check after mutation; pre-upload validation misses the mutated files.
+async fn run_post_apply_validation(catalog_uri: &str) -> Result<()> {
+    println!();
+    println!("Validating post-apply bucket state...");
+    let report = validate_catalog_uri(
+        catalog_uri,
+        default_concurrency(),
+        ValidateOptions::default(),
+    )
+    .await?;
+    report.print(false);
+    if !report.is_ok() {
+        return Err(Error::ValidationFailed(report.failures.len()));
+    }
+    Ok(())
 }
 
 fn print_diff_summary(
@@ -347,18 +361,20 @@ struct StaleNeighbor {
     expected: Vec<stac::Link>,
 }
 
+/// `scan_ids` are what we read; `expected_ids` is what neighbours are computed against.
 async fn find_stale_neighbors(
     catalog_bucket: &Bucket,
-    current_ids: &[String],
+    scan_ids: &[String],
+    expected_ids: &[String],
     root_href: &str,
 ) -> Result<Vec<StaleNeighbor>> {
     let mut out = Vec::new();
-    for id in current_ids {
+    for id in scan_ids {
         let key = format!("{id}/catalog.json");
         let doc = get_json(catalog_bucket, &key)
             .await
             .with_context(|| format!("reading {key} for neighbour-link check"))?;
-        let expected = compute_neighbor_links(id, current_ids, root_href);
+        let expected = compute_neighbor_links(id, expected_ids, root_href);
         let actual = extract_neighbor_links(&doc);
         if !links_equivalent(&actual, &expected) {
             out.push(StaleNeighbor {
@@ -388,7 +404,7 @@ async fn reconcile_neighbor_links(
     current_ids: &[String],
     root_href: &str,
 ) -> Result<()> {
-    let stale = find_stale_neighbors(catalog_bucket, current_ids, root_href).await?;
+    let stale = find_stale_neighbors(catalog_bucket, current_ids, current_ids, root_href).await?;
     apply_stale_neighbors(catalog_bucket, stale).await
 }
 
