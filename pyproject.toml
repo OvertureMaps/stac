@@ -1,5 +1,5 @@
 [build-system]
-requires = ["maturin>=1.7,<2.0"]
+requires = ["maturin>=1.15.0,<2.0"]
 build-backend = "maturin"
 
 [project]
@@ -40,7 +40,7 @@ strip = true
 
 [dependency-groups]
 dev = [
-    "maturin>=1.7,<2.0",
+    "maturin>=1.15.0,<2.0",
     "pytest>=8",
     "pytest-asyncio>=0.24",
 ]
