@@ -109,8 +109,8 @@ pub async fn run(args: ReconcileArgs) -> Result<()> {
     if !args.apply {
         // A to-add release has no catalog.json yet, so scan only existing catalogs.
         let root_href = args.root_href.trim_end_matches('/').to_string();
-        let scan_ids = newest_first(&catalog_ids);
-        let expected_ids = newest_first(&bucket_ids);
+        let scan_ids = sort_release_ids(&catalog_ids);
+        let expected_ids = sort_release_ids(&bucket_ids);
         let stale =
             find_stale_neighbors(&catalog_bucket, &scan_ids, &expected_ids, &root_href).await?;
         for s in &stale {
@@ -128,7 +128,7 @@ pub async fn run(args: ReconcileArgs) -> Result<()> {
     } else if diff.is_empty() {
         // Past purges may still have left stale prev/next; re-check even when in sync.
         let root_href = args.root_href.trim_end_matches('/').to_string();
-        let sorted = newest_first(&bucket_ids);
+        let sorted = sort_release_ids(&bucket_ids);
         let stale = find_stale_neighbors(&catalog_bucket, &sorted, &sorted, &root_href).await?;
         let mutated = !stale.is_empty();
         if mutated {
@@ -308,7 +308,7 @@ async fn apply_diff(
     }
 
     let current_children = children_from_root(&root);
-    let sorted = newest_first(&current_children);
+    let sorted = sort_release_ids(&current_children);
 
     // Any add/remove shifts the surviving releases' prev/next.
     reconcile_neighbor_links(catalog_bucket, &sorted, root_href).await?;
@@ -348,7 +348,7 @@ async fn apply_diff(
 }
 
 /// Reverse alphabetical works for `YYYY-MM-DD.N` release IDs.
-fn newest_first(ids: &[String]) -> Vec<String> {
+fn sort_release_ids(ids: &[String]) -> Vec<String> {
     let mut out = ids.to_vec();
     out.sort_by(|a, b| b.cmp(a));
     out
