@@ -397,3 +397,30 @@ pub async fn upload_directory(
     }
     Ok(uploaded)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn list_top_level_files_returns_direct_files_with_size_and_skips_nested() {
+        let tmp = tempfile::tempdir().unwrap();
+        let direct_bytes: &[u8] = b"hello world";
+        std::fs::write(tmp.path().join("direct.parquet"), direct_bytes).unwrap();
+        std::fs::create_dir(tmp.path().join("sub")).unwrap();
+        std::fs::write(tmp.path().join("sub/nested.parquet"), b"nested payload").unwrap();
+
+        let uri = format!("file://{}", tmp.path().display());
+        let bucket = Bucket::from_url(&uri).unwrap();
+
+        let entries = list_top_level_files(&bucket, "").await.unwrap();
+
+        assert_eq!(
+            entries.len(),
+            1,
+            "nested file should be skipped: {entries:?}"
+        );
+        assert_eq!(entries[0].name, "direct.parquet");
+        assert_eq!(entries[0].size, direct_bytes.len() as u64);
+    }
+}
