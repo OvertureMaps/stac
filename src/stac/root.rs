@@ -95,6 +95,47 @@ pub fn add_child_link(root: &mut Value, release: &str, root_href: &str) -> Resul
     Ok(())
 }
 
+/// Recompute `latest` on the root: top-level `"latest": "<id>"` and per-child-link `"latest": true`.
+pub fn refresh_latest(root: &mut Value) {
+    let mut children = children_from_root(root);
+    children.sort_by(|a, b| b.cmp(a));
+    let latest = children.into_iter().next();
+
+    if let Some(obj) = root.as_object_mut() {
+        match &latest {
+            Some(id) => {
+                obj.insert("latest".into(), json!(id));
+            }
+            None => {
+                obj.remove("latest");
+            }
+        }
+    }
+
+    let Some(links) = root.get_mut("links").and_then(|v| v.as_array_mut()) else {
+        return;
+    };
+    for link in links {
+        if link.get("rel").and_then(|v| v.as_str()) != Some("child") {
+            continue;
+        }
+        let is_latest = link
+            .get("href")
+            .and_then(|v| v.as_str())
+            .and_then(release_id_from_href)
+            .as_deref()
+            == latest.as_deref();
+        let Some(obj) = link.as_object_mut() else {
+            continue;
+        };
+        if is_latest {
+            obj.insert("latest".into(), json!(true));
+        } else {
+            obj.remove("latest");
+        }
+    }
+}
+
 pub fn stamp_vcs(root: &mut Value) -> Result<()> {
     let obj = root
         .as_object_mut()
@@ -114,4 +155,139 @@ pub fn stamp_vcs(root: &mut Value) -> Result<()> {
     obj.insert("vcs:branch".into(), json!(env!("GIT_BRANCH")));
     obj.insert("vcs:commit".into(), json!(env!("GIT_COMMIT")));
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn child_link(release: &str, latest: bool) -> Value {
+        let mut link = json!({
+            "rel": "child",
+            "href": format!("https://example.com/{release}/catalog.json"),
+            "type": "application/json",
+        });
+        if latest {
+            link.as_object_mut()
+                .unwrap()
+                .insert("latest".into(), json!(true));
+        }
+        link
+    }
+
+    fn root_with(children: &[(&str, bool)], top_latest: Option<&str>) -> Value {
+        let mut root = build_empty_root();
+        let links = root
+            .get_mut("links")
+            .and_then(|v| v.as_array_mut())
+            .unwrap();
+        for (id, latest) in children {
+            links.push(child_link(id, *latest));
+        }
+        if let Some(l) = top_latest {
+            root.as_object_mut()
+                .unwrap()
+                .insert("latest".into(), json!(l));
+        }
+        root
+    }
+
+    fn child_latest_flags(root: &Value) -> Vec<(String, Option<bool>)> {
+        root.get("links")
+            .and_then(|v| v.as_array())
+            .map(|links| {
+                links
+                    .iter()
+                    .filter(|l| l.get("rel").and_then(|v| v.as_str()) == Some("child"))
+                    .map(|l| {
+                        let id = l
+                            .get("href")
+                            .and_then(|v| v.as_str())
+                            .and_then(release_id_from_href)
+                            .unwrap_or_default();
+                        let flag = l.get("latest").and_then(|v| v.as_bool());
+                        (id, flag)
+                    })
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+
+    #[test]
+    fn promotes_newest_and_clears_stale_flag() {
+        let mut root = root_with(
+            &[("2026-08-19.0", true), ("2026-09-23.0", false)],
+            Some("2026-08-19.0"),
+        );
+        refresh_latest(&mut root);
+        assert_eq!(
+            root.get("latest").and_then(|v| v.as_str()),
+            Some("2026-09-23.0")
+        );
+        assert_eq!(
+            child_latest_flags(&root),
+            vec![
+                ("2026-08-19.0".to_string(), None),
+                ("2026-09-23.0".to_string(), Some(true)),
+            ]
+        );
+    }
+
+    #[test]
+    fn removing_latest_promotes_predecessor() {
+        let mut root = root_with(&[("2026-08-19.0", false)], Some("2026-09-23.0"));
+        refresh_latest(&mut root);
+        assert_eq!(
+            root.get("latest").and_then(|v| v.as_str()),
+            Some("2026-08-19.0")
+        );
+        assert_eq!(
+            child_latest_flags(&root),
+            vec![("2026-08-19.0".to_string(), Some(true))]
+        );
+    }
+
+    #[test]
+    fn empty_children_removes_top_level_latest() {
+        let mut root = root_with(&[], Some("2026-08-19.0"));
+        refresh_latest(&mut root);
+        assert!(root.get("latest").is_none());
+    }
+
+    #[test]
+    fn is_idempotent() {
+        let mut root = root_with(
+            &[("2026-08-19.0", false), ("2026-09-23.0", true)],
+            Some("2026-09-23.0"),
+        );
+        refresh_latest(&mut root);
+        let after_first = root.clone();
+        refresh_latest(&mut root);
+        assert_eq!(root, after_first);
+    }
+
+    #[test]
+    fn non_child_links_are_untouched() {
+        let mut root = root_with(&[("2026-08-19.0", false)], None);
+        root.get_mut("links")
+            .and_then(|v| v.as_array_mut())
+            .unwrap()
+            .push(json!({
+                "rel": "self",
+                "href": "https://example.com/catalog.json",
+                "latest": "sentinel",
+            }));
+        refresh_latest(&mut root);
+        let self_link = root
+            .get("links")
+            .and_then(|v| v.as_array())
+            .unwrap()
+            .iter()
+            .find(|l| l.get("rel").and_then(|v| v.as_str()) == Some("self"))
+            .unwrap();
+        assert_eq!(
+            self_link.get("latest").and_then(|v| v.as_str()),
+            Some("sentinel")
+        );
+    }
 }

@@ -1,0 +1,84 @@
+---
+# Recomputes derived state on the live root catalog (currently just the `latest`
+# flag on child links) and, only if something actually changed, invalidates the
+# single-file CloudFront path for /catalog.json. Triggered manually.
+name: Refresh Root
+run-name: Refresh root catalog
+
+on:
+  workflow_dispatch:
+
+permissions: {}
+
+# Shared with reconcile.yaml so both catalog.json writers serialize.
+concurrency:
+  group: catalog-writer
+  cancel-in-progress: false
+
+env:
+  AWS_REGION: us-west-2
+  STAC_PUBLISH_ROLE_ARN: arn:aws:iam::913550007193:role/stac-publish-oidc-overturemaps
+  CLOUDFRONT_INVALIDATOR_ROLE_ARN: arn:aws:iam::763944545891:role/cloudfront-invalidator
+  CLOUDFRONT_DISTRIBUTION_ID: E209PEWSOCNO5D
+  CATALOG_URI: s3://overturemaps-extras-us-west-2/stac/
+
+jobs:
+  refresh-root:
+    name: Refresh root
+    # Same guard as reconcile.yaml: this wields prod S3 write + CloudFront roles,
+    # so workflow_dispatch from a feature branch must not push feature-branch
+    # code to prod.
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      id-token: write # OIDC token exchange with AWS
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          persist-credentials: false
+
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # zizmor: ignore[superfluous-actions,stale-action-refs]
+
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+        with:
+          key: refresh-root
+
+      - name: Build overture-stac
+        run: cargo build --release --bin overture-stac
+
+      - name: Configure AWS credentials (bucket write)
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: ${{ env.STAC_PUBLISH_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Refresh root
+        id: refresh
+        shell: bash
+        env:
+          CATALOG_URI: ${{ env.CATALOG_URI }}
+        run: |
+          set -euo pipefail
+          : > refresh.log
+          ./target/release/overture-stac refresh-root --catalog-uri "$CATALOG_URI" 2>&1 | tee refresh.log
+          if grep -qE "^Refreshed root" refresh.log; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Configure AWS credentials (CloudFront invalidation, cross-account)
+        if: steps.refresh.outputs.changed == 'true'
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: ${{ env.CLOUDFRONT_INVALIDATOR_ROLE_ARN }}
+          role-chaining: true
+          role-skip-session-tagging: true
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Invalidate /catalog.json
+        if: steps.refresh.outputs.changed == 'true'
+        run: aws cloudfront create-invalidation --distribution-id "$CLOUDFRONT_DISTRIBUTION_ID" --paths "/catalog.json"

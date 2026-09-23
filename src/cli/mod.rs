@@ -11,11 +11,13 @@ use overture_stac::{Error, Result};
 pub mod build;
 pub mod list_releases;
 pub mod reconcile;
+pub mod refresh_root;
 pub mod validate;
 
 pub use build::BuildArgs;
 pub use list_releases::ListReleasesArgs;
 pub use reconcile::ReconcileArgs;
+pub use refresh_root::RefreshRootArgs;
 pub use validate::ValidateArgs;
 
 pub(crate) const PROD_ROOT_HREF: &str = "https://stac.overturemaps.org";
@@ -32,6 +34,9 @@ pub enum Command {
     /// Compare the live STAC catalog against the data bucket and report drift.
     /// Read-only; exits non-zero when the catalog is out of sync.
     Reconcile(ReconcileArgs),
+    /// Recompute derived state on the live root catalog (currently the `latest`
+    /// flag on child links) and write it back if changed. Idempotent.
+    RefreshRoot(RefreshRootArgs),
     /// Validate a built STAC catalog on disk (JSON schema, link integrity,
     /// Overture-specific rules). Exits non-zero on any failure.
     Validate(ValidateArgs),
@@ -43,6 +48,7 @@ impl Command {
             Command::Build(args) => build::run(args).await,
             Command::ListReleases(args) => list_releases::run(args).await,
             Command::Reconcile(args) => reconcile::run(args).await,
+            Command::RefreshRoot(args) => refresh_root::run(args).await,
             Command::Validate(args) => validate::run(args).await,
         }
     }
