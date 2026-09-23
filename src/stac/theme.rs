@@ -221,7 +221,7 @@ async fn process_type(
         // it only when we're running against that specific bucket.
         let s3_bucket = bucket.as_s3();
         let is_prod_s3 = s3_bucket == Some(PROD_S3_BUCKET);
-        let region = std::env::var("AWS_REGION").unwrap_or_else(|_| "us-west-2".to_string());
+        let region = bucket.region.as_str();
 
         let mut schemes = JsonMap::new();
         if let Some(bucket_name) = s3_bucket {
@@ -356,7 +356,7 @@ async fn process_type(
 
     let s3_bucket = bucket.as_s3();
     if let Some(bucket_name) = s3_bucket {
-        let region = std::env::var("AWS_REGION").unwrap_or_else(|_| "us-west-2".to_string());
+        let region = bucket.region.as_str();
         let glob = format!(
             "https://{bucket_name}.s3.{region}.amazonaws.com/{theme_key}/{type_key}/*.parquet"
         );
