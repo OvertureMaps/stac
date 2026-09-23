@@ -548,11 +548,7 @@ pub async fn build_top_catalog(
 ) -> Result<ReleaseCatalog> {
     let mut children: Vec<ReleaseCatalog> = Vec::new();
     for (idx, release) in ids.iter().enumerate() {
-        let title = if idx == 0 {
-            "Latest Overture Release".to_string()
-        } else {
-            format!("{release} Overture Release")
-        };
+        let title = format!("{release} Overture Release");
         let mut child = build_single_release(
             bucket,
             extras_bucket,
