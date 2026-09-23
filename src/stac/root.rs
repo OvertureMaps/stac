@@ -95,7 +95,8 @@ pub fn add_child_link(root: &mut Value, release: &str, root_href: &str) -> Resul
     Ok(())
 }
 
-/// Recompute `latest` on the root: top-level `"latest": "<id>"` and per-child-link `"latest": true`.
+/// Recompute derived state on the root: top-level `"latest": "<id>"`, per-child-link
+/// `"latest": true` on the newest release only, and normalized `"title"` on every child link.
 pub fn refresh_latest(root: &mut Value) {
     let mut children = children_from_root(root);
     children.sort_by(|a, b| b.cmp(a));
@@ -119,12 +120,11 @@ pub fn refresh_latest(root: &mut Value) {
         if link.get("rel").and_then(|v| v.as_str()) != Some("child") {
             continue;
         }
-        let is_latest = link
+        let release = link
             .get("href")
             .and_then(|v| v.as_str())
-            .and_then(release_id_from_href)
-            .as_deref()
-            == latest.as_deref();
+            .and_then(release_id_from_href);
+        let is_latest = release.as_deref() == latest.as_deref();
         let Some(obj) = link.as_object_mut() else {
             continue;
         };
@@ -132,6 +132,9 @@ pub fn refresh_latest(root: &mut Value) {
             obj.insert("latest".into(), json!(true));
         } else {
             obj.remove("latest");
+        }
+        if let Some(id) = release {
+            obj.insert("title".into(), json!(format!("{id} Overture Release")));
         }
     }
 }
@@ -264,6 +267,60 @@ mod tests {
         let after_first = root.clone();
         refresh_latest(&mut root);
         assert_eq!(root, after_first);
+    }
+
+    #[test]
+    fn normalizes_child_link_titles_to_release_id() {
+        // Seed with the stale "Latest Overture Release" title on the older link
+        // and a plain release-ID title on the newer one. refresh_latest should
+        // rewrite both to "<id> Overture Release".
+        let mut root = build_empty_root();
+        let links = root
+            .get_mut("links")
+            .and_then(|v| v.as_array_mut())
+            .unwrap();
+        links.push(json!({
+            "rel": "child",
+            "href": "https://example.com/2026-08-19.0/catalog.json",
+            "title": "Latest Overture Release",
+        }));
+        links.push(json!({
+            "rel": "child",
+            "href": "https://example.com/2026-09-23.0/catalog.json",
+            "title": "2026-09-23.0 Overture Release",
+        }));
+
+        refresh_latest(&mut root);
+
+        let titles: Vec<(String, Option<String>)> = root
+            .get("links")
+            .and_then(|v| v.as_array())
+            .unwrap()
+            .iter()
+            .filter(|l| l.get("rel").and_then(|v| v.as_str()) == Some("child"))
+            .map(|l| {
+                let id = l
+                    .get("href")
+                    .and_then(|v| v.as_str())
+                    .and_then(release_id_from_href)
+                    .unwrap_or_default();
+                let title = l.get("title").and_then(|v| v.as_str()).map(String::from);
+                (id, title)
+            })
+            .collect();
+        assert_eq!(
+            titles,
+            vec![
+                (
+                    "2026-08-19.0".to_string(),
+                    Some("2026-08-19.0 Overture Release".to_string())
+                ),
+                (
+                    "2026-09-23.0".to_string(),
+                    Some("2026-09-23.0 Overture Release".to_string())
+                ),
+            ]
+        );
     }
 
     #[test]
