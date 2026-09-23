@@ -9,6 +9,20 @@ use url::Url;
 
 use crate::{Error, Result, ResultExt};
 
+/// Read `AWS_REGION`, falling back to `us-west-2` (the public Overture region) with a warning.
+fn resolve_aws_region() -> String {
+    match std::env::var("AWS_REGION") {
+        Ok(r) => r,
+        Err(_) => {
+            tracing::warn!(
+                "AWS_REGION not set; defaulting to us-west-2. \
+                 Set AWS_REGION explicitly to target a bucket in another region."
+            );
+            "us-west-2".to_string()
+        }
+    }
+}
+
 /// Handle to a single object-store-backed bucket.
 ///
 /// Constructed via [`Bucket::from_url`]; supports any scheme `object_store` recognises
@@ -33,6 +47,10 @@ pub struct Bucket {
     /// Bucket name / host portion of the URI. For `s3://foo` this is `"foo"`.
     /// For `file:///tmp/x` this falls back to the full URI (host is empty).
     pub name: String,
+    /// AWS region, resolved once at construction from `AWS_REGION` (defaults to
+    /// `us-west-2`). Empty for non-S3 schemes; read only inside `as_s3()`-gated
+    /// blocks that emit S3-flavored URLs.
+    pub region: String,
 }
 
 impl Bucket {
@@ -47,8 +65,12 @@ impl Bucket {
     pub fn from_url(uri: &str) -> Result<Bucket> {
         let url = Url::parse(uri).context(format!("parsing URI: {uri}"))?;
         let mut anonymous_fallback: Option<Arc<dyn ObjectStore>> = None;
+        let region = if url.scheme() == "s3" {
+            resolve_aws_region()
+        } else {
+            String::new()
+        };
         let (store, path) = if url.scheme() == "s3" {
-            let region = std::env::var("AWS_REGION").unwrap_or_else(|_| "us-west-2".to_string());
             let mut opts: Vec<(String, String)> = vec![("region".into(), region.clone())];
             let access = std::env::var("AWS_ACCESS_KEY_ID").ok();
             let secret = std::env::var("AWS_SECRET_ACCESS_KEY").ok();
@@ -65,7 +87,7 @@ impl Bucket {
                 // `InvalidAccessKeyId` / etc., which is what a developer with
                 // a stale SSO session hits against the public Overture buckets.
                 let anon_opts: Vec<(String, String)> = vec![
-                    ("region".into(), region),
+                    ("region".into(), region.clone()),
                     ("skip_signature".into(), "true".into()),
                 ];
                 let (anon_store, _) = parse_url_opts(&url, anon_opts)
@@ -110,6 +132,7 @@ impl Bucket {
             anonymous_fallback,
             scheme: url.scheme().to_string(),
             name,
+            region,
         })
     }
 
@@ -119,6 +142,7 @@ impl Bucket {
             anonymous_fallback: self.anonymous_fallback.clone(),
             scheme: self.scheme.clone(),
             name: self.name.clone(),
+            region: self.region.clone(),
         }
     }
 

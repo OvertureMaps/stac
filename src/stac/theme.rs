@@ -7,7 +7,6 @@ use chrono::{DateTime, Utc};
 use serde_json::{json, Map as JsonMap, Value};
 use stac::{Bbox, Catalog, Collection, Extent, Item, Link, SpatialExtent, TemporalExtent};
 use std::collections::BTreeMap;
-use std::sync::Arc;
 
 use crate::storage::{
     list_top_level, list_top_level_files, read_fragment, Bucket, FragmentInfo, TopLevelFile,
@@ -21,6 +20,9 @@ pub const ITEM_STAC_EXTENSIONS: &[&str] = &[
 ];
 
 pub const TABLE_EXTENSION: &str = "https://stac-extensions.github.io/table/v1.2.0/schema.json";
+
+pub const PARTITION_EXTENSION: &str =
+    "https://schemas.portolan-sdi.org/incubating/partition/v1.0.0/schema.json";
 
 /// Overture's Azure mirror is only maintained for the canonical prod S3
 /// bucket. We only emit `azure`-flavored assets/schemes when the CLI is
@@ -85,14 +87,10 @@ pub async fn process_theme(
     use futures::stream::{StreamExt, TryStreamExt};
     const TYPES_PER_THEME: usize = 4;
     let type_keys = list_top_level(bucket, theme_key).await?;
-    let theme_key_owned = theme_key.to_string();
-    let bucket_owned = Arc::new(bucket.clone_ref());
-    let type_futs = type_keys.into_iter().map(|type_key| {
-        let bucket = Arc::clone(&bucket_owned);
-        let theme_key = theme_key_owned.clone();
-        async move { process_type(&bucket, &theme_key, &type_key, debug, release_datetime).await }
-    });
-    let mut per_type: Vec<PerType> = futures::stream::iter(type_futs)
+    let mut per_type: Vec<PerType> = futures::stream::iter(type_keys)
+        .map(|type_key| async move {
+            process_type(bucket, theme_key, &type_key, debug, release_datetime).await
+        })
         .buffer_unordered(TYPES_PER_THEME)
         .try_collect()
         .await?;
@@ -142,6 +140,7 @@ async fn process_type(
     let mut fragments_keys = list_top_level_files(bucket, &type_full).await?;
     fragments_keys.retain(|f| f.name.ends_with(".parquet"));
     fragments_keys.sort_by(|a, b| a.name.cmp(&b.name));
+    let remote_fragment_count = fragments_keys.len();
     if debug {
         fragments_keys.truncate(3);
     }
@@ -222,7 +221,7 @@ async fn process_type(
         // it only when we're running against that specific bucket.
         let s3_bucket = bucket.as_s3();
         let is_prod_s3 = s3_bucket == Some(PROD_S3_BUCKET);
-        let region = std::env::var("AWS_REGION").unwrap_or_else(|_| "us-west-2".to_string());
+        let region = bucket.region.as_str();
 
         let mut schemes = JsonMap::new();
         if let Some(bucket_name) = s3_bucket {
@@ -354,6 +353,26 @@ async fn process_type(
     collection.title = Some(type_name.clone());
     collection.extent = extent;
     collection.extensions = vec![TABLE_EXTENSION.into()];
+
+    let s3_bucket = bucket.as_s3();
+    if let Some(bucket_name) = s3_bucket {
+        let region = bucket.region.as_str();
+        let glob = format!(
+            "https://{bucket_name}.s3.{region}.amazonaws.com/{theme_key}/{type_key}/*.parquet"
+        );
+        collection.extensions.push(PARTITION_EXTENSION.into());
+        let partition_fields = &mut collection.additional_fields;
+        partition_fields.insert("partition:scheme".into(), json!("hive"));
+        partition_fields.insert(
+            "partition:keys".into(),
+            json!([
+                {"name": "theme", "type": "string"},
+                {"name": "type", "type": "string"},
+            ]),
+        );
+        partition_fields.insert("partition:glob".into(), json!(glob));
+        partition_fields.insert("partition:file_count".into(), json!(remote_fragment_count));
+    }
 
     let extras = &mut collection.additional_fields;
     let columns_json: Vec<Value> = columns_hint
