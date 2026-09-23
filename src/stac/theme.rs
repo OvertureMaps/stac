@@ -9,12 +9,15 @@ use stac::{Bbox, Catalog, Collection, Extent, Item, Link, SpatialExtent, Tempora
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
-use crate::storage::{list_top_level, read_fragment, Bucket, FragmentInfo};
+use crate::storage::{
+    list_top_level, list_top_level_files, read_fragment, Bucket, FragmentInfo, TopLevelFile,
+};
 use crate::{Error, Result};
 
 pub const ITEM_STAC_EXTENSIONS: &[&str] = &[
     "https://stac-extensions.github.io/storage/v2.0.0/schema.json",
     "https://stac-extensions.github.io/alternate-assets/v1.2.0/schema.json",
+    "https://stac-extensions.github.io/file/v2.1.0/schema.json",
 ];
 
 pub const TABLE_EXTENSION: &str = "https://stac-extensions.github.io/table/v1.2.0/schema.json";
@@ -136,27 +139,30 @@ async fn process_type(
         .to_string();
     tracing::info!("Opening Type: {type_name}");
 
-    let mut fragments_keys = list_top_level(bucket, &type_full).await?;
-    fragments_keys.retain(|f| f.ends_with(".parquet"));
-    fragments_keys.sort();
+    let mut fragments_keys = list_top_level_files(bucket, &type_full).await?;
+    fragments_keys.retain(|f| f.name.ends_with(".parquet"));
+    fragments_keys.sort_by(|a, b| a.name.cmp(&b.name));
     if debug {
         fragments_keys.truncate(3);
     }
     let total_fragments = fragments_keys.len();
-    let full_keys: Vec<String> = fragments_keys
-        .iter()
-        .map(|f| format!("{type_full}/{f}"))
+    let full_keys: Vec<TopLevelFile> = fragments_keys
+        .into_iter()
+        .map(|f| TopLevelFile {
+            name: format!("{type_full}/{}", f.name),
+            size: f.size,
+        })
         .collect();
 
     // Concurrent fragment metadata reads, bounded to keep S3 fanout in check.
     use futures::stream::{StreamExt, TryStreamExt};
     const FRAGMENT_CONCURRENCY: usize = 32;
     let fragment_futs: Vec<_> = full_keys
-        .clone()
-        .into_iter()
+        .iter()
+        .cloned()
         .enumerate()
-        .map(|(idx, key)| async move {
-            let info = read_fragment(bucket, &key).await?;
+        .map(|(idx, f)| async move {
+            let info = read_fragment(bucket, &f.name).await?;
             Ok::<(usize, FragmentInfo), Error>((idx, info))
         })
         .collect();
@@ -174,7 +180,7 @@ async fn process_type(
 
     for (idx, fragment) in &fragments {
         if idx % 10 == 0 || *idx == total_fragments - 1 {
-            let dir_last = full_keys[*idx].split('/').rev().nth(1).unwrap_or("?");
+            let dir_last = full_keys[*idx].name.split('/').rev().nth(1).unwrap_or("?");
             tracing::info!(" [ {dir_last} : {}/{total_fragments} fragments ]", idx + 1);
         }
         if columns_hint.is_none() {
@@ -268,6 +274,9 @@ async fn process_type(
                 .insert("storage:refs".into(), json!(["aws"]));
             aws_asset
                 .additional_fields
+                .insert("file:size".into(), json!(full_keys[*idx].size));
+            aws_asset
+                .additional_fields
                 .insert("alternate:name".into(), json!("HTTPS"));
             aws_asset.additional_fields.insert(
                 "alternate".into(),
@@ -296,6 +305,12 @@ async fn process_type(
             azure_asset
                 .additional_fields
                 .insert("storage:refs".into(), json!(["azure"]));
+            // Azure is a byte-identical mirror of the AWS bucket, so we reuse the size
+            // from the S3 listing rather than listing Azure separately. If the mirror
+            // ever diverges (re-encoded, partially uploaded), this number will lie.
+            azure_asset
+                .additional_fields
+                .insert("file:size".into(), json!(full_keys[*idx].size));
             item.assets.insert("azure".into(), azure_asset);
         }
 
