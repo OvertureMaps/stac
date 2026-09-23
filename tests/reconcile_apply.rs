@@ -1,8 +1,10 @@
-//! End-to-end fixture test for `overture-stac reconcile --apply`.
+//! End-to-end fixture tests for `overture-stac reconcile --apply` and
+//! `overture-stac refresh-root`.
 //!
 //! Uses `file://` URIs so nothing hits the network. Only exercises the REMOVE
-//! path (needs no real Overture-shaped parquet data to be present); ADD is
-//! covered separately by the ignored integration test that hits real S3.
+//! path for reconcile (needs no real Overture-shaped parquet data to be
+//! present); ADD is covered separately by the ignored integration test that
+//! hits real S3.
 
 use std::fs;
 use std::path::Path;
@@ -157,4 +159,99 @@ fn apply_is_noop_when_in_sync() {
         .assert()
         .success()
         .stdout(predicate::str::contains("Nothing to apply"));
+}
+
+#[test]
+fn refresh_root_heals_stale_latest_and_is_idempotent() {
+    // Stale flag on the older child, none on the newer. First run heals, second is a no-op.
+    let tmp = tempfile::tempdir().unwrap();
+    let catalog_dir = tmp.path().join("catalog");
+    let root_path = catalog_dir.join("catalog.json");
+
+    let root_href = "https://stac.example.com";
+    write_json(
+        &root_path,
+        &json!({
+            "type": "Catalog",
+            "id": "Overture Releases",
+            "description": "All Overture Releases",
+            "stac_version": "1.0.0",
+            "latest": "2026-02-01.0",
+            "links": [
+                {
+                    "rel": "child",
+                    "href": format!("{root_href}/2026-01-01.0/catalog.json"),
+                    "type": "application/json",
+                    "title": "2026-01-01.0 Overture Release",
+                    "latest": true,
+                },
+                {
+                    "rel": "child",
+                    "href": format!("{root_href}/2026-02-01.0/catalog.json"),
+                    "type": "application/json",
+                    "title": "2026-02-01.0 Overture Release",
+                },
+            ],
+        }),
+    );
+
+    let catalog_uri = format!("file://{}/", catalog_dir.display());
+
+    // First run: writes the fixed root.
+    Command::cargo_bin("overture-stac")
+        .unwrap()
+        .args(["refresh-root", "--catalog-uri", &catalog_uri])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Refreshed root"));
+
+    let root_after = read_json(&root_path);
+    let flags: Vec<(String, Option<bool>)> = root_after
+        .get("links")
+        .and_then(|v| v.as_array())
+        .unwrap()
+        .iter()
+        .filter(|l| l.get("rel").and_then(|v| v.as_str()) == Some("child"))
+        .map(|l| {
+            let id = l
+                .get("href")
+                .and_then(|v| v.as_str())
+                .and_then(|h| h.strip_suffix("/catalog.json"))
+                .and_then(|h| h.rsplit('/').next())
+                .unwrap_or("")
+                .to_string();
+            (id, l.get("latest").and_then(|v| v.as_bool()))
+        })
+        .collect();
+    assert_eq!(
+        flags,
+        vec![
+            ("2026-01-01.0".to_string(), None),
+            ("2026-02-01.0".to_string(), Some(true)),
+        ],
+        "stale flag should move from the older child to the newer one",
+    );
+
+    // Second run: no-op.
+    Command::cargo_bin("overture-stac")
+        .unwrap()
+        .args(["refresh-root", "--catalog-uri", &catalog_uri])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("already consistent"));
+}
+
+#[test]
+fn refresh_root_reports_missing_catalog_json() {
+    let tmp = tempfile::tempdir().unwrap();
+    let catalog_dir = tmp.path().join("catalog");
+    std::fs::create_dir_all(&catalog_dir).unwrap();
+    let catalog_uri = format!("file://{}/", catalog_dir.display());
+
+    Command::cargo_bin("overture-stac")
+        .unwrap()
+        .args(["refresh-root", "--catalog-uri", &catalog_uri])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Nothing to refresh"));
 }

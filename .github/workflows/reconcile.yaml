@@ -20,10 +20,9 @@ on:
 
 permissions: {}
 
-# One apply at a time. `cancel-in-progress: false` lets an in-flight apply
-# finish before the next tick fires, so two runs can never race on catalog.json.
+# Shared with refresh-root.yaml so both catalog.json writers serialize.
 concurrency:
-  group: ${{ github.workflow }}
+  group: catalog-writer
   cancel-in-progress: false
 
 env:

@@ -10,9 +10,9 @@ on:
 
 permissions: {}
 
-# One writer at a time on catalog.json.
+# Shared with reconcile.yaml so both catalog.json writers serialize.
 concurrency:
-  group: ${{ github.workflow }}
+  group: catalog-writer
   cancel-in-progress: false
 
 env:
