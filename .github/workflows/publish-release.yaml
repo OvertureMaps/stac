@@ -1,8 +1,8 @@
 ---
 # Publishes a single Overture release to the production STAC catalog. Builds the
 # catalog for the requested release, syncs it to s3://overturemaps-extras-us-west-2/stac/<release>/,
-# and invalidates CloudFront for that release path only. Top-level catalog nav is left to the
-# hourly reconcile workflow.
+# and invalidates CloudFront for all paths so stale cached responses (release assets and
+# top-level catalog nav alike) don't linger behind the new release.
 name: Publish Release
 run-name: Publish ${{ inputs.release_version }}
 
@@ -73,7 +73,7 @@ jobs:
         uses: OvertureMaps/workflows/.github/actions/s5cmd@main # zizmor: ignore[unpinned-uses]
         with:
           command: sync
-          flags: --delete
+          subcommand-flags: --delete
           source: ${{ env.CATALOG_OUTPUT_DIR }}/${{ inputs.release_version }}/
           destination: ${{ env.S3_DEST }}/${{ inputs.release_version }}/
 
@@ -85,10 +85,5 @@ jobs:
           role-skip-session-tagging: true # stac-publish-oidc-overturemaps lacks sts:TagSession on cloudfront-invalidator; nothing consumes session tags here
           aws-region: ${{ env.AWS_REGION }}
 
-      - name: Bust CloudFront cache for release path
-        env:
-          RELEASE_VERSION: ${{ inputs.release_version }}
-        run: |
-          aws cloudfront create-invalidation \
-            --distribution-id "$CLOUDFRONT_DISTRIBUTION_ID" \
-            --paths "/${RELEASE_VERSION}/*"
+      - name: Bust CloudFront cache
+        run: aws cloudfront create-invalidation --distribution-id "$CLOUDFRONT_DISTRIBUTION_ID" --paths "/*"
