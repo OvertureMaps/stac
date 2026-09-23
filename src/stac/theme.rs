@@ -366,7 +366,7 @@ async fn process_type(
     if let Some(bucket_name) = s3_bucket {
         let region = std::env::var("AWS_REGION").unwrap_or_else(|_| "us-west-2".to_string());
         let glob = format!(
-            "https://{bucket_name}.s3.{region}.amazonaws.com/release/{release}/{theme_key}/{type_key}/*.parquet"
+            "https://{bucket_name}.s3.{region}.amazonaws.com/{theme_key}/{type_key}/*.parquet"
         );
         collection.extensions.push(PARTITION_EXTENSION.into());
         let partition_fields = &mut collection.additional_fields;
