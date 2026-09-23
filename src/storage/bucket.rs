@@ -227,6 +227,40 @@ pub async fn list_top_level(bucket: &Bucket, prefix: &str) -> Result<Vec<String>
     Ok(out)
 }
 
+/// A single immediate-child file returned by [`list_top_level_files`].
+#[derive(Debug, Clone)]
+pub struct TopLevelFile {
+    /// Last path segment (filename).
+    pub name: String,
+    /// Object size in bytes, as reported by the storage listing. No HEAD required.
+    pub size: u64,
+}
+
+/// List files directly inside `prefix` (no recursion, no sub-folders) with their sizes.
+///
+/// Given `prefix = "theme=addresses"` containing `part-0.parquet` (500 B) and a sub-folder
+/// `type=address/`, returns `[TopLevelFile { name: "part-0.parquet", size: 500 }]`. The
+/// sub-folder and anything inside it is skipped.
+pub async fn list_top_level_files(bucket: &Bucket, prefix: &str) -> Result<Vec<TopLevelFile>> {
+    let p = Path::from(prefix);
+    let result = with_auth_retry(bucket, |store| {
+        let p = p.clone();
+        async move { store.list_with_delimiter(Some(&p)).await }
+    })
+    .await
+    .with_context(|| format!("listing {prefix} in {}", bucket.name))?;
+    let mut out = Vec::with_capacity(result.objects.len());
+    for obj in result.objects {
+        if let Some(name) = obj.location.parts().next_back() {
+            out.push(TopLevelFile {
+                name: name.as_ref().to_string(),
+                size: obj.size,
+            });
+        }
+    }
+    Ok(out)
+}
+
 /// Recursively list all object keys under `prefix`.
 pub async fn list_all(bucket: &Bucket, prefix: &str) -> Result<Vec<String>> {
     use futures::stream::StreamExt;
@@ -362,4 +396,31 @@ pub async fn upload_directory(
         }
     }
     Ok(uploaded)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn list_top_level_files_returns_direct_files_with_size_and_skips_nested() {
+        let tmp = tempfile::tempdir().unwrap();
+        let direct_bytes: &[u8] = b"hello world";
+        std::fs::write(tmp.path().join("direct.parquet"), direct_bytes).unwrap();
+        std::fs::create_dir(tmp.path().join("sub")).unwrap();
+        std::fs::write(tmp.path().join("sub/nested.parquet"), b"nested payload").unwrap();
+
+        let uri = format!("file://{}", tmp.path().display());
+        let bucket = Bucket::from_url(&uri).unwrap();
+
+        let entries = list_top_level_files(&bucket, "").await.unwrap();
+
+        assert_eq!(
+            entries.len(),
+            1,
+            "nested file should be skipped: {entries:?}"
+        );
+        assert_eq!(entries[0].name, "direct.parquet");
+        assert_eq!(entries[0].size, direct_bytes.len() as u64);
+    }
 }
