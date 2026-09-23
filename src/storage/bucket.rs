@@ -254,7 +254,7 @@ pub async fn list_top_level_files(bucket: &Bucket, prefix: &str) -> Result<Vec<T
         if let Some(name) = obj.location.parts().next_back() {
             out.push(TopLevelFile {
                 name: name.as_ref().to_string(),
-                size: obj.size as u64,
+                size: obj.size,
             });
         }
     }
