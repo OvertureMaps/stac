@@ -157,11 +157,7 @@ async fn write_root(output: &std::path::Path, root_href: &str, bucket: &Bucket) 
             "rel": "child",
             "href": format!("{root_href}/{r}/catalog.json"),
             "type": "application/json",
-            "title": if idx == 0 {
-                "Latest Overture Release".to_string()
-            } else {
-                format!("{r} Overture Release")
-            },
+            "title": format!("{r} Overture Release"),
         });
         if idx == 0 {
             link.as_object_mut()
