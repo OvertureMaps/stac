@@ -11,8 +11,8 @@ use overture_stac::stac::registry;
 use overture_stac::stac::{add_child_link, build_empty_root, remove_child_link};
 use overture_stac::stac::{
     build_single_release, children_from_root, compute_neighbor_links, list_release_ids,
-    read_catalog_children, save_absolute_published, stamp_vcs, validate_catalog_uri,
-    ValidateOptions,
+    read_catalog_children, refresh_latest, save_absolute_published, stamp_vcs,
+    validate_catalog_uri, ValidateOptions,
 };
 use overture_stac::storage::{
     delete_prefix, get_json, get_json_optional, put_json, upload_directory, Bucket,
@@ -317,11 +317,7 @@ async fn apply_diff(
     // parquet files get rewritten on release day, so this belongs on the same
     // apply that publishes the release), and stamp the VCS extension so anyone
     // reading the catalog can tell which build wrote it.
-    if let Some(latest) = sorted.first() {
-        root.as_object_mut()
-            .ok_or_else(|| Error::MalformedCatalog("root is not a JSON object".into()))?
-            .insert("latest".into(), json!(latest));
-    }
+    refresh_latest(&mut root);
     let manifest = registry::create_manifest(data_bucket)
         .await
         .context("refreshing registry manifest")?;

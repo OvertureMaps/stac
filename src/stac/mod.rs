@@ -20,7 +20,7 @@ pub use catalog::{
     list_release_ids, save_absolute_published, validate_release_id, ReleaseCatalog,
 };
 pub use root::{
-    add_child_link, build_empty_root, children_from_root, read_catalog_children,
+    add_child_link, build_empty_root, children_from_root, read_catalog_children, refresh_latest,
     release_id_from_href, remove_child_link, stamp_vcs,
 };
 pub use validate::{
