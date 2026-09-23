@@ -89,15 +89,7 @@ pub async fn process_theme(
     let type_keys = list_top_level(bucket, theme_key).await?;
     let mut per_type: Vec<PerType> = futures::stream::iter(type_keys)
         .map(|type_key| async move {
-            process_type(
-                bucket,
-                theme_key,
-                &type_key,
-                release,
-                debug,
-                release_datetime,
-            )
-            .await
+            process_type(bucket, theme_key, &type_key, debug, release_datetime).await
         })
         .buffer_unordered(TYPES_PER_THEME)
         .try_collect()
@@ -134,7 +126,6 @@ async fn process_type(
     bucket: &Bucket,
     theme_key: &str,
     type_key: &str,
-    release: &str,
     debug: bool,
     release_datetime: DateTime<Utc>,
 ) -> Result<PerType> {
@@ -149,6 +140,7 @@ async fn process_type(
     let mut fragments_keys = list_top_level_files(bucket, &type_full).await?;
     fragments_keys.retain(|f| f.name.ends_with(".parquet"));
     fragments_keys.sort_by(|a, b| a.name.cmp(&b.name));
+    let remote_fragment_count = fragments_keys.len();
     if debug {
         fragments_keys.truncate(3);
     }
@@ -379,7 +371,7 @@ async fn process_type(
             ]),
         );
         partition_fields.insert("partition:glob".into(), json!(glob));
-        partition_fields.insert("partition:file_count".into(), json!(total_fragments));
+        partition_fields.insert("partition:file_count".into(), json!(remote_fragment_count));
     }
 
     let extras = &mut collection.additional_fields;
