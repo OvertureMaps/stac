@@ -628,7 +628,11 @@ mod tests {
     use serde_json::Value;
 
     fn read_catalog_json(path: &Path) -> Value {
-        let bytes = std::fs::read(path.join("catalog.json")).unwrap();
+        read_json_file(&path.join("catalog.json"))
+    }
+
+    fn read_json_file(path: &Path) -> Value {
+        let bytes = std::fs::read(path).unwrap();
         serde_json::from_slice(&bytes).unwrap()
     }
 
@@ -680,6 +684,50 @@ mod tests {
             self_link.get("href").and_then(|v| v.as_str()),
             Some("https://stac.example.com/2026-09-23.0/catalog.json"),
         );
+    }
+
+    fn theme_with_one_item(theme_name: &str, type_name: &str, item_id: &str) -> ThemeResult {
+        let mut theme_catalog = Catalog::new(theme_name, format!("{theme_name} theme"));
+        theme_catalog.title = Some(theme_name.to_string());
+        let mut collection = Collection::new(type_name, format!("{type_name} collection"));
+        collection.title = Some(type_name.to_string());
+        let item = Item::new(item_id);
+        ThemeResult {
+            theme_name: theme_name.to_string(),
+            theme_catalog,
+            theme_extra_links: Vec::new(),
+            manifest_items: Vec::new(),
+            type_collections: vec![(type_name.to_string(), collection, vec![item], Vec::new())],
+        }
+    }
+
+    #[test]
+    fn sub_catalog_threads_root_href_through_theme_collection_and_item() {
+        let tmp = tempfile::tempdir().unwrap();
+        let dest = tmp.path().join("2026-09-23.0");
+        let mut sub = minimal_release("2026-09-23.0");
+        sub.bundles = vec![theme_with_one_item("addresses", "address", "00000")];
+        save_sub_catalog(&sub, "https://stac.example.com", &dest).unwrap();
+
+        let expected_root = "https://stac.example.com/catalog.json";
+        let release_doc = read_catalog_json(&dest);
+        let theme_doc = read_catalog_json(&dest.join("addresses"));
+        let coll_doc = read_json_file(&dest.join("addresses/address/collection.json"));
+        let item_doc = read_json_file(&dest.join("addresses/address/00000/00000.json"));
+
+        for (label, doc) in [
+            ("release", &release_doc),
+            ("theme", &theme_doc),
+            ("collection", &coll_doc),
+            ("item", &item_doc),
+        ] {
+            let root = find_link(doc, "root").unwrap_or_else(|| panic!("{label} missing rel:root"));
+            assert_eq!(
+                root.get("href").and_then(|v| v.as_str()),
+                Some(expected_root),
+                "{label} rel:root should point at the root catalog",
+            );
+        }
     }
 
     #[test]
