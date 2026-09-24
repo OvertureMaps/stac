@@ -11,8 +11,8 @@ use overture_stac::stac::registry;
 use overture_stac::stac::{add_child_link, build_empty_root, remove_child_link};
 use overture_stac::stac::{
     build_single_release, children_from_root, compute_neighbor_links, list_release_ids,
-    read_catalog_children, refresh_latest, save_absolute_published, stamp_vcs,
-    validate_catalog_uri, ValidateOptions,
+    read_catalog_children, refresh_latest, save_sub_catalog, stamp_vcs, validate_catalog_uri,
+    ValidateOptions,
 };
 use overture_stac::storage::{
     delete_prefix, get_json, get_json_optional, put_json, upload_directory, Bucket,
@@ -287,11 +287,7 @@ async fn apply_diff(
         .with_context(|| format!("building release {release}"))?;
 
         let release_dir = temp.path().join(release);
-        save_absolute_published(
-            &release_catalog,
-            &format!("{root_href}/{release}"),
-            &release_dir,
-        )?;
+        save_sub_catalog(&release_catalog, root_href, &release_dir)?;
 
         if validate {
             run_validation(&release_dir, false)

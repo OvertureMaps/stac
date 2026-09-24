@@ -24,9 +24,9 @@ use serde_json::json;
 use crate::stac::registry;
 use crate::stac::{
     add_child_link, build_empty_root, build_single_release, link_neighbor_releases,
-    list_release_ids, save_absolute_published, stamp_vcs,
-    validate_catalog as rust_validate_catalog, validate_catalog_uri as rust_validate_catalog_uri,
-    validate_url as rust_validate_url, Failure, ValidateOptions, ValidationReport,
+    list_release_ids, save_sub_catalog, stamp_vcs, validate_catalog as rust_validate_catalog,
+    validate_catalog_uri as rust_validate_catalog_uri, validate_url as rust_validate_url, Failure,
+    ValidateOptions, ValidationReport,
 };
 use crate::storage::{fetch_schema_version, Bucket};
 
@@ -159,8 +159,7 @@ fn build_release_catalog<'py>(
         link_neighbor_releases(&mut catalog, &ids, &root_href);
 
         let dest = output_path.join(&release_version);
-        save_absolute_published(&catalog, &format!("{root_href}/{release_version}"), &dest)
-            .map_err(map_err)?;
+        save_sub_catalog(&catalog, &root_href, &dest).map_err(map_err)?;
 
         Ok(())
     })

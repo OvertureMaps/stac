@@ -17,6 +17,7 @@ use std::collections::BTreeMap;
 use std::path::Path;
 use std::sync::{Arc, OnceLock};
 
+use crate::stac::root::ROOT_CATALOG_TITLE;
 use crate::stac::theme::{process_theme, ThemeResult};
 use crate::stac::{pmtiles, registry};
 use crate::storage::{list_top_level, Bucket};
@@ -250,22 +251,30 @@ pub fn link_neighbor_releases(catalog: &mut ReleaseCatalog, all_ids: &[String], 
     catalog.neighbor_links = compute_neighbor_links(&catalog.catalog.id, all_ids, root_href);
 }
 
-/// Save a ReleaseCatalog (or top-level Overture Releases catalog) under `dest`, using
-/// absolute self-hrefs rooted at `base_url`.
-pub fn save_absolute_published(
-    release: &ReleaseCatalog,
-    base_url: &str,
-    dest: &Path,
-) -> Result<()> {
-    let base_url = base_url.trim_end_matches('/').to_string();
+/// Save the root catalog and its sub-catalogs under `dest`.
+pub fn save_root_catalog(root: &ReleaseCatalog, root_href: &str, dest: &Path) -> Result<()> {
+    let root_href = root_href.trim_end_matches('/');
     std::fs::create_dir_all(dest)?;
-    let self_href = format!("{base_url}/catalog.json");
-    let root_title = release
-        .catalog
-        .title
-        .clone()
-        .unwrap_or_else(|| release.catalog.id.clone());
-    write_release(release, &self_href, &self_href, &root_title, dest, None)
+    let self_href = format!("{root_href}/catalog.json");
+    write_release(root, &self_href, &self_href, ROOT_CATALOG_TITLE, dest, None)
+}
+
+/// Save a sub-catalog (a single release) under `dest`, wired to the root at `{root_href}/catalog.json`.
+pub fn save_sub_catalog(sub: &ReleaseCatalog, root_href: &str, dest: &Path) -> Result<()> {
+    let root_href = root_href.trim_end_matches('/');
+    let release_id = &sub.catalog.id;
+    std::fs::create_dir_all(dest)?;
+    let self_href = format!("{root_href}/{release_id}/catalog.json");
+    let root_catalog_href = format!("{root_href}/catalog.json");
+    let parent = Some((root_catalog_href.clone(), ROOT_CATALOG_TITLE.to_string()));
+    write_release(
+        sub,
+        &self_href,
+        &root_catalog_href,
+        ROOT_CATALOG_TITLE,
+        dest,
+        parent,
+    )
 }
 
 fn write_release(
@@ -611,4 +620,84 @@ fn write_collections_parquet(path: &Path, items: Vec<Item>) -> Result<()> {
     coll.into_geoparquet_path(path, WriterOptions::default())
         .with_context(|| format!("write {}", path.display()))?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::Value;
+
+    fn read_catalog_json(path: &Path) -> Value {
+        let bytes = std::fs::read(path.join("catalog.json")).unwrap();
+        serde_json::from_slice(&bytes).unwrap()
+    }
+
+    fn find_link<'a>(cat: &'a Value, rel: &str) -> Option<&'a Value> {
+        cat.get("links")
+            .and_then(|v| v.as_array())
+            .and_then(|links| {
+                links
+                    .iter()
+                    .find(|l| l.get("rel").and_then(|v| v.as_str()) == Some(rel))
+            })
+    }
+
+    fn minimal_release(id: &str) -> ReleaseCatalog {
+        let mut catalog = Catalog::new(id, format!("Overture's {id} release"));
+        catalog.title = Some(format!("{id} Overture Release"));
+        ReleaseCatalog {
+            catalog,
+            bundles: Vec::new(),
+            neighbor_links: Vec::new(),
+            sub_children: Vec::new(),
+            extra_child_fields: serde_json::Map::new(),
+        }
+    }
+
+    #[test]
+    fn sub_catalog_points_root_and_parent_at_root_catalog() {
+        let tmp = tempfile::tempdir().unwrap();
+        let dest = tmp.path().join("2026-09-23.0");
+        let sub = minimal_release("2026-09-23.0");
+        save_sub_catalog(&sub, "https://stac.example.com", &dest).unwrap();
+
+        let doc = read_catalog_json(&dest);
+        let root = find_link(&doc, "root").unwrap();
+        let parent = find_link(&doc, "parent").unwrap();
+        let self_link = find_link(&doc, "self").unwrap();
+
+        assert_eq!(
+            root.get("href").and_then(|v| v.as_str()),
+            Some("https://stac.example.com/catalog.json"),
+            "rel:root should point at the root catalog, not the sub-catalog",
+        );
+        assert_eq!(
+            parent.get("href").and_then(|v| v.as_str()),
+            Some("https://stac.example.com/catalog.json"),
+            "sub-catalog should have rel:parent pointing at the root catalog",
+        );
+        assert_eq!(
+            self_link.get("href").and_then(|v| v.as_str()),
+            Some("https://stac.example.com/2026-09-23.0/catalog.json"),
+        );
+    }
+
+    #[test]
+    fn root_catalog_has_root_self_reference_and_no_parent() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut root_cat = minimal_release("Overture Releases");
+        root_cat.catalog.title = Some(ROOT_CATALOG_TITLE.to_string());
+        save_root_catalog(&root_cat, "https://stac.example.com", tmp.path()).unwrap();
+
+        let doc = read_catalog_json(tmp.path());
+        let root = find_link(&doc, "root").unwrap();
+        assert_eq!(
+            root.get("href").and_then(|v| v.as_str()),
+            Some("https://stac.example.com/catalog.json"),
+        );
+        assert!(
+            find_link(&doc, "parent").is_none(),
+            "root catalog must not carry a parent link",
+        );
+    }
 }
