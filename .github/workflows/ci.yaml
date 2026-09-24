@@ -30,7 +30,9 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      - uses: $/.github/actions/setup-rust
+        with:
+          cache-key: rust
 
       - name: fmt
         run: cargo fmt --check
@@ -85,9 +87,9 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      - uses: $/.github/actions/setup-rust
         with:
-          key: python-bindings
+          cache-key: python-bindings
 
       - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
 
@@ -114,9 +116,9 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      - uses: $/.github/actions/setup-rust
         with:
-          key: stac-validate
+          cache-key: stac-validate
 
       - name: Build sample catalog and validate
         run: cargo run --release -- build --debug --output tmp/ --validate
@@ -132,9 +134,9 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      - uses: $/.github/actions/setup-rust
         with:
-          key: stac-validate-offline
+          cache-key: stac-validate-offline
 
       - uses: lowlydba/setup-garage@4541bf2220810f325afe59324046f8278a1b477a # v1.0.0
         with:
