@@ -94,6 +94,15 @@ import overture_stac  # events now visible during any call
 
 Route a specific target with the usual `logging.getLogger("overture_stac.stac.theme").setLevel(...)`.
 
+## Migrating from [1.4.0](https://pypi.org/project/overture-stac/1.4.0/)
+
+`overture-stac` 2.x replaces the pure-Python [1.4.0](https://pypi.org/project/overture-stac/1.4.0/) release with a Rust core and thin Python bindings. The [1.4.0](https://pypi.org/project/overture-stac/1.4.0/) API is not preserved. The old entry points map as follows:
+
+- The `gen-stac` is replaced by the `overture-stac` CLI, distributed through the Rust crate. For now, you can install it from source with `cargo run --release -- build ...`. The `cargo install overture-stac` path from `crates.io` is coming soon. The PyPI wheel ships only the Python bindings, not the CLI binary.
+- The `OvertureRelease` class is replaced by module-level functions: `overture_stac.build_catalog(...)` to build, `overture_stac.validate_url(...)` or `validate_catalog(...)` to validate, and `overture_stac.list_releases()` to enumerate releases. All are async and should be awaited (or run via `asyncio.run`).
+
+`pip install overture-stac` continues to work as before. Prebuilt wheels are published for Linux, macOS, and Windows, so no Rust toolchain is required on the install side.
+
 ## Development
 
 A [`justfile`](./justfile) collects the common commands. Install [just](https://github.com/casey/just) with `brew install just` and run `just` to see recipes. `just check` runs `cargo fmt --check`, `cargo clippy`, and `cargo test`, the same checks CI would run.

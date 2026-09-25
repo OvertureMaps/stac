@@ -1,0 +1,85 @@
+---
+# Builds wheels + sdist on every v* tag and publishes to PyPI.
+name: Publish PyPI
+
+on:
+  push:
+    tags: ['v*']
+
+permissions: {}
+
+concurrency:
+  group: publish-pypi-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  wheels:
+    name: Wheels (${{ matrix.target.os }} / ${{ matrix.target.arch }})
+    runs-on: ${{ matrix.target.runner }}
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - { os: linux,   arch: x86_64,  runner: ubuntu-latest,  manylinux: auto }
+          - { os: linux,   arch: aarch64, runner: ubuntu-latest,  manylinux: auto }
+          - { os: macos,   arch: x86_64,  runner: macos-13,       manylinux: '' }
+          - { os: macos,   arch: aarch64, runner: macos-latest,   manylinux: '' }
+          - { os: windows, arch: x64,     runner: windows-latest, manylinux: '' }
+    steps:
+      - uses: actions/checkout@v5 # zizmor: ignore[unpinned-uses]
+        with:
+          persist-credentials: false
+
+      - name: Build wheels
+        uses: PyO3/maturin-action@v1 # zizmor: ignore[unpinned-uses]
+        with:
+          target: ${{ matrix.target.arch }}
+          args: --release --out dist --features python,extension-module
+          manylinux: ${{ matrix.target.manylinux }}
+
+      - uses: actions/upload-artifact@v4 # zizmor: ignore[unpinned-uses]
+        with:
+          name: wheels-${{ matrix.target.os }}-${{ matrix.target.arch }}
+          path: dist/*.whl
+
+  sdist:
+    name: Source distribution
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v5 # zizmor: ignore[unpinned-uses]
+        with:
+          persist-credentials: false
+
+      - name: Build sdist
+        uses: PyO3/maturin-action@v1 # zizmor: ignore[unpinned-uses]
+        with:
+          command: sdist
+          args: --out dist
+
+      - uses: actions/upload-artifact@v4 # zizmor: ignore[unpinned-uses]
+        with:
+          name: sdist
+          path: dist/*.tar.gz
+
+  publish:
+    name: Publish to PyPI
+    needs: [wheels, sdist]
+    if: github.repository == 'OvertureMaps/stac'
+    environment: pypi-publish
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write # OIDC trusted publishing to PyPI
+    steps:
+      - uses: actions/download-artifact@v5 # zizmor: ignore[unpinned-uses]
+        with:
+          path: dist
+          pattern: '{wheels-*,sdist}'
+          merge-multiple: true
+
+      - uses: pypa/gh-action-pypi-publish@v1 # zizmor: ignore[unpinned-uses]
+        with:
+          packages-dir: dist
