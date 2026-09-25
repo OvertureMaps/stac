@@ -9,6 +9,9 @@ use crate::{Error, Result};
 
 const VCS_EXTENSION_URL: &str = "https://stac-extensions.github.io/vcs/v0.1.0/schema.json";
 
+/// Title of the root catalog, used for `rel: root` / `rel: parent` link titles on sub-catalogs.
+pub const ROOT_CATALOG_TITLE: &str = "Overture Releases";
+
 /// Read the root `catalog.json` from a catalog bucket and extract release IDs
 /// from its `rel: child` links. Assumes the bucket handle is rooted at the
 /// catalog prefix (see [`Bucket::from_url`][crate::storage::Bucket::from_url]).

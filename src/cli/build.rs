@@ -6,7 +6,7 @@ use regex::Regex;
 
 use overture_stac::stac::{
     build_single_release, build_top_catalog, link_neighbor_releases, list_release_ids, registry,
-    save_absolute_published, stamp_vcs, validate_release_id,
+    save_root_catalog, save_sub_catalog, stamp_vcs, validate_release_id,
 };
 use overture_stac::storage::Bucket;
 use overture_stac::{Error, Result, ResultExt};
@@ -105,7 +105,7 @@ pub async fn run(args: BuildArgs) -> Result<()> {
         link_neighbor_releases(&mut catalog, &ids, &root_href);
 
         let dest = args.output.join(&release);
-        save_absolute_published(&catalog, &format!("{root_href}/{release}"), &dest)?;
+        save_sub_catalog(&catalog, &root_href, &dest)?;
         if args.validate {
             run_validation(&dest, false).await?;
         }
@@ -125,7 +125,7 @@ pub async fn run(args: BuildArgs) -> Result<()> {
         &args.output,
     )
     .await?;
-    save_absolute_published(&top, &root_href, &args.output)?;
+    save_root_catalog(&top, &root_href, &args.output)?;
     if args.validate {
         run_validation(&args.output, false).await?;
     }
