@@ -7,7 +7,7 @@ on:
     types: [closed]
 
 concurrency:
-  group: staging-cleanup-${{ github.event.number }}
+  group: staging-pr-${{ github.event.number }}
   cancel-in-progress: true
 
 permissions:
