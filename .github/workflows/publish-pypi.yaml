@@ -1,0 +1,92 @@
+---
+# Builds wheels + sdist on every v* tag and publishes to PyPI.
+name: Publish PyPI
+
+on:
+  push:
+    tags: ['v*']
+
+permissions: {}
+
+concurrency:
+  group: publish-pypi-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  wheels:
+    name: Wheels (${{ matrix.target.os }} / ${{ matrix.target.arch }})
+    runs-on: ${{ matrix.target.runner }}
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - { os: linux,   arch: x86_64,  runner: ubuntu-latest,  manylinux: auto }
+          - { os: linux,   arch: aarch64, runner: ubuntu-latest,  manylinux: auto }
+          - { os: macos,   arch: x86_64,  runner: macos-13,       manylinux: '' }
+          - { os: macos,   arch: aarch64, runner: macos-latest,   manylinux: '' }
+          - { os: windows, arch: x64,     runner: windows-latest, manylinux: '' }
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+
+      - name: Pin wheel version to tag
+        shell: bash
+        run: python .github/scripts/set_wheel_version.py "${GITHUB_REF_NAME#v}"
+
+      - name: Build wheels
+        uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
+        with:
+          target: ${{ matrix.target.arch }}
+          args: --release --out dist --features python,extension-module
+          manylinux: ${{ matrix.target.manylinux }}
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: wheels-${{ matrix.target.os }}-${{ matrix.target.arch }}
+          path: dist/*.whl
+
+  sdist:
+    name: Source distribution
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+
+      - name: Pin wheel version to tag
+        run: python .github/scripts/set_wheel_version.py "${GITHUB_REF_NAME#v}"
+
+      - name: Build sdist
+        uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
+        with:
+          command: sdist
+          args: --out dist
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: sdist
+          path: dist/*.tar.gz
+
+  publish:
+    name: Publish to PyPI
+    needs: [wheels, sdist]
+    if: github.repository == 'OvertureMaps/stac'
+    environment: pypi-publish
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write # OIDC trusted publishing to PyPI
+    steps:
+      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5.0.0
+        with:
+          path: dist
+          pattern: '{wheels-*,sdist}'
+          merge-multiple: true
+
+      - uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # v1.14.2
+        with:
+          packages-dir: dist
