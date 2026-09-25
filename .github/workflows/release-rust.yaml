@@ -1,0 +1,70 @@
+---
+name: Release Rust
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-rust-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Release
+    if: github.repository == 'OvertureMaps/stac'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write        # push rs-v* tag, create GitHub Release
+      pull-requests: write   # open/update the release-plz release PR
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      # release-plz has no path filter for a single crate; skip when only Python-facing paths changed.
+      - name: Guard release-pr on Rust-affecting changes
+        id: guard
+        run: |
+          last_tag=$(git describe --tags --match 'rs-v*' --abbrev=0 2>/dev/null || echo "")
+          if [ -z "$last_tag" ]; then
+            echo "No rs-v* tag yet; proceeding with release-pr."
+            echo "run_release_pr=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          changed=$(git diff --name-only "$last_tag"..HEAD)
+          if [ -z "$changed" ]; then
+            echo "No changes since $last_tag."
+            echo "run_release_pr=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if echo "$changed" | grep -qvE '^(src/python\.rs$|python/|pyproject\.toml$)'; then
+            echo "Rust-affecting changes since $last_tag; proceeding with release-pr."
+            echo "run_release_pr=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "Only Python-facing files changed since $last_tag; skipping release-pr."
+            echo "run_release_pr=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: release-plz release-pr
+        if: steps.guard.outputs.run_release_pr == 'true'
+        uses: release-plz/action@8e61445f0b34e7c6d985255f2f1f05a36eb350dc # v0.5.137
+        with:
+          command: release-pr
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+
+      - name: release-plz release
+        uses: release-plz/action@8e61445f0b34e7c6d985255f2f1f05a36eb350dc # v0.5.137
+        with:
+          command: release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}

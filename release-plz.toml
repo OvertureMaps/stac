@@ -1,0 +1,8 @@
+[workspace]
+git_tag_name = "rs-v{{ version }}"
+git_release_name = "rs-v{{ version }}"
+dependencies_update = false
+semver_check = true
+
+[[package]]
+name = "overture-stac"

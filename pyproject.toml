@@ -44,3 +44,20 @@ dev = [
     "pytest>=9.1.1",
     "pytest-asyncio>=1.4.0",
 ]
+
+[tool.semantic_release]
+tag_format = "v{version}"
+commit_parser = "conventional-monorepo"
+allow_zero_version = true
+major_on_zero = true
+build_command = ""
+
+[tool.semantic_release.commit_parser_options]
+path_filters = ["src/python.rs", "python/**", "pyproject.toml"]
+
+[tool.semantic_release.branches.main]
+match = "main"
+prerelease = false
+
+[tool.semantic_release.remote]
+type = "github"
