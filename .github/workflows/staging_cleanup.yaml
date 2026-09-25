@@ -31,11 +31,10 @@ jobs:
           role-to-assume: ${{ env.AWS_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
 
-      # No flags to ignore "not found" errors, so we use "|| true" to prevent failure if the path doesn't exist
       - name: Delete from S3
         run: |
           aws s3 rm --recursive \
-            s3://overture-managed-staging-usw2/gh-pages/${GITHUB_EVENT_REPOSITORY_NAME}/pr/${GITHUB_EVENT_NUMBER}/ || true
+            s3://overture-managed-staging-usw2/gh-pages/${GITHUB_EVENT_REPOSITORY_NAME}/pr/${GITHUB_EVENT_NUMBER}/
         env:
           GITHUB_EVENT_REPOSITORY_NAME: ${{ github.event.repository.name }}
           GITHUB_EVENT_NUMBER: ${{ github.event.number }}
@@ -44,7 +43,7 @@ jobs:
         run: |
           aws cloudfront create-invalidation \
             --distribution-id E1KP2IN0H2RGGT \
-            --paths "/${GITHUB_EVENT_REPOSITORY_NAME}/pr/${GITHUB_EVENT_NUMBER}/*" || true
+            --paths "/${GITHUB_EVENT_REPOSITORY_NAME}/pr/${GITHUB_EVENT_NUMBER}/*"
         env:
           GITHUB_EVENT_REPOSITORY_NAME: ${{ github.event.repository.name }}
           GITHUB_EVENT_NUMBER: ${{ github.event.number }}
