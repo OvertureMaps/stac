@@ -1,0 +1,36 @@
+{
+  "version": 8,
+  "name": "Places",
+  "sources": {
+    "overture": {
+      "type": "vector",
+      "url": "pmtiles://https://tiles.overturemaps.org/2026-08-19.0/places.pmtiles"
+    }
+  },
+  "layers": [
+    {
+      "id": "places",
+      "type": "circle",
+      "source": "overture",
+      "source-layer": "place",
+      "paint": {
+        "circle-radius": [
+          "interpolate",
+          [
+            "linear"
+          ],
+          [
+            "zoom"
+          ],
+          4,
+          1.2,
+          12,
+          4
+        ],
+        "circle-color": "#e6550d",
+        "circle-opacity": 0.75,
+        "circle-stroke-width": 0
+      }
+    }
+  ]
+}

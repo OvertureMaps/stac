@@ -1,0 +1,41 @@
+{
+  "version": 8,
+  "name": "Buildings by height (where known)",
+  "sources": {
+    "overture": {
+      "type": "vector",
+      "url": "pmtiles://https://tiles.overturemaps.org/2026-08-19.0/buildings.pmtiles"
+    }
+  },
+  "layers": [
+    {
+      "id": "buildings-height",
+      "type": "fill",
+      "source": "overture",
+      "source-layer": "building",
+      "filter": [
+        "has",
+        "height"
+      ],
+      "paint": {
+        "fill-color": [
+          "step",
+          [
+            "get",
+            "height"
+          ],
+          "#fee5d9",
+          6,
+          "#fcae91",
+          12,
+          "#fb6a4a",
+          20,
+          "#de2d26",
+          50,
+          "#a50f15"
+        ],
+        "fill-opacity": 0.9
+      }
+    }
+  ]
+}
