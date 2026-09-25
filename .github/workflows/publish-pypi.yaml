@@ -33,7 +33,7 @@ jobs:
           persist-credentials: false
 
       - name: Build wheels
-        uses: PyO3/maturin-action@v1 # zizmor: ignore[unpinned-uses]
+        uses: PyO3/maturin-action@
         with:
           target: ${{ matrix.target.arch }}
           args: --release --out dist --features python,extension-module
