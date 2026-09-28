@@ -207,6 +207,7 @@ async fn process_type(
         });
 
         let mut item = Item::new(&item_id);
+        item.collection = Some(type_name.clone());
         item.geometry = Some(serde_json::from_value(geojson_bbox.clone())?);
         item.bbox = Some(Bbox::new(xmin, ymin, xmax, ymax));
 
