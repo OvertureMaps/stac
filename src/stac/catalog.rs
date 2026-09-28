@@ -787,9 +787,6 @@ mod tests {
             nulls += col.null_count();
         }
         assert!(rows > 0, "expected at least one row in collections.parquet");
-        assert_eq!(
-            nulls, 0,
-            "collection column must have no null values",
-        );
+        assert_eq!(nulls, 0, "collection column must have no null values",);
     }
 }
