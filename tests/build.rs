@@ -2,10 +2,12 @@
 //! bucket in debug mode. Marked `#[ignore]` because it's network-dependent and slow —
 //! run explicitly with `cargo test -- --ignored`.
 
+use std::fs::File;
 use std::path::PathBuf;
 
 use overture_stac::stac::build_single_release;
 use overture_stac::storage::Bucket;
+use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
 
 const TEST_RELEASE: &str = "2026-07-22.0";
 const TEST_SCHEMA: &str = "1.18.0";
@@ -45,5 +47,30 @@ async fn build_single_release_debug_mode() {
     assert!(
         release_dir.join("collections.parquet").exists(),
         "collections.parquet written"
+    );
+
+    // Regression guard for #173: every row must carry a non-null `collection`,
+    // otherwise overturemaps-py bbox queries return "No data found" for every type.
+    let file = File::open(release_dir.join("collections.parquet")).expect("open parquet");
+    let reader = ParquetRecordBatchReaderBuilder::try_new(file)
+        .expect("parquet reader builder")
+        .build()
+        .expect("parquet reader");
+    let mut rows = 0usize;
+    let mut nulls = 0usize;
+    for batch in reader {
+        let batch = batch.expect("record batch");
+        let idx = batch
+            .schema()
+            .index_of("collection")
+            .expect("collection column present in collections.parquet");
+        let col = batch.column(idx);
+        rows += col.len();
+        nulls += col.null_count();
+    }
+    assert!(rows > 0, "collections.parquet has at least one row");
+    assert_eq!(
+        nulls, 0,
+        "collection column in collections.parquet must have no null values",
     );
 }
