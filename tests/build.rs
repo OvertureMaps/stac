@@ -49,7 +49,7 @@ async fn build_single_release_debug_mode() {
         "collections.parquet written"
     );
 
-    // Regression guard for #173: every row must carry a non-null `collection`,
+    // Every row must carry a non-null `collection`,
     // otherwise overturemaps-py bbox queries return "No data found" for every type.
     let file = File::open(release_dir.join("collections.parquet")).expect("open parquet");
     let reader = ParquetRecordBatchReaderBuilder::try_new(file)
