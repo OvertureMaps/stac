@@ -748,4 +748,45 @@ mod tests {
             "root catalog must not carry a parent link",
         );
     }
+
+    #[test]
+    fn collections_parquet_carries_non_null_collection() {
+        use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
+        use std::fs::File;
+
+        let mut item = Item::new("00000");
+        item.collection = Some("address".to_string());
+        item.geometry = Some(
+            serde_json::from_value(json!({
+                "type": "Polygon",
+                "coordinates": [[[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0], [0.0, 0.0]]],
+            }))
+            .unwrap(),
+        );
+
+        let tmp = tempfile::tempdir().unwrap();
+        let path = tmp.path().join("collections.parquet");
+        write_collections_parquet(&path, vec![item]).unwrap();
+
+        let file = File::open(&path).unwrap();
+        let reader = ParquetRecordBatchReaderBuilder::try_new(file)
+            .unwrap()
+            .build()
+            .unwrap();
+
+        let mut rows = 0usize;
+        let mut nulls = 0usize;
+        for batch in reader {
+            let batch = batch.unwrap();
+            let idx = batch
+                .schema()
+                .index_of("collection")
+                .expect("collection column present in collections.parquet");
+            let col = batch.column(idx);
+            rows += col.len();
+            nulls += col.null_count();
+        }
+        assert!(rows > 0, "expected at least one row in collections.parquet");
+        assert_eq!(nulls, 0, "collection column must have no null values",);
+    }
 }
