@@ -28,32 +28,7 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@stable
 
-      # release-plz has no path filter for a single crate; skip when only Python-facing paths changed.
-      - name: Guard release-pr on Rust-affecting changes
-        id: guard
-        run: |
-          last_tag=$(git describe --tags --match 'rs-v*' --abbrev=0 2>/dev/null || echo "")
-          if [ -z "$last_tag" ]; then
-            echo "No rs-v* tag yet; proceeding with release-pr."
-            echo "run_release_pr=true" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          changed=$(git diff --name-only "$last_tag"..HEAD)
-          if [ -z "$changed" ]; then
-            echo "No changes since $last_tag."
-            echo "run_release_pr=false" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          if echo "$changed" | grep -qvE '^(src/python\.rs$|python/|pyproject\.toml$)'; then
-            echo "Rust-affecting changes since $last_tag; proceeding with release-pr."
-            echo "run_release_pr=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "Only Python-facing files changed since $last_tag; skipping release-pr."
-            echo "run_release_pr=false" >> "$GITHUB_OUTPUT"
-          fi
-
       - name: release-plz release-pr
-        if: steps.guard.outputs.run_release_pr == 'true'
         uses: release-plz/action@8e61445f0b34e7c6d985255f2f1f05a36eb350dc # v0.5.137
         with:
           command: release-pr
