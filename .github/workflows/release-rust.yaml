@@ -42,7 +42,7 @@ jobs:
     runs-on: ubuntu-latest
     # Approval gate before publishing to crates.io. The trusted publisher
     # config on crates.io must scope to this same environment name.
-    environment: release
+    environment: crates-io
     permissions:
       contents: write        # push v* tag, create GitHub Release
       id-token: write        # OIDC token exchange for crates.io Trusted Publishing
