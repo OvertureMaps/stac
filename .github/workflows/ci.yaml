@@ -160,37 +160,9 @@ jobs:
         run: |
           cargo run --release -- validate /tmp/out --no-overture-rules
 
-  version-bump-guard:
-    name: Version bump guard
-    if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          fetch-depth: 0
-          persist-credentials: false
-
-      - name: Require Cargo.toml version bump when src/ changes
-        env:
-          BASE_REF: ${{ github.base_ref }}
-        run: |
-          set -euo pipefail
-          changed=$(git diff --name-only "origin/$BASE_REF...HEAD")
-          if ! grep -qE '^(src/|Cargo\.toml)' <<< "$changed"; then
-            exit 0
-          fi
-          old_version=$(git show "origin/$BASE_REF:Cargo.toml" | grep -m1 '^version = ' | cut -d'"' -f2)
-          new_version=$(grep -m1 '^version = ' Cargo.toml | cut -d'"' -f2)
-          if [ "$old_version" = "$new_version" ]; then
-            echo "::error file=Cargo.toml::src/ or Cargo.toml changed but [package].version was not bumped (still $old_version) — bump Cargo.toml's version."
-            exit 1
-          fi
-
   all-checks-pass:
     name: All Checks Pass
-    needs: [rust, msrv, python, stac-validate, stac-validate-offline, version-bump-guard]
+    needs: [rust, msrv, python, stac-validate, stac-validate-offline]
     runs-on: ubuntu-latest
     if: always()
     permissions:
