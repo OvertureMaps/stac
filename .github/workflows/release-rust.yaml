@@ -13,13 +13,38 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  release:
-    name: Release
+  release-pr:
+    name: Release PR
     if: github.repository == 'OvertureMaps/stac'
     runs-on: ubuntu-latest
     permissions:
-      contents: write        # push v* tag, create GitHub Release
+      contents: write        # push to the release-plz release branch
       pull-requests: write   # open/update the release-plz release PR
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # zizmor: ignore[superfluous-actions,stale-action-refs]
+
+      - name: release-plz release-pr
+        uses: release-plz/action@8e61445f0b34e7c6d985255f2f1f05a36eb350dc # v0.5.137
+        with:
+          command: release-pr
+        env:
+          GITHUB_TOKEN: ${{ secrets.RELEASE_PLZ_TOKEN }}
+
+  release:
+    name: Release
+    if: github.repository == 'OvertureMaps/stac'
+    needs: release-pr
+    runs-on: ubuntu-latest
+    # Approval gate before publishing to crates.io. The trusted publisher
+    # config on crates.io must scope to this same environment name.
+    environment: release
+    permissions:
+      contents: write        # push v* tag, create GitHub Release
       id-token: write        # OIDC token exchange for crates.io Trusted Publishing
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -33,8 +58,10 @@ jobs:
         id: auth
         uses: rust-lang/crates-io-auth-action@c6f97d42243bad5fab37ca0427f495c86d5b1a18 # v1.0.5
 
-      - name: release-plz
+      - name: release-plz release
         uses: release-plz/action@8e61445f0b34e7c6d985255f2f1f05a36eb350dc # v0.5.137
+        with:
+          command: release
         env:
           GITHUB_TOKEN: ${{ secrets.RELEASE_PLZ_TOKEN }}
           CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
