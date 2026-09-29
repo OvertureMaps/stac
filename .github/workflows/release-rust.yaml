@@ -18,7 +18,7 @@ jobs:
     if: github.repository == 'OvertureMaps/stac'
     runs-on: ubuntu-latest
     permissions:
-      contents: write        # push rs-v* tag, create GitHub Release
+      contents: write        # push v* tag, create GitHub Release
       pull-requests: write   # open/update the release-plz release PR
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
