@@ -1,0 +1,278 @@
+# Changelog
+
+All notable changes to this project will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [Unreleased]
+
+## [3.0.0](https://github.com/OvertureMaps/stac/compare/v0.0.0-reserved...v3.0.0) - 2026-09-30
+
+### Added
+
+- *(root)* add refresh-root and heal latest on child links
+- *(bucket)* warn when AWS_REGION defaults to us-west-2
+- *(theme)* declare partition extension on type collections
+- *(theme)* emit file:size on parquet assets
+- add publish-release workflow for scoped single-release publish
+- *(ci)* add offline stac-validate via lowlydba/setup-garage
+- *(storage)* derive item asset hrefs and registry path from data uri
+- *(python)* rename build_catalog, add build_root_catalog
+- *(cli)* grouped exit codes per error kind, exit 10 on dry-run drift
+- *(s3)* retry reads anonymously on auth errors
+- *(python)* expose validate and list_releases bindings
+- *(validate)* add subcommand with local, url, and bucket modes
+- *(reconcile)* stamp VCS extension + optional --backup-catalog on apply
+- *(cli)* reconcile --apply with add + remove; unify on --catalog-uri
+- *(cli)* add `reconcile` subcommand — reports drift between live catalog and data bucket
+- *(cli)* add `list-releases` subcommand
+- *(python)* auto-infer schema_version from STAC catalog when omitted
+- *(python)* add PEP 561 type stubs (dual-layer maturin)
+- *(python)* install pyo3-log skeleton for tracing → Python logging
+- *(cli,python)* default concurrency to num_cpus/2 when unset
+- *(python)* add async PyO3 bindings for build_catalog
+- enrich STAC metadata, add self-healing prev/next release links
+- add regex to release and schema version flags
+- *(cli)* add --release and --schema-version flags and containerise gen-stac
+
+### Fixed
+
+- *(theme)* populate item.collection so collections.parquet has non-null values
+- *(publish-pypi)* pin actions to shas, drive wheel version from tag
+- *(catalog)* point sub-catalog rel:root at root catalog, not itself ([#170](https://github.com/OvertureMaps/stac/pull/170))
+- *(build)* drop "Latest Overture Release" title in write_root
+- *(root)* title all child links with the release id
+- *(theme)* report full remote fragment count in partition:file_count
+- *(bucket)* drop redundant u64 cast on object_store size
+- *(reconcile)* compare full stac::Link and combine drift print
+- *(reconcile)* address copilot findings on dry-run and post-apply validation
+- skip root schema validation and self-heal stale neighbour links
+- *(catalog)* drop item-only extensions and stray latest from release catalog
+- *(storage)* parquet fragments inherit anonymous-auth retry
+- *(python)* distinguish omitted schema_version from explicit None
+- *(catalog)* skip collections.parquet on empty releases
+- *(catalog)* propagate registry scan errors
+- *(catalog)* validate release id at library boundary
+- *(storage)* honor URI path via PrefixStore
+- *(reconcile)* refresh registry manifest before writing root
+- *(catalog)* emit prev/next on multi-release builds, sort types deterministically
+- *(theme)* prepend union bbox to collection spatial extent
+- *(reconcile)* propagate bucket and JSON-shape errors instead of swallowing
+- *(s3)* pass env AWS credentials to object_store explicitly (avoids IMDS fallback)
+- *(s3)* default region to us-west-2 in Bucket::from_url
+- *(cli)* always write root catalog.json in both --release and walk-all modes
+- correct storage:schemes to satisfy storage/v2.0.0 schema
+- *(ci)* add explanatory comment for packages:write permission
+- *(ci)* pin docker action versions to commit hashes
+- remove enable-cache from setup-uv to prevent cache-poisoning
+- fix license field validation failures
+- replace summaries with table extension and extra fields
+
+### Other
+
+- add Cargo.lock
+- don't attribute Python bindings removal to an unreleased 3.0
+- remove Python bindings and PyO3
+- apply fmt
+- *(collections)* assert non-null collection column in collections.parquet
+- Revise README for overture-stac 2.x changes
+- publish cross-platform PyPI wheels via maturin-action
+- Modify S3 URL format for parquet file access
+- *(bucket)* cover list_top_level_files size and nested-skip
+- Cast object size to u64 for TopLevelFile
+- apply fmt
+- *(validate)* extract shared check_document helper for local + remote paths
+- *(reconcile)* rename newest_first to sort_release_ids
+- apply fmt
+- drop cli-improvement-proposals and phantom crate-architecture link
+- *(readme)* drop Rust-vs-Python migration framing
+- update Cargo.lock
+- track Cargo.lock for reproducible builds
+- add crates.io metadata and MSRV CI job for rust 1.88
+- update Cargo
+- ignore zizmor stale-action-refs for dtolnay/rust-toolchain
+- set persist-credentials false on checkout, ignore superfluous-actions for rust-toolchain
+- pin action versions to SHAs to satisfy zizmor
+- *(error)* strip trailing whitespace on exit_code doc comment
+- set least-privilege token permissions per job
+- keep explicit top-level workflow permissions
+- Merge remote-tracking branch 'origin/main' into rust
+- trigger on main instead of rust branch
+- Potential fix for pull request finding 'CodeQL / Workflow does not contain permissions'
+- Potential fix for pull request finding 'CodeQL / Workflow does not contain permissions'
+- add fmt/clippy/test/doc/build and python bindings checks on rust branch
+- refresh README and architecture doc for Rust
+- *(cli)* split main.rs into cli/ subcommands and stac/root
+- *(lint)* silence clippy warnings across catalog, validate, bucket
+- *(readme)* declutter
+- *(python)* document pyo3-log setup and drop stale TODO
+- *(cli)* add CLI improvement proposals
+- *(src)* group into storage/ and stac/ module folders
+- *(error)* migrate from anyhow to thiserror; central crate::Error enum
+- *(reconcile)* fixture tests for --apply remove path + noop-in-sync
+- *(justfile)* add `install` recipe (cargo install --path .)
+- *(python)* pytest smoke tests + py-test / py-typecheck recipes
+- *(cli)* smoke tests for argparse, dispatch, and validation
+- *(rust)* unit tests for Bucket + integration test for build_single_release
+- *(readme)* add TODO section for CI, wheel distribution, streaming, log bridge, prod migration
+- *(rust)* remove dead new_public_bucket helper
+- *(rust)* rename package/binary to `overture-stac`, add subcommand, rename workers → concurrency
+- *(rust)* drop Python, hoist Rust to root for the `rust` branch
+- Merge branch 'main' into jjcfrancisco/rust-port
+- [CHORE] Bump stac-check-action, drop pre-publish validation pending theme fan-out ([#111](https://github.com/OvertureMaps/stac/pull/111))
+- [FEATURE] Add scheduled workflow to publish the STAC catalog to prod ([#110](https://github.com/OvertureMaps/stac/pull/110))
+- bump to 1.4.0
+- bump to 1.3.0, derive __version__ from installed metadata
+- Make Skillset issue form field optional ([#96](https://github.com/OvertureMaps/stac/pull/96))
+- [CHORE](gha-deps)(deps): bump the minor-patch group with 2 updates
+- [CHORE] Move permissions comment inline for zizmor
+- [CHORE] Satisfy zizmor audits in issue field sync workflow
+- [CHORE] Add Overture issue template and issue field sync workflow
+- [CHORE](gha-deps)(deps): bump aws-actions/configure-aws-credentials
+- Merge pull request #89 from OvertureMaps/dependabot/github_actions/astral-sh/setup-uv-9.0.0
+- Merge pull request #90 from OvertureMaps/dependabot/github_actions/pypa/gh-action-pypi-publish-1.14.1
+- Update dependabot.yml
+- [CHORE](gha-deps)(deps): bump pypa/gh-action-pypi-publish
+- [CHORE](gha-deps)(deps): bump astral-sh/setup-uv from 8.3.1 to 8.3.2
+- Merge pull request #86 from OvertureMaps/dependabot/github_actions/marocchino/sticky-pull-request-comment-3.0.5
+- Merge pull request #84 from OvertureMaps/dependabot/github_actions/aws-actions/configure-aws-credentials-6.2.2
+- [CHORE](gha-deps)(deps): Bump astral-sh/setup-uv from 8.2.0 to 8.3.1
+- [ENHANCEMENT](ci) Add 404 redirect so deep links also catch
+- [ENHANCEMENT](ci) Publish redirect page instead of building STAC on GH Pages
+- [DOCS] Replace labs.overturemaps.org refs with stac.overturemaps.org
+- Merge pull request #80 from OvertureMaps/dependabot/github_actions/lowlydba/are-we-good-1.0.4
+- [CHORE](gha-deps)(deps): Bump aws-actions/configure-aws-credentials
+- [DOCS] Explain trailing-slash normalization rationale for root_href
+- [SECURITY] Avoid template injection in staging build step
+- [BUG] Pass --root-href to staging catalog builds so links match deploy path
+- [CHORE] Bump version to 1.2.0
+- [BUG] Fix CI STAC validation to serve catalog for absolute self links
+- [CHORE] gitignore .impeccable local tooling cache
+- [BUG] Add missing self links via ABSOLUTE_PUBLISHED catalog + --root-href flag
+- [CHORE](gha-deps)(deps): bump the actions group with 2 updates
+- [CHORE](gha-deps)(deps): bump astral-sh/setup-uv from 8.1.0 to 8.2.0
+- bump version to 1.1.1
+- *(ci)* remove daily schedule from publish-stac workflow
+- remove Dockerfile and publish-docker workflow — container lives in tf-data-platform
+- Merge pull request #71 from OvertureMaps/dependabot/github_actions/actions-6a98abd9ac
+- Merge pull request #72 from OvertureMaps/dependabot/github_actions/aws-actions/configure-aws-credentials-6.2.0
+- [CHORE](gha-deps)(deps): Bump aws-actions/configure-aws-credentials
+- Update publish-pypi.yml
+- [CHORE](gha-deps)(deps): Bump aws-actions/configure-aws-credentials
+- bump version to 1.0.10
+- bump version to 1.0.9
+- add may mapping and bump up pyproject
+- Update dependabot.yml
+- [CHORE] Update stac-check-action owner repo
+- Apply suggestions from code review
+- Update uv.lock
+- bump version
+- Add title to test root Catalog
+- Update test_process_theme_worker.py
+- [ENHANCEMENT] Add title fields to STAC catalogs/collections
+- Merge pull request #58 from OvertureMaps/jjcfrancisco/fix-stac-license-validation
+- remove bypass allow to fail
+- Merge pull request #54 from OvertureMaps/jjcfrancisco/fix-stac-bbox-validation
+- Merge pull request #53 from OvertureMaps/jjcfrancisco/fix-stac-collection-metadata
+- Update ci.yaml
+- Use tracked .python-version for CI
+- Use pyproject python in CI; require Python >=3.11
+- Update ci.yaml
+- Update ci.yaml
+- [FEATURE](ci) Validate STAC output with stac-check
+- Update staging.yaml
+- [FEATURE](ci) Auto post staging deploy comments & cleanup
+- [CHORE](deps)(deps): Bump astral-sh/setup-uv from 8.0.0 to 8.1.0
+- Merge pull request #37 from OvertureMaps/dependabot/github_actions/actions/upload-artifact-7.0.1
+- Merge pull request #38 from OvertureMaps/dependabot/github_actions/actions/upload-pages-artifact-5.0.0
+- Update dependabot.yml
+- [CHORE](deps)(deps): Bump actions/upload-pages-artifact
+- [CHORE](deps)(deps): Bump lowlydba/are-we-good from 1.0.1 to 1.0.2
+- Update staging.yaml
+- Update ci.yaml
+- Merge branch '306-devops-create-omf-ruleset-for-all-public-repos' of https://github.com/OvertureMaps/stac into 306-devops-create-omf-ruleset-for-all-public-repos
+- Update ci.yaml
+- Add workflow concurrency and staging fixes
+- hardening pt 2
+- [SECURITY] Harden workflows pt. 1
+- [CHORE](deps)(deps): Bump actions/deploy-pages from 4 to 5
+- Merge pull request #32 from OvertureMaps/dependabot/github_actions/actions/upload-artifact-7
+- Merge pull request #31 from OvertureMaps/dependabot/github_actions/actions/checkout-6
+- Merge pull request #30 from OvertureMaps/dependabot/github_actions/actions/download-artifact-8
+- Create dco.yml
+- Add maintainers, keywords, and URLs to pyproject
+- Merge pull request #25 from OvertureMaps/dependabot/github_actions/actions/upload-artifact-6
+- Merge pull request #28 from OvertureMaps/dependabot/github_actions/actions/upload-pages-artifact-4
+- Merge pull request #27 from OvertureMaps/dependabot/github_actions/aws-actions/configure-aws-credentials-6
+- Merge pull request #24 from OvertureMaps/dependabot/github_actions/astral-sh/setup-uv-7
+- [CHORE](deps)(deps): Bump actions/setup-python from 5 to 6
+- [CHORE] Add CODEOWNERS
+- Add PMTiles and improve assets links ([#21](https://github.com/OvertureMaps/stac/pull/21))
+- Update staging.yaml
+- Update cli.py
+- New preview deployment
+- Remove October release mapping 
+- Update cli.py
+- Update cli.py
+- bump to december in lieu of automation ([#17](https://github.com/OvertureMaps/stac/pull/17))
+- First commit ([#16](https://github.com/OvertureMaps/stac/pull/16))
+- update versions
+- Add registry manifest, uv, & tests ([#13](https://github.com/OvertureMaps/stac/pull/13))
+- adjust oct release date
+- update stac w oct release and schema
+- update stac w sept release and schema
+- add aug patch release
+- Update gen-all-release-stac.py
+- Update README.md
+- Update README.md
+- Cleanup
+- V1 ([#8](https://github.com/OvertureMaps/stac/pull/8))
+- Update overture_releases.yaml
+- Update STAC Example.ipynb
+- Update overture_stac.py
+- Add latest flag and title
+- Update gen-all-release-stac.py
+- Update gen-all-release-stac.py
+- Update gen-all-release-stac.py
+- Update overture_stac.py
+- Update requirements.txt
+- Generate all releases ([#6](https://github.com/OvertureMaps/stac/pull/6))
+- Update gen-data-release-stac.py
+- Add super basic manifest geojson output
+- Update gen-data-release-stac.py
+- Update publish-stack.yaml
+- Convert to CLI script with GeoParquet capabilities ([#5](https://github.com/OvertureMaps/stac/pull/5))
+- Update README.md
+- Forgot to deconflict the merge.
+- remove PM tiles manifest generators, as they are were a defunct expiriment.
+- Rename explore site manifest generator.
+- Update license prior to donation
+- Update latest manifest/stac generating scripts.
+- Update STAC branch with the latest as presented at CNG 2025.
+- Fix an issue that prevented the asset bbox from being written out to the final catalog.
+- Format stac script with black.
+- Get PM Tiles-related STAC stuff happening too.
+- Add json manifest generator for pmtiles as the STAC was a bit of overkill.
+- Add example STAC Catalogs for both the geoparquet data releases and pmtiles releases.
+- Add pmtiles catalog, with collections for each public GA release.
+- Rename data release stac file, and add the release/schema versions to the top-level catalog.
+- Update example STAC
+- Fix the aws region specifier
+- Follow best practices for catalog & collection names, also add support for the 'Storage' stac extension to provide additional s3 / azure blob metadata
+- Example stac build.
+- Do a full catalog build with everything we have
+- Rename type collection to the appropriate type name, and inclue schema / column names for each type.
+- Fix incorrect and too-long file hrefs for each asset.
+- Shorten file Ids so that the collection item readouts aren't so verbose.
+- Get *something* writing the STAC out to disk using relative paths. Paths still need a lot of fixing.
+- Get the stac assembled, but writing it out still needs to be massaged.
+- Update release -> release_version
+- Fix #1 by incorporating the schema version and tag information.
+- Fix print statements and make bboxes arrays of numbers, not strings.
+- Add code that will obtain the bbox for each partial geoparquet file.
+- Done with first-cut at a manifest-level file with filenames, no metadata or bboxes.
+- Add types detected within each theme.
+- Make themes a list of dictionaries.
+- Minimal top-level manifest gen and theme/type crawling working.
+- Initial commit
