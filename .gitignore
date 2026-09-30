@@ -1,16 +1,6 @@
 # Rust
 /target
 
-# Python / maturin
-__pycache__/
-*.py[cod]
-*.egg-info/
-dist/
-.pytest_cache/
-.venv/
-# maturin develop drops the compiled .so alongside the Python source
-python/**/*.so
-
 # Editors / IDEs
 .idea/
 .vscode/
@@ -20,7 +10,6 @@ python/**/*.so
 public_releases/
 output/
 test_output/
-py_output/
 rust_output/
 
 # Misc

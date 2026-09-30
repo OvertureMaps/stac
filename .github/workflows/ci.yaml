@@ -77,34 +77,6 @@ jobs:
           MSRV: ${{ steps.msrv.outputs.version }}
         run: cargo "+$MSRV" build --locked
 
-  python:
-    name: Python bindings (maturin build + pytest)
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-
-      - uses: $/.github/actions/setup-rust
-        with:
-          cache-key: python-bindings
-
-      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
-
-      - name: Set up Python
-        run: uv python install 3.11
-
-      - name: Build extension
-        run: uv run maturin develop --release --features python,extension-module
-
-      - name: Smoke test
-        run: uv run python -c "import overture_stac; print(dir(overture_stac))"
-
-      - name: pytest
-        run: uv run pytest
-
   stac-validate:
     name: STAC validation (build + validate against public bucket)
     runs-on: ubuntu-latest
@@ -162,7 +134,7 @@ jobs:
 
   all-checks-pass:
     name: All Checks Pass
-    needs: [rust, msrv, python, stac-validate, stac-validate-offline]
+    needs: [rust, msrv, stac-validate, stac-validate-offline]
     runs-on: ubuntu-latest
     if: always()
     permissions:
