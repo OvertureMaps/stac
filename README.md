@@ -3,7 +3,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Publish Release](https://github.com/OvertureMaps/stac/actions/workflows/publish-release.yaml/badge.svg)](https://github.com/OvertureMaps/stac/actions/workflows/publish-release.yaml)
 
-`overture-stac` generates, validates, and reconciles the STAC catalog for public [Overture Maps](https://overturemaps.org) releases. It ships as a Rust CLI, with Python bindings for calling the same core from Python.
+`overture-stac` generates, validates, and reconciles the STAC catalog for public [Overture Maps](https://overturemaps.org) releases. It ships as a Rust CLI.
 
 - [`docs/architecture.md`](./docs/architecture.md) — how the production catalog gets built and published.
 
@@ -36,72 +36,12 @@ cargo run --release -- build \
 
 Pass `--debug` for a fast run (a few fragments per type). The `build` subcommand reads from the Overture public bucket over `object_store`, which supports `s3://`, `gs://`, `az://`, and `http(s)://` URIs. The CLI defaults to Overture's S3 location, but the underlying core is cloud-agnostic.
 
-## Python bindings
-
-Same core, imported from Python:
-
-```python
-import asyncio
-import overture_stac
-
-asyncio.run(overture_stac.build_catalog(
-    release_version="2026-07-22.0",
-    schema_version="1.18.0",
-))
-```
-
-Build & install into the current venv with `maturin`:
-
-```bash
-uv run maturin develop --release --features python,extension-module
-# or: just py-develop
-```
-
-The function is async (returns a coroutine) and matches the CLI defaults: `data_uri`, `extras_uri`, `root_href`, `concurrency`, `debug` are all keyword arguments with production defaults. Errors surface as `overture_stac.OvertureStacError`.
-
-The same module also exposes the CLI's `validate` and `list-releases` operations, so scripts and services can consume the STAC catalog without shelling out:
-
-```python
-import asyncio
-import overture_stac
-
-async def main():
-    ids = await overture_stac.list_releases()
-    print("current releases:", ids)
-
-    # Also: validate_catalog(dir=...) for a local build,
-    #       validate_catalog_uri(catalog_uri="s3://...") for the bucket.
-    report = await overture_stac.validate_url("https://stac.overturemaps.org")
-    if not report.ok:
-        for f in report.failures:
-            print(f"[{f.kind}] {f.location}: {f.message}")
-
-asyncio.run(main())
-```
-
-`validate_url` accepts `https://host`, `https://host/`, or a full `.json` URL. Concurrency is capped at 16 for CDN politeness. `check_schema`, `check_links`, `check_overture_rules` are keyword flags (all `True` by default).
-
-### Logging
-
-Rust `tracing`/`log` events forward into Python's `logging` module via `pyo3-log` (installed automatically on module import). Every event lands on the logger whose name matches the Rust module path (`overture_stac.stac.theme`, `object_store.aws.builder`, `reqwest.connect`, etc.). Python's root logger defaults to `WARNING`, so **INFO events are silently filtered** unless you configure `logging`:
-
-```python
-import logging
-logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
-
-import overture_stac  # events now visible during any call
-```
-
-Route a specific target with the usual `logging.getLogger("overture_stac.stac.theme").setLevel(...)`.
-
 ## Migrating from [1.4.0](https://pypi.org/project/overture-stac/1.4.0/)
 
-`overture-stac` 2.x replaces the pure-Python [1.4.0](https://pypi.org/project/overture-stac/1.4.0/) release with a Rust core and thin Python bindings. The [1.4.0](https://pypi.org/project/overture-stac/1.4.0/) API is not preserved. The old entry points map as follows:
+`overture-stac` 2.x replaced the pure-Python [1.4.0](https://pypi.org/project/overture-stac/1.4.0/) release with a Rust core plus thin Python bindings; those bindings have since been retired in favor of the Rust CLI/crate only. The [1.4.0](https://pypi.org/project/overture-stac/1.4.0/) API is not preserved. The old entry points map as follows:
 
-- `gen-stac` is replaced by the `overture-stac` CLI, distributed through the Rust crate. For now, you can install it from source with `cargo run --release -- build ...`. The `cargo install overture-stac` path from `crates.io` is coming soon. The PyPI wheel ships only the Python bindings, not the CLI binary.
-- The `OvertureRelease` class is replaced by module-level functions: `overture_stac.build_release_catalog(...)` and `overture_stac.build_root_catalog(...)` to build, `overture_stac.validate_url(...)` / `validate_catalog(...)` / `validate_catalog_uri(...)` to validate, and `overture_stac.list_releases()` to enumerate releases. All are async and should be awaited (or run via `asyncio.run`).
-
-`pip install overture-stac` continues to work as before. Prebuilt wheels are published for Linux, macOS, and Windows, so no Rust toolchain is required on the install side.
+- `gen-stac` is replaced by the `overture-stac` CLI, distributed through the Rust crate: `cargo install overture-stac`.
+- The `OvertureRelease` class is replaced by the CLI's `build`, `validate`, and `list-releases` subcommands.
 
 ## Development
 

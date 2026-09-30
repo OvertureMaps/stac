@@ -31,9 +31,9 @@ pub async fn list_release_ids(bucket: &Bucket, prefix: &str) -> Result<Vec<Strin
 }
 
 /// Reject anything that isn't a canonical Overture release ID (`YYYY-MM-DD.N`).
-/// Guards the public API — any caller (Python, an in-process user) that reaches
-/// [`build_single_release`] gets the same path-traversal check the CLI applies
-/// up front, so `output.join(release)` can never escape `output`.
+/// Guards the public API — any caller that reaches [`build_single_release`]
+/// gets the same path-traversal check the CLI applies up front, so
+/// `output.join(release)` can never escape `output`.
 pub fn validate_release_id(release: &str) -> Result<()> {
     if release_id_re().is_match(release) {
         Ok(())
