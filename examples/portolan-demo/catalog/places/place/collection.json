@@ -1,0 +1,253 @@
+{
+  "type": "Collection",
+  "id": "place",
+  "stac_version": "1.1.0",
+  "stac_extensions": [
+    "https://schemas.portolan-sdi.org/portolan/v0.2.0/schema.json",
+    "https://stac-extensions.github.io/table/v1.2.0/schema.json"
+  ],
+  "title": "Places",
+  "description": "73.6 million points of interest worldwide \u2014 businesses, services, landmarks, and other named places \u2014 conflated by Overture from multiple open and member-contributed sources.\n\nEach place carries a category (`categories.primary`, with a coarser `basic_category` and a full `taxonomy.hierarchy`), a `confidence` score between 0 and 1, and, where known, `brand`, `addresses`, `websites`, `phones`, and `socials`. Places are point geometries, not footprints; join to [Buildings](../../buildings/building/collection.json) on location if you need a footprint.\n\n**Read `confidence` before you trust a row.** Overture retains low-confidence candidates rather than dropping them, so an unfiltered extract includes places that may not exist. Measured over partition `00000` (4.6 million rows), confidence is spread across the full range, with the largest single band at 0.9. The [agent guide](AGENTS.md) carries the query and a suggested filtering threshold.\n\nCategory coverage is good: `basic_category` is populated on roughly 96% of rows in that same partition, led by `restaurant`, `personal_or_beauty_service`, and `fashion_and_apparel_store`.\n\nField definitions come from the [Overture places schema reference](https://docs.overturemaps.org/schema/reference/places/place/).\n",
+  "license": "other",
+  "keywords": [
+    "places",
+    "points of interest",
+    "poi",
+    "business",
+    "gers",
+    "overture"
+  ],
+  "providers": [
+    {
+      "name": "Overture Maps Foundation",
+      "description": "Overture Maps Foundation is a collaborative effort of its members to build open, interoperable map data. It assembles, conflates, and quality-checks the source datasets behind this collection and publishes them on a monthly cadence.",
+      "roles": [
+        "producer",
+        "licensor",
+        "processor",
+        "host"
+      ],
+      "url": "https://overturemaps.org/"
+    }
+  ],
+  "extent": {
+    "spatial": {
+      "bbox": [
+        [
+          -179.99806213378906,
+          -84.9901123046875,
+          -77.02679443359375,
+          81.75200653076172
+        ],
+        [
+          -179.99806213378906,
+          -84.9901123046875,
+          -77.02679443359375,
+          28.517011642456055
+        ],
+        [
+          -176.8875732421875,
+          28.517009735107422,
+          -77.46292114257812,
+          34.473384857177734
+        ],
+        [
+          -179.81707763671875,
+          34.47338104248047,
+          -89.38878631591797,
+          81.75200653076172
+        ]
+      ]
+    },
+    "temporal": {
+      "interval": [
+        [
+          null,
+          null
+        ]
+      ]
+    }
+  },
+  "links": [
+    {
+      "rel": "root",
+      "href": "../../catalog.json",
+      "type": "application/json",
+      "title": "Overture Places and Buildings"
+    },
+    {
+      "rel": "parent",
+      "href": "../catalog.json",
+      "type": "application/json",
+      "title": "Places"
+    },
+    {
+      "rel": "describedby",
+      "href": "./README.md",
+      "type": "text/markdown",
+      "title": "README"
+    },
+    {
+      "rel": "agents",
+      "href": "./AGENTS.md",
+      "type": "text/markdown",
+      "title": "Agent guide"
+    },
+    {
+      "rel": "license",
+      "href": "https://docs.overturemaps.org/attribution/",
+      "title": "Overture Maps Attribution and Licensing"
+    },
+    {
+      "rel": "item",
+      "href": "./00000/00000.json",
+      "type": "application/geo+json",
+      "title": "Places partition 00000"
+    },
+    {
+      "rel": "item",
+      "href": "./00001/00001.json",
+      "type": "application/geo+json",
+      "title": "Places partition 00001"
+    },
+    {
+      "rel": "item",
+      "href": "./00002/00002.json",
+      "type": "application/geo+json",
+      "title": "Places partition 00002"
+    }
+  ],
+  "assets": {
+    "style": {
+      "href": "./styles/default.json",
+      "type": "application/json",
+      "title": "Default style",
+      "roles": [
+        "style",
+        "default"
+      ],
+      "file:size": 659,
+      "file:checksum": "12201e5424d8aee38395f5d763cea9c144c3c0bce1d417ff28da0db68c7a977ed12c"
+    },
+    "style-by-confidence": {
+      "href": "./styles/by-confidence.json",
+      "type": "application/json",
+      "title": "Coloured by confidence score",
+      "roles": [
+        "style"
+      ],
+      "file:size": 902,
+      "file:checksum": "1220ea4fe052d3a4b2932cc99007fde132af0563be348e1f72fbde247520719bdf49"
+    },
+    "style-by-category": {
+      "href": "./styles/by-category.json",
+      "type": "application/json",
+      "title": "Coloured by basic category",
+      "roles": [
+        "style"
+      ],
+      "file:size": 1305,
+      "file:checksum": "1220748bb3e51cbe826c592412f86113ee8b5e9fdc51547539077f96d8571c340550"
+    }
+  },
+  "summaries": {
+    "num_rows": {
+      "minimum": 4556592,
+      "maximum": 4677697
+    },
+    "num_row_groups": {
+      "minimum": 256,
+      "maximum": 256
+    }
+  },
+  "table:primary_geometry": "geometry",
+  "table:row_count": 73631092,
+  "table:columns": [
+    {
+      "name": "id",
+      "type": "string",
+      "description": "Stable feature identifier. Where the feature is part of the Global Entity Reference System (GERS), this is its GERS ID and can be used to join Overture releases to each other and to external datasets."
+    },
+    {
+      "name": "geometry",
+      "type": "binary",
+      "description": "Feature geometry as WKB, in EPSG:4326 (longitude, latitude). This is the GeoParquet primary geometry column."
+    },
+    {
+      "name": "categories",
+      "type": "struct<primary: string, alternate: list<string>>",
+      "description": "Overture category classification for the place. `primary` is the single best-fit category; `alternate` holds additional categories that also apply."
+    },
+    {
+      "name": "confidence",
+      "type": "double",
+      "description": "Score between 0 and 1 indicating how confident Overture is that the place exists. Filter on this before treating places as ground truth; low-confidence rows are retained rather than dropped."
+    },
+    {
+      "name": "websites",
+      "type": "list<string>",
+      "description": "Web addresses for the place. Unique, at least one entry when present."
+    },
+    {
+      "name": "emails",
+      "type": "list<string>",
+      "description": "Email addresses for the place. Unique, at least one entry when present."
+    },
+    {
+      "name": "socials",
+      "type": "list<string>",
+      "description": "Social media URLs for the place. Unique, at least one entry when present."
+    },
+    {
+      "name": "phones",
+      "type": "list<string>",
+      "description": "Telephone numbers for the place. Unique, at least one entry when present."
+    },
+    {
+      "name": "brand",
+      "type": "struct<wikidata: string, names: struct<primary: string, common: map<string, string>, rules: list<struct<variant: string, language: string, perspectives: struct<mode: string, countries: list<string>>, value: string, between: list<double>, side: string>>>>",
+      "description": "Brand associated with the place, including its Wikidata QID where known. The Wikidata id is the reliable key for grouping chain locations; brand names vary."
+    },
+    {
+      "name": "addresses",
+      "type": "list<struct<freeform: string, locality: string, postcode: string, region: string, country: string>>",
+      "description": "One or more postal addresses for the place. `freeform` carries the street line as published; `country` is an ISO 3166-1 alpha-2 code."
+    },
+    {
+      "name": "names",
+      "type": "struct<primary: string, common: map<string, string>, rules: list<struct<variant: string, language: string, perspectives: struct<mode: string, countries: list<string>>, value: string, between: list<double>, side: string>>>",
+      "description": "All known names for the feature. `primary` is the main name; `common` maps language codes to translations; `rules` carries variants that apply only in a given language, along a linear range, or from a given geopolitical perspective."
+    },
+    {
+      "name": "sources",
+      "type": "list<struct<property: string, dataset: string, license: string, record_id: string, update_time: string, confidence: double, between: list<double>, provider: string, resource: string, version: string>>",
+      "description": "Provenance for the feature: which upstream dataset each property came from, the record id in that dataset, its license, and when it was last updated. `property` is a JSON pointer to the field the entry explains; an empty pointer covers the whole feature."
+    },
+    {
+      "name": "operating_status",
+      "type": "string",
+      "description": "Whether the place is operating, temporarily closed, or permanently closed."
+    },
+    {
+      "name": "basic_category",
+      "type": "string",
+      "description": "Intuitive, general-level category for the place \u2014 a coarser grouping than `categories.primary`, intended for readers who want a small, stable vocabulary."
+    },
+    {
+      "name": "taxonomy",
+      "type": "struct<primary: string, hierarchy: list<string>, alternates: list<string>>",
+      "description": "Structured representation of the place's category within the Overture taxonomy. `hierarchy` is the full path from the broadest ancestor down to `primary`, which makes it possible to aggregate at any level without a lookup table."
+    },
+    {
+      "name": "version",
+      "type": "int32",
+      "description": "Version of this feature. Incremented by Overture whenever the feature changes between releases."
+    },
+    {
+      "name": "bbox",
+      "type": "struct<xmin: double, xmax: double, ymin: double, ymax: double>",
+      "description": "Bounding box of the feature geometry, stored as a struct so that readers can filter on it with Parquet row-group statistics before decoding any geometry."
+    }
+  ],
+  "geoparquet:version": "1.1.0"
+}
