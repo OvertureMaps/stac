@@ -38,7 +38,7 @@ Pass `--debug` for a fast run (a few fragments per type). The `build` subcommand
 
 ## Migrating from [1.4.0](https://pypi.org/project/overture-stac/1.4.0/)
 
-`overture-stac` 2.x replaced the pure-Python [1.4.0](https://pypi.org/project/overture-stac/1.4.0/) release with a Rust core (Python bindings were dropped in 3.0; see the crate's history for that transitional release). The [1.4.0](https://pypi.org/project/overture-stac/1.4.0/) API is not preserved. The old entry points map as follows:
+`overture-stac` 2.x replaced the pure-Python [1.4.0](https://pypi.org/project/overture-stac/1.4.0/) release with a Rust core plus thin Python bindings; those bindings have since been retired in favor of the Rust CLI/crate only. The [1.4.0](https://pypi.org/project/overture-stac/1.4.0/) API is not preserved. The old entry points map as follows:
 
 - `gen-stac` is replaced by the `overture-stac` CLI, distributed through the Rust crate: `cargo install overture-stac`.
 - The `OvertureRelease` class is replaced by the CLI's `build`, `validate`, and `list-releases` subcommands.
