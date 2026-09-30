@@ -12,14 +12,18 @@ concurrency:
   group: release-rust-${{ github.ref }}
   cancel-in-progress: false
 
+env:
+  AWS_REGION: us-west-2
+  PULL_REQUESTER_ROLE_ARN: arn:aws:iam::816069134238:role/gha-pull-requester-secrets-reader
+
 jobs:
   release-pr:
     name: Release PR
     if: github.repository == 'OvertureMaps/stac'
     runs-on: ubuntu-latest
     permissions:
-      contents: write        # push to the release-plz release branch
-      pull-requests: write   # open/update the release-plz release PR
+      contents: read
+      id-token: write # OIDC token exchange with AWS to read the app PEM
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -28,12 +32,40 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # zizmor: ignore[superfluous-actions,stale-action-refs]
 
+      - name: Configure AWS credentials (app PEM read)
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: ${{ env.PULL_REQUESTER_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Fetch overture-pull-requester PEM from Secrets Manager
+        # Exports the PEM as env.PULL_REQUESTER_APP_PEM, masked (incl. multi-line).
+        uses: aws-actions/aws-secretsmanager-get-secrets@2cb1a461cbd4865ac4299648312e4704c646cd53 # v3.0.1
+        with:
+          secret-ids: |
+            PULL_REQUESTER_APP_PEM, omf-github-terraform/pull-requester/pem
+
+      # release-plz acts as overture-pull-requester[bot] rather than via
+      # GITHUB_TOKEN: events created with GITHUB_TOKEN start no workflow, so the
+      # release PR would never report the required checks, and the DCO check
+      # skips bot commits (release-plz can't write a Signed-off-by trailer).
+      - name: Generate app token
+        id: app-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          client-id: Iv23liiN80WEARreTV7m # https://github.com/apps/overture-pull-requester
+          private-key: ${{ env.PULL_REQUESTER_APP_PEM }}
+          owner: OvertureMaps
+          repositories: stac
+          permission-contents: write # push the release-plz release branch
+          permission-pull-requests: write # open/update the release PR
+
       - name: release-plz release-pr
         uses: release-plz/action@b8d6b54b02889ff2ae2bb82e8b57c3a8fc1683a5 # v0.5.139
         with:
           command: release-pr
         env:
-          GITHUB_TOKEN: ${{ secrets.RELEASE_PLZ_TOKEN }}
+          GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
 
   release:
     name: Release
@@ -44,8 +76,8 @@ jobs:
     # config on crates.io must scope to this same environment name.
     environment: crates-io
     permissions:
-      contents: write        # push v* tag, create GitHub Release
-      id-token: write        # OIDC token exchange for crates.io Trusted Publishing
+      contents: read
+      id-token: write # OIDC: AWS for the app PEM, crates.io Trusted Publishing
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -53,6 +85,32 @@ jobs:
           persist-credentials: false
 
       - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # zizmor: ignore[superfluous-actions,stale-action-refs]
+
+      - name: Configure AWS credentials (app PEM read)
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: ${{ env.PULL_REQUESTER_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Fetch overture-pull-requester PEM from Secrets Manager
+        # Exports the PEM as env.PULL_REQUESTER_APP_PEM, masked (incl. multi-line).
+        uses: aws-actions/aws-secretsmanager-get-secrets@2cb1a461cbd4865ac4299648312e4704c646cd53 # v3.0.1
+        with:
+          secret-ids: |
+            PULL_REQUESTER_APP_PEM, omf-github-terraform/pull-requester/pem
+
+      # Same reasoning as release-pr: a GITHUB_TOKEN-created release fires no
+      # `release: published` event downstream.
+      - name: Generate app token
+        id: app-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          client-id: Iv23liiN80WEARreTV7m # https://github.com/apps/overture-pull-requester
+          private-key: ${{ env.PULL_REQUESTER_APP_PEM }}
+          owner: OvertureMaps
+          repositories: stac
+          permission-contents: write # push the v* tag, create the GitHub Release
+          permission-pull-requests: write # comment the release back on the PR
 
       - name: Authenticate with crates.io
         id: auth
@@ -63,5 +121,5 @@ jobs:
         with:
           command: release
         env:
-          GITHUB_TOKEN: ${{ secrets.RELEASE_PLZ_TOKEN }}
+          GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
           CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
