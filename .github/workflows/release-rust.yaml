@@ -60,6 +60,16 @@ jobs:
           permission-contents: write # push the release-plz release branch
           permission-pull-requests: write # open/update the release PR
 
+      # Nothing below needs either, and release-plz pulls in nested actions.
+      - name: Drop the PEM and AWS credentials
+        run: |
+          {
+            echo "PULL_REQUESTER_APP_PEM="
+            echo "AWS_ACCESS_KEY_ID="
+            echo "AWS_SECRET_ACCESS_KEY="
+            echo "AWS_SESSION_TOKEN="
+          } >> "$GITHUB_ENV"
+
       - name: release-plz release-pr
         uses: release-plz/action@b8d6b54b02889ff2ae2bb82e8b57c3a8fc1683a5 # v0.5.139
         with:
@@ -111,6 +121,16 @@ jobs:
           repositories: stac
           permission-contents: write # push the v* tag, create the GitHub Release
           permission-pull-requests: write # comment the release back on the PR
+
+      # Nothing below needs either, and release-plz pulls in nested actions.
+      - name: Drop the PEM and AWS credentials
+        run: |
+          {
+            echo "PULL_REQUESTER_APP_PEM="
+            echo "AWS_ACCESS_KEY_ID="
+            echo "AWS_SECRET_ACCESS_KEY="
+            echo "AWS_SESSION_TOKEN="
+          } >> "$GITHUB_ENV"
 
       - name: Authenticate with crates.io
         id: auth
