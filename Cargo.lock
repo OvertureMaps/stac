@@ -2573,7 +2573,7 @@ checksum = "1a80800c0488c3a21695ea981a54918fbb37abf04f4d0720c453632255e2ff0e"
 
 [[package]]
 name = "overture-stac"
-version = "0.1.0"
+version = "3.0.0"
 dependencies = [
  "arrow-array 59.2.0",
  "arrow-schema 59.2.0",
