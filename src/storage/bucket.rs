@@ -1,8 +1,8 @@
 //! Cloud-agnostic object store handle via `object_store::parse_url`.
 
 use object_store::{
-    parse_url, parse_url_opts, path::Path, prefix::PrefixStore, GetOptions, GetResult, ObjectStore,
-    ObjectStoreExt,
+    parse_url, parse_url_opts, path::Path, prefix::PrefixStore, Attribute, Attributes, GetOptions,
+    GetResult, ObjectStore, ObjectStoreExt, PutOptions,
 };
 use std::sync::Arc;
 use url::Url;
@@ -341,27 +341,49 @@ pub async fn get_json_optional(bucket: &Bucket, key: &str) -> Result<Option<serd
     Ok(Some(value))
 }
 
-/// Serialize `value` to JSON and PUT it.
+const JSON_CONTENT_TYPE: &str = "application/json";
+
+/// Serialize `value` to JSON and PUT it as `application/json`.
 pub async fn put_json(bucket: &Bucket, key: &str, value: &serde_json::Value) -> Result<()> {
-    let p = Path::from(key);
     let body = serde_json::to_vec(value).with_context(|| format!("serializing JSON for {key}"))?;
+    put_bytes(bucket, key, body, JSON_CONTENT_TYPE).await
+}
+
+/// PUT raw bytes at `key` with an explicit `Content-Type`.
+///
+/// Stores do not infer a type from the key, and a missing one makes browsers download
+/// the object instead of rendering it.
+pub async fn put_bytes(
+    bucket: &Bucket,
+    key: &str,
+    bytes: Vec<u8>,
+    content_type: &'static str,
+) -> Result<()> {
+    let p = Path::from(key);
+    let mut attributes = Attributes::new();
+    // `LocalFileSystem` errors on any attribute, and a file has no Content-Type to set.
+    if bucket.scheme != "file" {
+        attributes.insert(Attribute::ContentType, content_type.into());
+    }
+    let opts = PutOptions {
+        attributes,
+        ..Default::default()
+    };
     bucket
         .store
-        .put(&p, body.into())
+        .put_opts(&p, bytes.into(), opts)
         .await
         .with_context(|| format!("putting {key} to {}", bucket.name))?;
     Ok(())
 }
 
-/// PUT raw bytes at `key`.
-pub async fn put_bytes(bucket: &Bucket, key: &str, bytes: Vec<u8>) -> Result<()> {
-    let p = Path::from(key);
-    bucket
-        .store
-        .put(&p, bytes.into())
-        .await
-        .with_context(|| format!("putting {key} to {}", bucket.name))?;
-    Ok(())
+/// Content type for a file under a built catalog, by extension.
+fn content_type_for(path: &std::path::Path) -> &'static str {
+    match path.extension().and_then(|e| e.to_str()) {
+        Some("json") => JSON_CONTENT_TYPE,
+        Some("geojson") => "application/geo+json",
+        _ => "application/octet-stream",
+    }
 }
 
 /// Recursively delete every object under `prefix`.
@@ -415,7 +437,7 @@ pub async fn upload_directory(
             let key = format!("{key_prefix}{rel}");
             let bytes =
                 std::fs::read(&path).with_context(|| format!("reading {}", path.display()))?;
-            put_bytes(bucket, &key, bytes).await?;
+            put_bytes(bucket, &key, bytes, content_type_for(&path)).await?;
             uploaded += 1;
         }
     }
