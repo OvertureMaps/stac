@@ -1,8 +1,8 @@
 //! Cloud-agnostic object store handle via `object_store::parse_url`.
 
 use object_store::{
-    parse_url, parse_url_opts, path::Path, prefix::PrefixStore, Attribute, Attributes, GetOptions,
-    GetResult, ObjectStore, ObjectStoreExt, PutOptions,
+    parse_url, parse_url_opts, path::Path, prefix::PrefixStore, Attribute, AttributeValue,
+    Attributes, GetOptions, GetResult, ObjectStore, ObjectStoreExt, PutOptions,
 };
 use std::sync::Arc;
 use url::Url;
@@ -357,7 +357,7 @@ pub async fn put_bytes(
     bucket: &Bucket,
     key: &str,
     bytes: Vec<u8>,
-    content_type: &'static str,
+    content_type: impl Into<AttributeValue>,
 ) -> Result<()> {
     let p = Path::from(key);
     let mut attributes = Attributes::new();
