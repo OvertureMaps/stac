@@ -342,6 +342,8 @@ pub async fn get_json_optional(bucket: &Bucket, key: &str) -> Result<Option<serd
 }
 
 const JSON_CONTENT_TYPE: &str = "application/json";
+const GEOJSON_CONTENT_TYPE: &str = "application/geo+json";
+const BINARY_CONTENT_TYPE: &str = "application/octet-stream";
 
 /// Serialize `value` to JSON and PUT it as `application/json`.
 pub async fn put_json(bucket: &Bucket, key: &str, value: &serde_json::Value) -> Result<()> {
@@ -381,8 +383,8 @@ pub async fn put_bytes(
 fn content_type_for(path: &std::path::Path) -> &'static str {
     match path.extension().and_then(|e| e.to_str()) {
         Some("json") => JSON_CONTENT_TYPE,
-        Some("geojson") => "application/geo+json",
-        _ => "application/octet-stream",
+        Some("geojson") => GEOJSON_CONTENT_TYPE,
+        _ => BINARY_CONTENT_TYPE,
     }
 }
 
