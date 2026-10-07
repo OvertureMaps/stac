@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.0.1](https://github.com/OvertureMaps/stac/compare/v3.0.0...v3.0.1) - 2026-10-07
+
+### Fixed
+
+- keep put_bytes signature, type by extension
+- set Content-Type on published objects
+
+### Other
+
+- name all content-type constants
+- accept owned content types in put_bytes
+
 ## [3.0.0](https://github.com/OvertureMaps/stac/compare/v0.0.0-reserved...v3.0.0) - 2026-09-30
 
 ### Added
