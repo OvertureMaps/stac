@@ -1,8 +1,8 @@
 //! Cloud-agnostic object store handle via `object_store::parse_url`.
 
 use object_store::{
-    parse_url, parse_url_opts, path::Path, prefix::PrefixStore, Attribute, AttributeValue,
-    Attributes, GetOptions, GetResult, ObjectStore, ObjectStoreExt, PutOptions,
+    parse_url, parse_url_opts, path::Path, prefix::PrefixStore, Attribute, Attributes, GetOptions,
+    GetResult, ObjectStore, ObjectStoreExt, PutOptions,
 };
 use std::sync::Arc;
 use url::Url;
@@ -342,24 +342,28 @@ pub async fn get_json_optional(bucket: &Bucket, key: &str) -> Result<Option<serd
 }
 
 const JSON_CONTENT_TYPE: &str = "application/json";
-const GEOJSON_CONTENT_TYPE: &str = "application/geo+json";
 const BINARY_CONTENT_TYPE: &str = "application/octet-stream";
 
 /// Serialize `value` to JSON and PUT it as `application/json`.
 pub async fn put_json(bucket: &Bucket, key: &str, value: &serde_json::Value) -> Result<()> {
     let body = serde_json::to_vec(value).with_context(|| format!("serializing JSON for {key}"))?;
-    put_bytes(bucket, key, body, JSON_CONTENT_TYPE).await
+    put_typed(bucket, key, body, JSON_CONTENT_TYPE).await
 }
 
-/// PUT raw bytes at `key` with an explicit `Content-Type`.
+/// PUT raw bytes at `key`, with a `Content-Type` derived from the key's extension.
+pub async fn put_bytes(bucket: &Bucket, key: &str, bytes: Vec<u8>) -> Result<()> {
+    put_typed(bucket, key, bytes, content_type_for(key)).await
+}
+
+/// PUT `bytes` at `key` with an explicit `Content-Type`.
 ///
 /// Stores do not infer a type from the key, and a missing one makes browsers download
 /// the object instead of rendering it.
-pub async fn put_bytes(
+async fn put_typed(
     bucket: &Bucket,
     key: &str,
     bytes: Vec<u8>,
-    content_type: impl Into<AttributeValue>,
+    content_type: &'static str,
 ) -> Result<()> {
     let p = Path::from(key);
     let mut attributes = Attributes::new();
@@ -379,11 +383,15 @@ pub async fn put_bytes(
     Ok(())
 }
 
-/// Content type for a file under a built catalog, by extension.
-fn content_type_for(path: &std::path::Path) -> &'static str {
-    match path.extension().and_then(|e| e.to_str()) {
+/// Content type for an object in a built catalog, by key extension.
+fn content_type_for(key: &str) -> &'static str {
+    match std::path::Path::new(key)
+        .extension()
+        .and_then(|e| e.to_str())
+    {
         Some("json") => JSON_CONTENT_TYPE,
-        Some("geojson") => GEOJSON_CONTENT_TYPE,
+        Some("geojson") => stac::mime::APPLICATION_GEOJSON,
+        Some("parquet") => stac::mime::APPLICATION_PARQUET,
         _ => BINARY_CONTENT_TYPE,
     }
 }
@@ -439,7 +447,7 @@ pub async fn upload_directory(
             let key = format!("{key_prefix}{rel}");
             let bytes =
                 std::fs::read(&path).with_context(|| format!("reading {}", path.display()))?;
-            put_bytes(bucket, &key, bytes, content_type_for(&path)).await?;
+            put_bytes(bucket, &key, bytes).await?;
             uploaded += 1;
         }
     }

@@ -45,16 +45,28 @@ async fn put_json_sets_application_json() {
 }
 
 #[tokio::test]
+async fn put_json_ignores_key_extension() {
+    let bucket = memory_bucket();
+    put_json(&bucket, "catalog.json.bak-20261006", &json!({}))
+        .await
+        .expect("put_json");
+    assert_eq!(
+        content_type(&bucket, "catalog.json.bak-20261006").await,
+        "application/json"
+    );
+}
+
+#[tokio::test]
 async fn upload_directory_derives_type_from_extension() {
     let bucket = memory_bucket();
     let dir = tempfile::tempdir().expect("tempdir");
-    for name in ["a.json", "b.geojson", "c.parquet"] {
+    for name in ["a.json", "b.geojson", "c.parquet", "d.bin"] {
         fs::write(dir.path().join(name), b"{}").expect("write fixture");
     }
     let uploaded = upload_directory(&bucket, "rel/", dir.path())
         .await
         .expect("upload_directory");
-    assert_eq!(uploaded, 3);
+    assert_eq!(uploaded, 4);
     assert_eq!(
         content_type(&bucket, "rel/a.json").await,
         "application/json"
@@ -65,6 +77,10 @@ async fn upload_directory_derives_type_from_extension() {
     );
     assert_eq!(
         content_type(&bucket, "rel/c.parquet").await,
+        "application/vnd.apache.parquet"
+    );
+    assert_eq!(
+        content_type(&bucket, "rel/d.bin").await,
         "application/octet-stream"
     );
 }
