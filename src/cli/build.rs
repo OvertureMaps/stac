@@ -1,5 +1,6 @@
 //! `build` — generate a STAC catalog on disk from a data bucket.
 
+use std::collections::HashMap;
 use std::path::PathBuf;
 
 use regex::Regex;
@@ -113,10 +114,18 @@ pub async fn run(args: BuildArgs) -> Result<()> {
 
     // Multi-release path.
     let ids = list_release_ids(&bucket, "release").await?;
+    let mut schema_versions = HashMap::new();
+    for id in &ids {
+        let schema = resolve_release_schema_version(id).await;
+        if !schema.is_empty() {
+            schema_versions.insert(id.clone(), schema);
+        }
+    }
     let top = build_top_catalog(
         &bucket,
         extras_bucket.as_ref(),
         &ids,
+        &schema_versions,
         &root_href,
         args.debug,
         concurrency,

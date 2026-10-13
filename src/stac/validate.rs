@@ -724,7 +724,7 @@ fn check_catalog(location: &str, value: &Value, out: &mut Vec<Failure>) {
     let is_release_catalog = value.get("release:version").is_some();
     if is_release_catalog {
         match value.get("schema:version") {
-            None => {}
+            None => tracing::warn!(location, "release catalog has no schema:version"),
             Some(v) if v.is_null() => push_rule(
                 out,
                 location,

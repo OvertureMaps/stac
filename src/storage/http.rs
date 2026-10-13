@@ -80,14 +80,14 @@ pub async fn resolve_schema_version_from_calendar(release_id: &str) -> Result<Op
 
     match calendar.get(release_id) {
         None => {
-            tracing::debug!(
+            tracing::warn!(
                 release_id,
                 "release not in release calendar; schema:version stays null"
             );
             Ok(None)
         }
         Some(None) => {
-            tracing::debug!(
+            tracing::warn!(
                 release_id,
                 "release calendar has no schemaVersion yet; schema:version stays null"
             );

@@ -13,7 +13,7 @@ use serde_json::{json, Value};
 use stac::geoparquet::WriterOptions;
 use stac::{Catalog, Collection, Item, ItemCollection, Link};
 use stac_io::IntoGeoparquetPath;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 use std::path::Path;
 use std::sync::{Arc, OnceLock};
 
@@ -546,10 +546,13 @@ fn strip_last(href: &str) -> String {
 }
 
 /// Build the top-level `Overture Releases` catalog (multi-release path).
+/// `schema_versions` maps release id to schema version; missing ids are left unset.
+#[allow(clippy::too_many_arguments)]
 pub async fn build_top_catalog(
     bucket: &Bucket,
     extras_bucket: Option<&Bucket>,
     ids: &[String],
+    schema_versions: &HashMap<String, String>,
     root_href: &str,
     debug: bool,
     concurrency: usize,
@@ -558,11 +561,12 @@ pub async fn build_top_catalog(
     let mut children: Vec<ReleaseCatalog> = Vec::new();
     for (idx, release) in ids.iter().enumerate() {
         let title = format!("{release} Overture Release");
+        let schema = schema_versions.get(release).map_or("", String::as_str);
         let mut child = build_single_release(
             bucket,
             extras_bucket,
             release,
-            "",
+            schema,
             &title,
             debug,
             concurrency,
