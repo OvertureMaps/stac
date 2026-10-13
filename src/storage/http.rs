@@ -3,15 +3,12 @@
 use std::collections::HashMap;
 use std::sync::LazyLock;
 
-use regex::Regex;
-
 use crate::{Result, ResultExt};
 
-// Regex: allows only tags of the form `v<semver>` (e.g., `v1.2.3`)
-static SCHEMA_VERSION_RE: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"^v(\d+\.\d+\.\d+)$").expect("static regex"));
-
 const USER_AGENT: &str = concat!("overture-stac/", env!("CARGO_PKG_VERSION"));
+
+/// Overture release calendar. Shipped releases carry a `v<semver>` `schemaVersion`, upcoming ones are null.
+pub const RELEASE_CALENDAR_URL: &str = "https://docs.overturemaps.org/release-calendar.json";
 
 fn http_client() -> Result<reqwest::Client> {
     reqwest::Client::builder()
@@ -51,21 +48,19 @@ pub async fn fetch_schema_version(
         .map(String::from))
 }
 
-/// Resolve `schema:version` by finding the `v<semver>` tag
-/// that is currently coupled with the `data-<release_id>` tag on GitHub.
-/// This allows to map a schema version to the corresponding release version
-pub async fn resolve_schema_version_from_github(release_id: &str) -> Result<Option<String>> {
-    static TAG_CACHE: LazyLock<tokio::sync::OnceCell<Option<HashMap<String, String>>>> =
+/// Look up `release_id` in the release calendar; returns its `schemaVersion` without the `v`, or `None` if absent/unshipped.
+pub async fn resolve_schema_version_from_calendar(release_id: &str) -> Result<Option<String>> {
+    static CALENDAR_CACHE: LazyLock<tokio::sync::OnceCell<Option<ReleaseCalendar>>> =
         LazyLock::new(tokio::sync::OnceCell::new);
 
-    let cached = TAG_CACHE
+    let cached = CALENDAR_CACHE
         .get_or_init(|| async {
-            match fetch_all_schema_tags().await {
-                Ok(map) => Some(map),
+            match fetch_json(RELEASE_CALENDAR_URL).await {
+                Ok(body) => Some(parse_release_calendar(&body)),
                 Err(err) => {
                     tracing::warn!(
                         ?err,
-                        "failed to fetch OvertureMaps/schema tags; schema:version stays null for the rest of this run"
+                        "failed to fetch release calendar; schema:version stays null for the rest of this run"
                     );
                     None
                 }
@@ -73,85 +68,73 @@ pub async fn resolve_schema_version_from_github(release_id: &str) -> Result<Opti
         })
         .await;
 
-    let Some(tags) = cached else {
+    let Some(calendar) = cached else {
         return Ok(None);
     };
 
-    let data_tag = format!("data-{release_id}");
-    let Some(data_sha) = tags.get(&data_tag) else {
-        tracing::debug!(
-            release_id,
-            "no data-tag on OvertureMaps/schema; schema:version stays null"
-        );
-        return Ok(None);
-    };
-
-    let mut candidates: Vec<String> = tags
-        .iter()
-        .filter(|(_, sha)| sha == &data_sha)
-        .filter_map(|(name, _)| SCHEMA_VERSION_RE.captures(name).map(|c| c[1].to_string()))
-        .collect();
-
-    match candidates.len() {
-        0 => {
-            tracing::warn!(
+    match calendar.get(release_id) {
+        None => {
+            tracing::debug!(
                 release_id,
-                %data_sha,
-                "data-tag has no paired v<semver> tag; schema:version stays null"
+                "release not in release calendar; schema:version stays null"
             );
             Ok(None)
         }
-        1 => Ok(candidates.pop()),
-        _ => {
-            candidates.sort_by(|a, b| compare_semver(b, a));
-            tracing::warn!(
+        Some(None) => {
+            tracing::debug!(
                 release_id,
-                ?candidates,
-                "multiple v<semver> tags on data-tag commit; picking highest"
+                "release calendar has no schemaVersion yet; schema:version stays null"
             );
-            Ok(Some(candidates.remove(0)))
+            Ok(None)
         }
+        Some(Some(v)) => Ok(Some(v.clone())),
     }
 }
 
-async fn fetch_all_schema_tags() -> Result<HashMap<String, String>> {
-    let mut out = HashMap::new();
-    for page in 1..=10 {
-        let url = format!(
-            "https://api.github.com/repos/OvertureMaps/schema/tags?per_page=100&page={page}"
-        );
-        let body = fetch_json(&url).await?;
-        let Some(arr) = body.as_array() else { break };
-        if arr.is_empty() {
-            break;
-        }
-        for entry in arr {
-            let (Some(name), Some(sha)) = (
-                entry.get("name").and_then(|v| v.as_str()),
-                entry
-                    .get("commit")
-                    .and_then(|c| c.get("sha"))
-                    .and_then(|v| v.as_str()),
-            ) else {
-                continue;
-            };
-            out.insert(name.to_string(), sha.to_string());
-        }
-        if arr.len() < 100 {
-            break;
-        }
-    }
-    Ok(out)
+/// `dataVersion` -> `schemaVersion` without the `v` prefix (`None` when null).
+type ReleaseCalendar = HashMap<String, Option<String>>;
+
+fn parse_release_calendar(body: &serde_json::Value) -> ReleaseCalendar {
+    body.get("releases")
+        .and_then(|r| r.as_array())
+        .into_iter()
+        .flatten()
+        .filter_map(|entry| {
+            let data_version = entry.get("dataVersion")?.as_str()?;
+            let schema_version = entry
+                .get("schemaVersion")
+                .and_then(|v| v.as_str())
+                .map(|v| v.strip_prefix('v').unwrap_or(v).to_string());
+            Some((data_version.to_string(), schema_version))
+        })
+        .collect()
 }
 
-fn compare_semver(a: &str, b: &str) -> std::cmp::Ordering {
-    fn parts(v: &str) -> (u64, u64, u64) {
-        let mut it = v.split('.').map(|s| s.parse::<u64>().unwrap_or(0));
-        (
-            it.next().unwrap_or(0),
-            it.next().unwrap_or(0),
-            it.next().unwrap_or(0),
-        )
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn parses_calendar_entries() {
+        let body = json!({
+            "releases": [
+                {"dataVersion": "2024-04-16-beta.0", "schemaVersion": "v0.10.0-beta"},
+                {"dataVersion": "2026-08-19.0", "schemaVersion": "v1.18.0"},
+                {"dataVersion": "2026-10-21.0", "schemaVersion": null},
+                {"schemaVersion": "v9.9.9"},
+            ]
+        });
+        let cal = parse_release_calendar(&body);
+        assert_eq!(cal.len(), 3);
+        assert_eq!(cal["2026-08-19.0"].as_deref(), Some("1.18.0"));
+        assert_eq!(cal["2024-04-16-beta.0"].as_deref(), Some("0.10.0-beta"));
+        assert_eq!(cal["2026-10-21.0"], None);
+        assert!(!cal.contains_key("2026-12-16.0"));
     }
-    parts(a).cmp(&parts(b))
+
+    #[test]
+    fn tolerates_missing_releases_key() {
+        assert!(parse_release_calendar(&json!({})).is_empty());
+    }
 }
