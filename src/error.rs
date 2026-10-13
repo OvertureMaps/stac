@@ -92,6 +92,9 @@ pub enum Error {
 
     #[error("malformed catalog JSON: {0}")]
     MalformedCatalog(String),
+
+    #[error("malformed release calendar: {0}")]
+    MalformedReleaseCalendar(String),
 }
 
 impl Error {
@@ -111,6 +114,7 @@ impl Error {
             | Error::UrlParse(_) => 2,
 
             Error::MalformedCatalog(_)
+            | Error::MalformedReleaseCalendar(_)
             | Error::MissingSelfLink(_)
             | Error::MissingGeoMetadata(_)
             | Error::MissingGeometryColumn(_)
