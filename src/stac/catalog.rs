@@ -753,6 +753,46 @@ mod tests {
         );
     }
 
+    #[tokio::test]
+    async fn top_catalog_stamps_schema_version_only_on_resolved_releases() {
+        let data = tempfile::tempdir().unwrap();
+        let resolved = "2026-09-23.0";
+        let unresolved = "2026-10-21.0";
+        for id in [resolved, unresolved] {
+            std::fs::create_dir_all(data.path().join("release").join(id)).unwrap();
+        }
+        let bucket = Bucket::from_url(&format!("file://{}", data.path().display())).unwrap();
+        let ids = list_release_ids(&bucket, "release").await.unwrap();
+        let schema_versions = HashMap::from([(resolved.to_string(), "2.0.0".to_string())]);
+
+        let out = tempfile::tempdir().unwrap();
+        let root_href = "https://stac.example.com";
+        let top = build_top_catalog(
+            &bucket,
+            None,
+            &ids,
+            &schema_versions,
+            root_href,
+            false,
+            1,
+            out.path(),
+        )
+        .await
+        .unwrap();
+        save_root_catalog(&top, root_href, out.path()).unwrap();
+
+        let resolved_doc = read_catalog_json(&out.path().join(resolved));
+        assert_eq!(resolved_doc["schema:version"], json!("2.0.0"));
+        assert_eq!(
+            resolved_doc["schema:tag"],
+            json!("https://github.com/OvertureMaps/schema/releases/tag/v2.0.0"),
+        );
+
+        let unresolved_doc = read_catalog_json(&out.path().join(unresolved));
+        assert!(unresolved_doc.get("schema:version").is_none());
+        assert!(unresolved_doc.get("schema:tag").is_none());
+    }
+
     #[test]
     fn collections_parquet_carries_non_null_collection() {
         use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
