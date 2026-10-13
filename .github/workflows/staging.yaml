@@ -37,6 +37,7 @@ jobs:
           PR_NUMBER: ${{ github.event.number }}
         run: |
           cargo run --release -- build \
+            --validate \
             --root-href "https://staging.overturemaps.org/${REPO_NAME}/pr/${PR_NUMBER}"
 
       - name: Upload artifact

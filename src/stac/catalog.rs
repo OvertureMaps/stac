@@ -13,7 +13,7 @@ use serde_json::{json, Value};
 use stac::geoparquet::WriterOptions;
 use stac::{Catalog, Collection, Item, ItemCollection, Link};
 use stac_io::IntoGeoparquetPath;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 use std::path::Path;
 use std::sync::{Arc, OnceLock};
 
@@ -546,10 +546,13 @@ fn strip_last(href: &str) -> String {
 }
 
 /// Build the top-level `Overture Releases` catalog (multi-release path).
+/// `schema_versions` maps release id to schema version; missing ids are left unset.
+#[allow(clippy::too_many_arguments)]
 pub async fn build_top_catalog(
     bucket: &Bucket,
     extras_bucket: Option<&Bucket>,
     ids: &[String],
+    schema_versions: &HashMap<String, String>,
     root_href: &str,
     debug: bool,
     concurrency: usize,
@@ -558,11 +561,12 @@ pub async fn build_top_catalog(
     let mut children: Vec<ReleaseCatalog> = Vec::new();
     for (idx, release) in ids.iter().enumerate() {
         let title = format!("{release} Overture Release");
+        let schema = schema_versions.get(release).map_or("", String::as_str);
         let mut child = build_single_release(
             bucket,
             extras_bucket,
             release,
-            "",
+            schema,
             &title,
             debug,
             concurrency,
@@ -747,6 +751,46 @@ mod tests {
             find_link(&doc, "parent").is_none(),
             "root catalog must not carry a parent link",
         );
+    }
+
+    #[tokio::test]
+    async fn top_catalog_stamps_schema_version_only_on_resolved_releases() {
+        let data = tempfile::tempdir().unwrap();
+        let resolved = "2026-09-23.0";
+        let unresolved = "2026-10-21.0";
+        for id in [resolved, unresolved] {
+            std::fs::create_dir_all(data.path().join("release").join(id)).unwrap();
+        }
+        let bucket = Bucket::from_url(&format!("file://{}", data.path().display())).unwrap();
+        let ids = list_release_ids(&bucket, "release").await.unwrap();
+        let schema_versions = HashMap::from([(resolved.to_string(), "2.0.0".to_string())]);
+
+        let out = tempfile::tempdir().unwrap();
+        let root_href = "https://stac.example.com";
+        let top = build_top_catalog(
+            &bucket,
+            None,
+            &ids,
+            &schema_versions,
+            root_href,
+            false,
+            1,
+            out.path(),
+        )
+        .await
+        .unwrap();
+        save_root_catalog(&top, root_href, out.path()).unwrap();
+
+        let resolved_doc = read_catalog_json(&out.path().join(resolved));
+        assert_eq!(resolved_doc["schema:version"], json!("2.0.0"));
+        assert_eq!(
+            resolved_doc["schema:tag"],
+            json!("https://github.com/OvertureMaps/schema/releases/tag/v2.0.0"),
+        );
+
+        let unresolved_doc = read_catalog_json(&out.path().join(unresolved));
+        assert!(unresolved_doc.get("schema:version").is_none());
+        assert!(unresolved_doc.get("schema:tag").is_none());
     }
 
     #[test]
