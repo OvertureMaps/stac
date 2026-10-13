@@ -5,7 +5,7 @@
 use clap::Subcommand;
 
 use overture_stac::stac::{validate_catalog, ValidateOptions};
-use overture_stac::storage::resolve_schema_version_from_github;
+use overture_stac::storage::resolve_schema_version_from_calendar;
 use overture_stac::{Error, Result};
 
 pub mod build;
@@ -67,18 +67,17 @@ pub(crate) async fn run_validation(dir: &std::path::Path, json: bool) -> Result<
     Ok(())
 }
 
-/// Primary: parquet fragment metadata. Fallback: sibling tag on
-/// OvertureMaps/schema. Returns `""` if both miss.
+/// Primary: parquet fragment metadata. Fallback: the Overture release calendar. Returns `""` if both miss.
 pub(crate) async fn resolve_release_schema_version(release: &str) -> String {
     // TODO: prefer parquet metadata to obtain the schema:version once available.
-    // Fallback to GitHub tag lookup.
-    resolve_schema_version_from_github(release)
+    // Fallback to release calendar lookup.
+    resolve_schema_version_from_calendar(release)
         .await
         .unwrap_or_else(|err| {
             tracing::warn!(
                 release,
                 ?err,
-                "GitHub schema:version lookup failed; leaving null"
+                "release calendar schema:version lookup failed; leaving null"
             );
             None
         })

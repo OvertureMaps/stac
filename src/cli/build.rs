@@ -42,9 +42,7 @@ pub struct BuildArgs {
     #[arg(long = "release-version")]
     release_version: Option<String>,
 
-    /// Schema version for the release (e.g. 1.17.0). Optional; when omitted,
-    /// resolved from parquet metadata (once stamped) or a paired tag on
-    /// OvertureMaps/schema. Left null when neither source has a match.
+    /// Schema version for the release (e.g. 1.17.0). Optional; when omitted, resolved from parquet metadata (once stamped) or the Overture release calendar. Left null when neither matches.
     #[arg(long = "schema-version")]
     schema_version: Option<String>,
 
