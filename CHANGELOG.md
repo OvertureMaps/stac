@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [4.0.0](https://github.com/OvertureMaps/stac/compare/v3.0.1...v4.0.0) - 2026-10-14
+
+### Fixed
+
+- *(build)* resolve schema:version when building all releases
+- *(storage)* validate release calendar strictly against its schema
+
+### Other
+
+- *(build)* cover schema:version threading in multi-release build
+
 ## [3.0.1](https://github.com/OvertureMaps/stac/compare/v3.0.0...v3.0.1) - 2026-10-07
 
 ### Fixed
