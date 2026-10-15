@@ -1,0 +1,51 @@
+{
+  "version": 8,
+  "name": "Building Parts by roof shape",
+  "sources": {
+    "overture": {
+      "type": "vector",
+      "url": "pmtiles://https://tiles.overturemaps.org/2026-08-19.0/buildings.pmtiles"
+    }
+  },
+  "layers": [
+    {
+      "id": "parts-roof",
+      "type": "fill",
+      "source": "overture",
+      "source-layer": "building_part",
+      "paint": {
+        "fill-color": [
+          "match",
+          [
+            "get",
+            "roof_shape"
+          ],
+          "gabled",
+          "#3182bd",
+          "flat",
+          "#969696",
+          "hipped",
+          "#31a354",
+          "skillion",
+          "#fdae6b",
+          "pyramidal",
+          "#756bb1",
+          "half_hipped",
+          "#9ecae1",
+          "round",
+          "#e6550d",
+          "dome",
+          "#e7298a",
+          "saltbox",
+          "#a1d99b",
+          "onion",
+          "#8c6d31",
+          "mansard",
+          "#636363",
+          "#d9d9d9"
+        ],
+        "fill-opacity": 0.85
+      }
+    }
+  ]
+}
