@@ -159,6 +159,7 @@ pub fn stamp_vcs(root: &mut Value) -> Result<()> {
     }
     obj.insert("vcs:type".into(), json!("git"));
     obj.insert("vcs:branch".into(), json!(env!("GIT_BRANCH")));
+    obj.remove("vcs:commit");
     obj.insert("vcs:revision".into(), json!(env!("GIT_COMMIT")));
     Ok(())
 }
@@ -170,6 +171,9 @@ mod tests {
     #[test]
     fn stamp_vcs_uses_only_schema_defined_fields() {
         let mut root = build_empty_root();
+        root.as_object_mut()
+            .unwrap()
+            .insert("vcs:commit".into(), json!("legacy"));
         stamp_vcs(&mut root).unwrap();
         let exts = root["stac_extensions"].as_array().unwrap();
         assert!(exts.iter().any(|v| v.as_str() == Some(VCS_EXTENSION_URL)));
