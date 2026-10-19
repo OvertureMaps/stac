@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [4.0.1](https://github.com/OvertureMaps/stac/compare/v4.0.0...v4.0.1) - 2026-10-19
+
+### Fixed
+
+- write vcs:revision for root catalog commit provenance ([#201](https://github.com/OvertureMaps/stac/pull/201))
+
 ## [4.0.0](https://github.com/OvertureMaps/stac/compare/v3.0.1...v4.0.0) - 2026-10-14
 
 ### Fixed
