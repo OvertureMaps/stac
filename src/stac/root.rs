@@ -159,13 +159,36 @@ pub fn stamp_vcs(root: &mut Value) -> Result<()> {
     }
     obj.insert("vcs:type".into(), json!("git"));
     obj.insert("vcs:branch".into(), json!(env!("GIT_BRANCH")));
-    obj.insert("vcs:commit".into(), json!(env!("GIT_COMMIT")));
+    obj.insert("vcs:revision".into(), json!(env!("GIT_COMMIT")));
     Ok(())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn stamp_vcs_uses_only_schema_defined_fields() {
+        let mut root = build_empty_root();
+        stamp_vcs(&mut root).unwrap();
+        let exts = root["stac_extensions"].as_array().unwrap();
+        assert!(exts.iter().any(|v| v.as_str() == Some(VCS_EXTENSION_URL)));
+        let revision = root["vcs:revision"].as_str().unwrap();
+        assert!(!revision.is_empty());
+        assert!(root.get("vcs:commit").is_none());
+        let vcs_keys: Vec<_> = root
+            .as_object()
+            .unwrap()
+            .keys()
+            .filter(|k| k.starts_with("vcs:"))
+            .collect();
+        for k in vcs_keys {
+            assert!(
+                ["vcs:type", "vcs:branch", "vcs:revision", "vcs:tag"].contains(&k.as_str()),
+                "unexpected {k}"
+            );
+        }
+    }
 
     fn child_link(release: &str, latest: bool) -> Value {
         let mut link = json!({
