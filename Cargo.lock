@@ -331,12 +331,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "37b6c8a6b12cf3869d299ce36ed8e1cd6fe9836264b68fb6c6538473a36124a1"
 
 [[package]]
-name = "arrow-schema"
-version = "60.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f85a9a58cd03560526b0066487574aacb9008e413504fa0ee23d61141e96c338"
-
-[[package]]
 name = "arrow-select"
 version = "58.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2648,7 +2642,7 @@ name = "overture-stac"
 version = "4.0.2"
 dependencies = [
  "arrow-array 59.2.0",
- "arrow-schema 60.0.0",
+ "arrow-schema 59.3.1",
  "assert_cmd",
  "bytes",
  "chrono",
