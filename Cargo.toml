@@ -52,7 +52,7 @@ url = "2"
 
 [dev-dependencies]
 arrow-array = "59"
-arrow-schema = "59"
+arrow-schema = "60"
 assert_cmd = "2"
 jsonschema = "0.58"
 predicates = "3"

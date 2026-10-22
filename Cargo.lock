@@ -172,7 +172,7 @@ dependencies = [
  "ahash",
  "arrow-buffer 59.2.0",
  "arrow-data 59.2.0",
- "arrow-schema 59.2.0",
+ "arrow-schema 59.3.1",
  "chrono",
  "half",
  "hashbrown 0.17.1",
@@ -246,7 +246,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "723fe4aeed7604e00b9883a465af4ff0a0e6c44c03e41a68c3d1cbc403e0e44d"
 dependencies = [
  "arrow-buffer 59.2.0",
- "arrow-schema 59.2.0",
+ "arrow-schema 59.3.1",
  "half",
  "num-integer",
  "num-traits",
@@ -275,7 +275,7 @@ dependencies = [
  "arrow-array 59.2.0",
  "arrow-buffer 59.2.0",
  "arrow-data 59.2.0",
- "arrow-schema 59.2.0",
+ "arrow-schema 59.3.1",
  "arrow-select 59.2.0",
  "flatbuffers",
 ]
@@ -326,9 +326,15 @@ checksum = "21ca356ad6425cecb6eb7b28e4f659f1ee7880fbb1a16127de7dd62901efee9e"
 
 [[package]]
 name = "arrow-schema"
-version = "59.2.0"
+version = "59.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e6fed2ca0d1eade57e811cbe73b98ad50cc08a1183e13b2d2aa43a7df593f40e"
+checksum = "37b6c8a6b12cf3869d299ce36ed8e1cd6fe9836264b68fb6c6538473a36124a1"
+
+[[package]]
+name = "arrow-schema"
+version = "60.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f85a9a58cd03560526b0066487574aacb9008e413504fa0ee23d61141e96c338"
 
 [[package]]
 name = "arrow-select"
@@ -354,7 +360,7 @@ dependencies = [
  "arrow-array 59.2.0",
  "arrow-buffer 59.2.0",
  "arrow-data 59.2.0",
- "arrow-schema 59.2.0",
+ "arrow-schema 59.3.1",
  "num-traits",
 ]
 
@@ -2642,7 +2648,7 @@ name = "overture-stac"
 version = "4.0.2"
 dependencies = [
  "arrow-array 59.2.0",
- "arrow-schema 59.2.0",
+ "arrow-schema 60.0.0",
  "assert_cmd",
  "bytes",
  "chrono",
@@ -2738,7 +2744,7 @@ dependencies = [
  "arrow-buffer 59.2.0",
  "arrow-data 59.2.0",
  "arrow-ipc 59.2.0",
- "arrow-schema 59.2.0",
+ "arrow-schema 59.3.1",
  "arrow-select 59.2.0",
  "base64 0.23.1",
  "brotli",
