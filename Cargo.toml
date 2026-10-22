@@ -51,7 +51,7 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 url = "2"
 
 [dev-dependencies]
-arrow-array = "59"
+arrow-array = "60"
 arrow-schema = "59"
 assert_cmd = "2"
 jsonschema = "0.58"
