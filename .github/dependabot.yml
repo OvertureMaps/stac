@@ -29,3 +29,25 @@ updates:
     commit-message:
       prefix: "[CHORE](gha-deps)"
       include: "scope"
+
+  # Maintain Rust crate dependencies
+  - package-ecosystem: "cargo"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    cooldown:
+      default-days: 7
+    open-pull-requests-limit: 5
+    groups:
+      minor-patch:
+        applies-to: version-updates
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
+    labels:
+      - "bot"
+    commit-message:
+      prefix: "[CHORE](cargo-deps)"
+      include: "scope"
