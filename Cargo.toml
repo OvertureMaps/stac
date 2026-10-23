@@ -34,8 +34,8 @@ chrono = "0.4"
 clap = { version = "4", features = ["derive"] }
 futures = "0.3"
 num_cpus = "1"
-object_store = { version = "0.13", features = ["aws", "gcp", "azure", "http"] }
-parquet = { version = "59", features = ["async", "object_store"] }
+object_store = { version = "0.14.1", features = ["aws", "gcp", "azure", "http"] }
+parquet = { version = "60", features = ["async", "object_store"] }
 regex = "1"
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json"] }
 serde = { version = "1", features = ["derive"] }
@@ -51,8 +51,8 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 url = "2"
 
 [dev-dependencies]
-arrow-array = "59"
-arrow-schema = "59"
+arrow-array = "60"
+arrow-schema = "60"
 assert_cmd = "2"
 jsonschema = "0.58"
 predicates = "3"
