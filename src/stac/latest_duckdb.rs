@@ -47,9 +47,14 @@ pub async fn discover_views(data_bucket: &Bucket, latest: &str) -> Result<Vec<Vi
         }
     }
     views.sort();
-    // Views are named after the type alone, so a type shared across themes would collide.
+    ensure_unique_types(&views)?;
+    Ok(views)
+}
+
+/// Views are named after the type alone, so a type shared across themes would collide.
+fn ensure_unique_types(views: &[View]) -> Result<()> {
     let mut seen = std::collections::HashMap::new();
-    for v in &views {
+    for v in views {
         if let Some(other) = seen.insert(v.r#type.as_str(), v.theme.as_str()) {
             return Err(Error::LatestDuckdb(format!(
                 "type `{}` appears in themes `{other}` and `{}`",
@@ -57,7 +62,7 @@ pub async fn discover_views(data_bucket: &Bucket, latest: &str) -> Result<Vec<Vi
             )));
         }
     }
-    Ok(views)
+    Ok(())
 }
 
 fn quote_ident(s: &str) -> String {
@@ -150,9 +155,33 @@ pub fn ensure_latest_duckdb_link(root: &mut Value) {
     }));
 }
 
+/// Drop the root link to `latest.ddb`. The uploaded file is left in place, unlinked.
+pub fn remove_latest_duckdb_link(root: &mut Value) {
+    if let Some(links) = root.get_mut("links").and_then(|v| v.as_array_mut()) {
+        links.retain(|l| l.get("href").and_then(|v| v.as_str()) != Some(LATEST_DUCKDB_HREF));
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn rejects_duplicate_types_across_themes() {
+        let theme = |t: &str, ty: &str| View {
+            theme: t.into(),
+            r#type: ty.into(),
+        };
+        let views = [
+            theme("base", "address"),
+            theme("base", "building"),
+            theme("transportation", "address"),
+            theme("transportation", "building"),
+        ];
+        let err = ensure_unique_types(&views).unwrap_err();
+        assert!(err.to_string().contains("address"), "{err}");
+        assert!(ensure_unique_types(&views[..2]).is_ok());
+    }
 
     #[test]
     fn sql_has_one_view_per_type() {

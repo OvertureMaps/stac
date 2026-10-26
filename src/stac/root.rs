@@ -4,7 +4,7 @@
 
 use serde_json::{json, Value};
 
-use super::latest_duckdb::ensure_latest_duckdb_link;
+use super::latest_duckdb::{ensure_latest_duckdb_link, remove_latest_duckdb_link};
 use crate::storage::{get_json, Bucket};
 use crate::{Error, Result};
 
@@ -122,6 +122,8 @@ pub fn refresh_latest(root: &mut Value) {
 
     if latest.is_some() {
         ensure_latest_duckdb_link(root);
+    } else {
+        remove_latest_duckdb_link(root);
     }
 
     let Some(links) = root.get_mut("links").and_then(|v| v.as_array_mut()) else {
@@ -376,10 +378,11 @@ mod tests {
         refresh_latest(&mut root);
         refresh_latest(&mut root);
         assert_eq!(count(&root), 1);
-    }
 
-    #[test]
-    fn non_child_links_are_untouched() {
+        root["links"].as_array_mut().unwrap().retain(|l| l["rel"] != "child");
+        refresh_latest(&mut root);
+        assert_eq!(count(&root), 0);
+    }
         let mut root = root_with(&[("2026-08-19.0", false)], None);
         root.get_mut("links")
             .and_then(|v| v.as_array_mut())
