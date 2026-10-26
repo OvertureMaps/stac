@@ -133,7 +133,7 @@ impl Error {
 
             Error::ValidationFailed(_) | Error::StacValidate(_) => 4,
 
-            Error::ObjectStore(_) | Error::Http(_) | Error::Io(_) => 5,
+            Error::ObjectStore(_) | Error::Http(_) | Error::Io(_) | Error::LatestDuckdb(_) => 5,
         }
     }
 }
