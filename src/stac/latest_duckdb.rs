@@ -48,11 +48,14 @@ pub async fn discover_views(data_bucket: &Bucket, latest: &str) -> Result<Vec<Vi
     }
     views.sort();
     // Views are named after the type alone, so a type shared across themes would collide.
-    if let Some(pair) = views.windows(2).find(|w| w[0].r#type == w[1].r#type) {
-        return Err(Error::LatestDuckdb(format!(
-            "type `{}` appears in themes `{}` and `{}`",
-            pair[0].r#type, pair[0].theme, pair[1].theme
-        )));
+    let mut seen = std::collections::HashMap::new();
+    for v in &views {
+        if let Some(other) = seen.insert(v.r#type.as_str(), v.theme.as_str()) {
+            return Err(Error::LatestDuckdb(format!(
+                "type `{}` appears in themes `{other}` and `{}`",
+                v.r#type, v.theme
+            )));
+        }
     }
     Ok(views)
 }

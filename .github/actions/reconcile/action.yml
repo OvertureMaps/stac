@@ -41,7 +41,7 @@ runs:
         for attempt in 1 2 3; do
           "$OVERTURE_STAC_BIN" reconcile --apply --validate --catalog-uri "$OVERTURE_STAC_CATALOG_URI" 2>&1 | tee -a reconcile.log
           code=${PIPESTATUS[0]}
-          if grep -qE "^Applied [0-9]+ change" reconcile.log; then
+          if grep -qE -e "^Applied [0-9]+ change" -e "^Published latest.ddb" reconcile.log; then
             applied=true
           fi
           if [ "$code" = 5 ] && [ "$applied" = true ]; then
