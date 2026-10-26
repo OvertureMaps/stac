@@ -40,7 +40,7 @@ jobs:
       - name: clippy
         run: cargo clippy --all-targets --all-features
 
-      - uses: ./.github/actions/setup-duckdb
+      - uses: $/.github/actions/setup-duckdb
 
       - name: test
         run: cargo test --all-features

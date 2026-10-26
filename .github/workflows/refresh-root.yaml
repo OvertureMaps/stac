@@ -44,7 +44,7 @@ jobs:
         with:
           cache-key: refresh-root
 
-      - uses: ./.github/actions/setup-duckdb
+      - uses: $/.github/actions/setup-duckdb
 
       - name: Build overture-stac
         run: cargo build --release --bin overture-stac
