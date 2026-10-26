@@ -77,6 +77,6 @@ jobs:
           role-skip-session-tagging: true
           aws-region: ${{ env.AWS_REGION }}
 
-      - name: Invalidate /catalog.json
+      - name: Invalidate /catalog.json and /latest.ddb
         if: steps.refresh.outputs.changed == 'true'
-        run: aws cloudfront create-invalidation --distribution-id "$CLOUDFRONT_DISTRIBUTION_ID" --paths "/catalog.json"
+        run: aws cloudfront create-invalidation --distribution-id "$CLOUDFRONT_DISTRIBUTION_ID" --paths "/catalog.json" "/latest.ddb"

@@ -17,11 +17,12 @@ cargo build --release
 
 ## Usage
 
-Four subcommands (`overture-stac --help` for full listings):
+Five subcommands (`overture-stac --help` for full listings):
 
 - `build` — walk the data bucket and write a full STAC catalog to disk. Defaults to all current releases.
 - `list-releases` — print release IDs the data bucket currently exposes, newest first.
 - `reconcile` — compare the live catalog against the data bucket and report drift. `--apply` writes the fix.
+- `refresh-root` — recompute derived root state (the `latest` flag, the `latest.ddb` link) and republish `latest.ddb` when `latest` changes.
 - `validate` — run JSON-schema + link-integrity + Overture-specific checks against a built catalog (local dir, remote URL, or object-store URI).
 
 Typical single-release build:

@@ -90,6 +90,9 @@ pub enum Error {
     #[error("--url must be an http(s) URL (got: {0})")]
     InvalidValidateUrl(String),
 
+    #[error("building latest.ddb: {0}")]
+    LatestDuckdb(String),
+
     #[error("malformed catalog JSON: {0}")]
     MalformedCatalog(String),
 

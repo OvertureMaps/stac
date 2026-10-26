@@ -10,9 +10,9 @@ use serde_json::json;
 use overture_stac::stac::registry;
 use overture_stac::stac::{add_child_link, build_empty_root, remove_child_link};
 use overture_stac::stac::{
-    build_single_release, children_from_root, compute_neighbor_links, list_release_ids,
-    read_catalog_children, refresh_latest, save_sub_catalog, stamp_vcs, validate_catalog_uri,
-    ValidateOptions,
+    build_single_release, children_from_root, compute_neighbor_links, latest_duckdb_stale,
+    list_release_ids, publish_latest_duckdb, read_catalog_children, refresh_latest,
+    save_sub_catalog, stamp_vcs, validate_catalog_uri, ValidateOptions,
 };
 use overture_stac::storage::{
     delete_prefix, get_json, get_json_optional, put_json, upload_directory, Bucket,
@@ -130,11 +130,27 @@ pub async fn run(args: ReconcileArgs) -> Result<()> {
         let root_href = args.root_href.trim_end_matches('/').to_string();
         let sorted = sort_release_ids(&bucket_ids);
         let stale = find_stale_neighbors(&catalog_bucket, &sorted, &sorted, &root_href).await?;
-        let mutated = !stale.is_empty();
+        let mut mutated = !stale.is_empty();
         if mutated {
             apply_stale_neighbors(&catalog_bucket, stale).await?;
             println!("Patched stale neighbour links.");
-        } else {
+        }
+        // A missing `latest.ddb` link (e.g. first run after this feature ships) is repaired here.
+        if let Some(root) = get_json_optional(&catalog_bucket, "catalog.json").await? {
+            let mut refreshed = root.clone();
+            refresh_latest(&mut refreshed);
+            if latest_duckdb_stale(&root, &refreshed) {
+                if let Some(latest) = refreshed.get("latest").and_then(|v| v.as_str()) {
+                    publish_latest_duckdb(&catalog_bucket, &data_bucket, &args.data_uri, latest)
+                        .await
+                        .context("publishing latest.ddb")?;
+                    put_json(&catalog_bucket, "catalog.json", &refreshed).await?;
+                    println!("Published latest.ddb for {latest}.");
+                    mutated = true;
+                }
+            }
+        }
+        if !mutated {
             println!("Catalog is in sync with the bucket. Nothing to apply.");
         }
         if mutated && args.validate {
@@ -152,6 +168,7 @@ pub async fn run(args: ReconcileArgs) -> Result<()> {
         apply_diff(
             &catalog_bucket,
             &data_bucket,
+            &args.data_uri,
             extras_bucket.as_ref(),
             &root_href,
             &diff,
@@ -235,6 +252,7 @@ fn print_diff_summary(
 async fn apply_diff(
     catalog_bucket: &Bucket,
     data_bucket: &Bucket,
+    data_uri: &str,
     extras_bucket: Option<&Bucket>,
     root_href: &str,
     diff: &Diff,
@@ -257,6 +275,7 @@ async fn apply_diff(
     }
 
     let mut root = existing_root.unwrap_or_else(build_empty_root);
+    let initial_root = root.clone();
 
     // Removals: update root first, then delete files.
     for release in &diff.to_remove {
@@ -314,6 +333,15 @@ async fn apply_diff(
     // apply that publishes the release), and stamp the VCS extension so anyone
     // reading the catalog can tell which build wrote it.
     refresh_latest(&mut root);
+    // Upload the database before the root that links to it.
+    if latest_duckdb_stale(&initial_root, &root) {
+        if let Some(latest) = root.get("latest").and_then(|v| v.as_str()) {
+            publish_latest_duckdb(catalog_bucket, data_bucket, data_uri, latest)
+                .await
+                .context("publishing latest.ddb")?;
+            println!("Published latest.ddb for {latest}.");
+        }
+    }
     let manifest = registry::create_manifest(data_bucket)
         .await
         .context("refreshing registry manifest")?;
