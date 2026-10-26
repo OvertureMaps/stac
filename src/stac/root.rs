@@ -379,10 +379,16 @@ mod tests {
         refresh_latest(&mut root);
         assert_eq!(count(&root), 1);
 
-        root["links"].as_array_mut().unwrap().retain(|l| l["rel"] != "child");
+        root["links"]
+            .as_array_mut()
+            .unwrap()
+            .retain(|l| l["rel"] != "child");
         refresh_latest(&mut root);
         assert_eq!(count(&root), 0);
     }
+
+    #[test]
+    fn non_child_links_are_untouched() {
         let mut root = root_with(&[("2026-08-19.0", false)], None);
         root.get_mut("links")
             .and_then(|v| v.as_array_mut())
