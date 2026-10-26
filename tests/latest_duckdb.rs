@@ -1,5 +1,5 @@
-//! `latest.ddb` end to end against a local `file://` data bucket. Needs network once:
-//! the build installs DuckDB's `httpfs` and `spatial` extensions.
+//! `latest.ddb` end to end against a local `file://` data bucket. Needs the DuckDB CLI on
+//! PATH and network once: the build installs DuckDB's `httpfs` and `spatial` extensions.
 
 mod common;
 
@@ -29,31 +29,21 @@ async fn publishes_views_for_every_discovered_type() {
         .await
         .unwrap();
 
-    let conn = duckdb::Connection::open_with_flags(
-        catalog_dir.join("latest.ddb"),
-        duckdb::Config::default()
-            .access_mode(duckdb::AccessMode::ReadOnly)
-            .unwrap(),
-    )
-    .unwrap();
-    conn.execute_batch("LOAD spatial;").unwrap();
+    let db = catalog_dir.join("latest.ddb");
+    let names = common::duckdb_query(
+        &db,
+        "SELECT view_name FROM duckdb_views() WHERE NOT internal ORDER BY 1",
+    );
+    assert_eq!(names.lines().collect::<Vec<_>>(), ["place", "water"]);
 
-    let mut views: Vec<(String, String)> = conn
-        .prepare("SELECT view_name, comment FROM duckdb_views() WHERE NOT internal")
-        .unwrap()
-        .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))
-        .unwrap()
-        .collect::<Result<_, _>>()
-        .unwrap();
-    views.sort();
-    let names: Vec<&str> = views.iter().map(|(n, _)| n.as_str()).collect();
-    assert_eq!(names, ["place", "water"]);
-    assert!(views.iter().all(|(_, c)| c.contains("LOAD spatial")));
+    let comments = common::duckdb_query(
+        &db,
+        "SELECT count(*) FROM duckdb_views() WHERE NOT internal AND comment LIKE '%LOAD spatial%'",
+    );
+    assert_eq!(comments.trim(), "2");
 
-    let rows: i64 = conn
-        .query_row("SELECT count(*) FROM water", [], |r| r.get(0))
-        .unwrap();
-    assert_eq!(rows, 1);
+    let rows = common::duckdb_query(&db, "LOAD spatial; SELECT count(*) FROM water");
+    assert_eq!(rows.trim(), "1");
 }
 
 #[tokio::test]

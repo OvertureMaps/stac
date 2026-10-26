@@ -18,7 +18,7 @@ A `reconcile --apply --validate` run has these stages, always in this order:
 1. Diff the release IDs in the catalog against those in the public data bucket.
 2. Build each added release locally and validate it before upload; removed releases are dropped from the root first.
 3. Upload to S3 under the `stac/` prefix, then rewrite the root `catalog.json` last, so it only ever points at complete releases.
-4. Refresh `latest` on the root. When the `latest` release changes, build `latest.ddb` (DuckDB views over that release's parquet files) with the embedded DuckDB library and upload it next to `catalog.json`. The root links to it with `rel: alternate`.
+4. Refresh `latest` on the root. When the `latest` release changes, build `latest.ddb` (DuckDB views over that release's parquet files) with the DuckDB CLI and upload it next to `catalog.json`. The root links to it with `rel: alternate`. The CLI is found on `PATH` or via `DUCKDB_BIN`; the workflows install a pinned version with `.github/actions/setup-duckdb`.
 5. Invalidate the CDN cache in front of the bucket, only if something changed.
 
 Reading the data bucket needs no AWS credentials. Publishing is where the workflow needs to touch two separate AWS accounts, which is the part worth understanding before changing anything here.

@@ -1,7 +1,11 @@
 //! `latest.ddb` — a DuckDB database of views over the newest release's parquet files,
-//! published next to the root catalog. The SQL is a build input only; the database file
-//! is the artifact. The views follow the release's own `theme=*/type=*` layout, so new
-//! feature types appear without a code change.
+//! published next to the root catalog. The views follow the release's own
+//! `theme=*/type=*` layout, so new feature types appear without a code change. The
+//! database is written by the DuckDB CLI, which keeps the DuckDB engine out of the Rust build.
+
+use std::io::Write;
+use std::path::Path;
+use std::process::{Command, Stdio};
 
 use serde_json::json;
 use serde_json::Value;
@@ -79,7 +83,7 @@ pub fn build_views_sql(latest: &str, data_uri: &str, views: &[View]) -> String {
     // Spatial must be loaded at build time: views store the column types they were created
     // with, so a BLOB-typed view breaks as soon as a reader loads spatial. Readers need
     // `LOAD spatial` to open the file.
-    // httpfs reads `s3://` and is fetched at build time; parquet is compiled in.
+    // httpfs reads `s3://` and is fetched at build time; parquet is built into the CLI.
     let mut stmts = vec![
         "INSTALL httpfs;".to_string(),
         "LOAD httpfs;".to_string(),
@@ -128,17 +132,45 @@ pub async fn publish_latest_duckdb(
     let bytes = tokio::task::spawn_blocking(move || -> Result<Vec<u8>> {
         let dir = tempfile::tempdir().context("creating temp dir for latest.ddb")?;
         let path = dir.path().join(LATEST_DUCKDB_KEY);
-        {
-            let conn = ::duckdb::Connection::open(&path)
-                .map_err(|e| Error::LatestDuckdb(e.to_string()))?;
-            conn.execute_batch(&sql)
-                .map_err(|e| Error::LatestDuckdb(e.to_string()))?;
-        }
+        run_duckdb_cli(&path, &sql)?;
         Ok(std::fs::read(&path)?)
     })
     .await
     .map_err(|e| Error::LatestDuckdb(e.to_string()))??;
     put_bytes(catalog_bucket, LATEST_DUCKDB_KEY, bytes).await
+}
+
+/// Run `sql` against the database at `path` with the DuckDB CLI (`$DUCKDB_BIN`, default
+/// `duckdb`). The script is piped over stdin and `-bail` aborts on the first failing statement.
+fn run_duckdb_cli(path: &Path, sql: &str) -> Result<()> {
+    let bin = std::env::var("DUCKDB_BIN").unwrap_or_else(|_| "duckdb".to_string());
+    let mut child = Command::new(&bin)
+        .arg("-bail")
+        .arg(path)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|e| {
+            Error::LatestDuckdb(format!(
+                "could not run `{bin}` ({e}); install the DuckDB CLI or set DUCKDB_BIN"
+            ))
+        })?;
+    child
+        .stdin
+        .take()
+        .ok_or_else(|| Error::LatestDuckdb("no stdin for duckdb".into()))?
+        .write_all(sql.as_bytes())?;
+    let out = child.wait_with_output()?;
+    if out.status.success() {
+        Ok(())
+    } else {
+        Err(Error::LatestDuckdb(format!(
+            "`{bin}` exited with {}: {}",
+            out.status,
+            String::from_utf8_lossy(&out.stderr).trim()
+        )))
+    }
 }
 
 /// Add the root link to `latest.ddb`, replacing any existing one. Only that link is touched.
