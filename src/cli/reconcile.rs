@@ -150,7 +150,7 @@ pub async fn run(args: ReconcileArgs) -> Result<()> {
             refresh_latest(&mut refreshed);
             let data = args
                 .generate_latest_ddb
-                .then(|| (&data_bucket, args.data_uri.as_str()));
+                .then_some((&data_bucket, args.data_uri.as_str()));
             sync_latest_duckdb(&catalog_bucket, data, &root, &mut refreshed)
                 .await
                 .context("syncing latest.ddb")?;
