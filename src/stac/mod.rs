@@ -21,7 +21,8 @@ pub use catalog::{
     list_release_ids, save_root_catalog, save_sub_catalog, validate_release_id, ReleaseCatalog,
 };
 pub use latest_duckdb::{
-    check_duckdb_cli, publish_latest_duckdb, sync_latest_duckdb, LATEST_DUCKDB_KEY,
+    check_duckdb_cli, publish_latest_duckdb, publish_latest_duckdb_to_dir, sync_latest_duckdb,
+    LATEST_DUCKDB_KEY,
 };
 pub use root::{
     add_child_link, build_empty_root, children_from_root, read_catalog_children, refresh_latest,

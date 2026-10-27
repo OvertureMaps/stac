@@ -153,6 +153,30 @@ pub async fn sync_latest_duckdb(
     Ok(())
 }
 
+/// Build `latest.ddb` into a catalog directory written by `build` and link it from that
+/// directory's root `catalog.json`.
+pub async fn publish_latest_duckdb_to_dir(
+    dir: &Path,
+    data_bucket: &Bucket,
+    data_uri: &str,
+) -> Result<()> {
+    let root_path = dir.join("catalog.json");
+    let mut root: Value = serde_json::from_slice(&std::fs::read(&root_path)?)?;
+    let latest = root
+        .get("latest")
+        .and_then(|v| v.as_str())
+        .map(String::from)
+        .ok_or_else(|| Error::LatestDuckdb("root catalog has no `latest`".into()))?;
+    let uri = url::Url::from_directory_path(std::path::absolute(dir)?)
+        .map_err(|()| Error::LatestDuckdb(format!("invalid output dir {}", dir.display())))?;
+    let catalog_bucket = Bucket::from_url(uri.as_str())?;
+    publish_latest_duckdb(&catalog_bucket, data_bucket, data_uri, &latest).await?;
+    ensure_latest_duckdb_link(&mut root);
+    std::fs::write(&root_path, serde_json::to_vec_pretty(&root)?)?;
+    println!("Published latest.ddb for {latest}.");
+    Ok(())
+}
+
 /// Fail fast when the DuckDB CLI cannot run, before anything is published.
 pub fn check_duckdb_cli() -> Result<()> {
     let bin = duckdb_bin();
