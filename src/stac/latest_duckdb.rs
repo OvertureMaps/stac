@@ -104,14 +104,81 @@ pub fn build_views_sql(latest: &str, data_uri: &str, views: &[View]) -> String {
     stmts.join("\n\n")
 }
 
+fn has_latest_duckdb_link(root: &Value) -> bool {
+    root.get("links")
+        .and_then(|v| v.as_array())
+        .is_some_and(|l| l.iter().any(|l| l["href"] == LATEST_DUCKDB_HREF))
+}
+
 /// True when `latest.ddb` must be rebuilt: the `latest` release changed or the root had no link.
 pub fn latest_duckdb_stale(before: &Value, after: &Value) -> bool {
-    let has_link = |root: &Value| {
-        root.get("links")
-            .and_then(|v| v.as_array())
-            .is_some_and(|l| l.iter().any(|l| l["href"] == LATEST_DUCKDB_HREF))
-    };
-    before.get("latest") != after.get("latest") || has_link(before) != has_link(after)
+    before.get("latest") != after.get("latest") || !has_latest_duckdb_link(before)
+}
+
+/// Bring `latest.ddb` and its root link in line with `root`, whose `latest` is already
+/// refreshed. `before` is the root as read. Call before writing the root, so it never links
+/// to a file that is not uploaded yet.
+///
+/// - `data` is `Some((data_bucket, data_uri))`: rebuild and upload when stale, then link it.
+///   With no `latest`, drop the link.
+/// - `None`: drop the link when `latest` changed, so it never points at the previous release.
+pub async fn sync_latest_duckdb(
+    catalog_bucket: &Bucket,
+    data: Option<(&Bucket, &str)>,
+    before: &Value,
+    root: &mut Value,
+) -> Result<()> {
+    let latest = root
+        .get("latest")
+        .and_then(|v| v.as_str())
+        .map(String::from);
+    match (data, latest) {
+        (Some((data_bucket, data_uri)), Some(latest)) => {
+            if latest_duckdb_stale(before, root) {
+                publish_latest_duckdb(catalog_bucket, data_bucket, data_uri, &latest).await?;
+                println!("Published latest.ddb for {latest}.");
+            }
+            ensure_latest_duckdb_link(root);
+        }
+        (Some(_), None) => remove_latest_duckdb_link(root),
+        (None, _) => {
+            if before.get("latest") != root.get("latest") && has_latest_duckdb_link(root) {
+                remove_latest_duckdb_link(root);
+                println!(
+                    "Removed latest.ddb link: `latest` changed and --generate-latest-ddb is off."
+                );
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Fail fast when the DuckDB CLI cannot run, before anything is published.
+pub fn check_duckdb_cli() -> Result<()> {
+    let bin = duckdb_bin();
+    let out = Command::new(&bin)
+        .arg("-version")
+        .output()
+        .map_err(|e| spawn_error(&bin, &e))?;
+    if out.status.success() {
+        Ok(())
+    } else {
+        Err(Error::LatestDuckdb(format!(
+            "`{bin} -version` exited with {}: {}",
+            out.status,
+            String::from_utf8_lossy(&out.stderr).trim()
+        )))
+    }
+}
+
+fn duckdb_bin() -> String {
+    std::env::var("DUCKDB_BIN").unwrap_or_else(|_| "duckdb".to_string())
+}
+
+fn spawn_error(bin: &str, e: &std::io::Error) -> Error {
+    Error::LatestDuckdb(format!(
+        "could not run `{bin}` ({e}); install the DuckDB CLI or set DUCKDB_BIN"
+    ))
 }
 
 /// Build `latest.ddb` over `latest` under `data_uri` (including any path prefix) and upload
@@ -143,7 +210,7 @@ pub async fn publish_latest_duckdb(
 /// Run `sql` against the database at `path` with the DuckDB CLI (`$DUCKDB_BIN`, default
 /// `duckdb`). The script is piped over stdin and `-bail` aborts on the first failing statement.
 fn run_duckdb_cli(path: &Path, sql: &str) -> Result<()> {
-    let bin = std::env::var("DUCKDB_BIN").unwrap_or_else(|_| "duckdb".to_string());
+    let bin = duckdb_bin();
     let mut child = Command::new(&bin)
         .arg("-bail")
         .arg(path)
@@ -151,11 +218,7 @@ fn run_duckdb_cli(path: &Path, sql: &str) -> Result<()> {
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
-        .map_err(|e| {
-            Error::LatestDuckdb(format!(
-                "could not run `{bin}` ({e}); install the DuckDB CLI or set DUCKDB_BIN"
-            ))
-        })?;
+        .map_err(|e| spawn_error(&bin, &e))?;
     child
         .stdin
         .take()
@@ -197,6 +260,35 @@ pub fn remove_latest_duckdb_link(root: &mut Value) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn link_helpers_are_idempotent_and_leave_other_links() {
+        let count = |root: &Value| {
+            root["links"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .filter(|l| l["href"] == LATEST_DUCKDB_HREF)
+                .count()
+        };
+        let mut root = json!({"links": [{"rel": "self", "href": "x"}]});
+        ensure_latest_duckdb_link(&mut root);
+        ensure_latest_duckdb_link(&mut root);
+        assert_eq!(count(&root), 1);
+        remove_latest_duckdb_link(&mut root);
+        assert_eq!(count(&root), 0);
+        assert_eq!(root["links"].as_array().unwrap().len(), 1);
+    }
+
+    #[test]
+    fn stale_when_latest_changes_or_link_missing() {
+        let linked = json!({"latest": "r1", "links": [{"href": LATEST_DUCKDB_HREF}]});
+        let unlinked = json!({"latest": "r1", "links": []});
+        let moved = json!({"latest": "r2", "links": []});
+        assert!(!latest_duckdb_stale(&linked, &linked));
+        assert!(latest_duckdb_stale(&unlinked, &unlinked));
+        assert!(latest_duckdb_stale(&linked, &moved));
+    }
 
     #[test]
     fn rejects_duplicate_types_across_themes() {

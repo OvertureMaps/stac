@@ -4,7 +4,6 @@
 
 use serde_json::{json, Value};
 
-use super::latest_duckdb::{ensure_latest_duckdb_link, remove_latest_duckdb_link};
 use crate::storage::{get_json, Bucket};
 use crate::{Error, Result};
 
@@ -101,8 +100,8 @@ pub fn add_child_link(root: &mut Value, release: &str, root_href: &str) -> Resul
 
 /// Recompute derived state on the root: top-level `"latest": "<id>"`, per-child-link
 /// `"latest": true` on the newest release only, normalized `"title"` on every child link,
-/// and the root link to `latest.ddb`. A root with no child releases is invalid: it logs a
-/// warning and clears `latest`.
+/// A root with no child releases is invalid: it logs a warning and clears `latest`.
+/// The `latest.ddb` link is managed separately by `sync_latest_duckdb`.
 pub fn refresh_latest(root: &mut Value) {
     let mut children = children_from_root(root);
     children.sort_by(|a, b| b.cmp(a));
@@ -118,12 +117,6 @@ pub fn refresh_latest(root: &mut Value) {
                 obj.remove("latest");
             }
         }
-    }
-
-    if latest.is_some() {
-        ensure_latest_duckdb_link(root);
-    } else {
-        remove_latest_duckdb_link(root);
     }
 
     let Some(links) = root.get_mut("links").and_then(|v| v.as_array_mut()) else {
@@ -361,30 +354,6 @@ mod tests {
                 ),
             ]
         );
-    }
-
-    #[test]
-    fn maintains_latest_duckdb_link() {
-        use super::super::latest_duckdb::LATEST_DUCKDB_HREF;
-        let count = |root: &Value| {
-            root["links"]
-                .as_array()
-                .unwrap()
-                .iter()
-                .filter(|l| l["href"] == LATEST_DUCKDB_HREF)
-                .count()
-        };
-        let mut root = root_with(&[("2026-08-19.0", false)], None);
-        refresh_latest(&mut root);
-        refresh_latest(&mut root);
-        assert_eq!(count(&root), 1);
-
-        root["links"]
-            .as_array_mut()
-            .unwrap()
-            .retain(|l| l["rel"] != "child");
-        refresh_latest(&mut root);
-        assert_eq!(count(&root), 0);
     }
 
     #[test]

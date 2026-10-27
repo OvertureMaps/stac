@@ -63,7 +63,7 @@ jobs:
         run: |
           set -euo pipefail
           : > refresh.log
-          ./target/release/overture-stac refresh-root --catalog-uri "$CATALOG_URI" 2>&1 | tee refresh.log
+          ./target/release/overture-stac refresh-root --generate-latest-ddb --catalog-uri "$CATALOG_URI" 2>&1 | tee refresh.log
           if grep -qE "^Refreshed root" refresh.log; then
             echo "changed=true" >> "$GITHUB_OUTPUT"
           else

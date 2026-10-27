@@ -10,9 +10,9 @@ use serde_json::json;
 use overture_stac::stac::registry;
 use overture_stac::stac::{add_child_link, build_empty_root, remove_child_link};
 use overture_stac::stac::{
-    build_single_release, children_from_root, compute_neighbor_links, latest_duckdb_stale,
-    list_release_ids, publish_latest_duckdb, read_catalog_children, refresh_latest,
-    save_sub_catalog, stamp_vcs, validate_catalog_uri, ValidateOptions,
+    build_single_release, check_duckdb_cli, children_from_root, compute_neighbor_links,
+    list_release_ids, read_catalog_children, refresh_latest, save_sub_catalog, stamp_vcs,
+    sync_latest_duckdb, validate_catalog_uri, ValidateOptions,
 };
 use overture_stac::storage::{
     delete_prefix, get_json, get_json_optional, put_json, upload_directory, Bucket,
@@ -63,6 +63,12 @@ pub struct ReconcileArgs {
     /// Concurrent theme-processing futures used when building added releases.
     #[arg(long)]
     concurrency: Option<usize>,
+
+    /// With --apply, build and publish `latest.ddb` (needs the DuckDB CLI, checked before
+    /// anything is written). Without it, the `latest.ddb` root link is removed when `latest`
+    /// changes, so it never points at an older release.
+    #[arg(long = "generate-latest-ddb", default_value_t = false)]
+    generate_latest_ddb: bool,
 }
 
 /// Diff between the catalog's known release IDs and the data bucket's actual release IDs.
@@ -87,6 +93,9 @@ impl Diff {
 }
 
 pub async fn run(args: ReconcileArgs) -> Result<()> {
+    if args.apply && args.generate_latest_ddb {
+        check_duckdb_cli()?;
+    }
     // Both buckets are constructed with any URI path baked into a PrefixStore,
     // so downstream keys ("release/<id>", "catalog.json") stay layout-relative.
     let catalog_bucket = Bucket::from_url(&args.catalog_uri)?;
@@ -139,15 +148,15 @@ pub async fn run(args: ReconcileArgs) -> Result<()> {
         if let Some(root) = get_json_optional(&catalog_bucket, "catalog.json").await? {
             let mut refreshed = root.clone();
             refresh_latest(&mut refreshed);
-            if latest_duckdb_stale(&root, &refreshed) {
-                if let Some(latest) = refreshed.get("latest").and_then(|v| v.as_str()) {
-                    publish_latest_duckdb(&catalog_bucket, &data_bucket, &args.data_uri, latest)
-                        .await
-                        .context("publishing latest.ddb")?;
-                    put_json(&catalog_bucket, "catalog.json", &refreshed).await?;
-                    println!("Published latest.ddb for {latest}.");
-                    mutated = true;
-                }
+            let data = args
+                .generate_latest_ddb
+                .then(|| (&data_bucket, args.data_uri.as_str()));
+            sync_latest_duckdb(&catalog_bucket, data, &root, &mut refreshed)
+                .await
+                .context("syncing latest.ddb")?;
+            if refreshed != root {
+                put_json(&catalog_bucket, "catalog.json", &refreshed).await?;
+                mutated = true;
             }
         }
         if !mutated {
@@ -175,6 +184,7 @@ pub async fn run(args: ReconcileArgs) -> Result<()> {
             concurrency,
             args.backup_catalog,
             args.validate,
+            args.generate_latest_ddb,
         )
         .await?;
         println!();
@@ -259,6 +269,7 @@ async fn apply_diff(
     concurrency: usize,
     backup: bool,
     validate: bool,
+    generate_latest_ddb: bool,
 ) -> Result<()> {
     let root_key = "catalog.json";
     let existing_root = get_json_optional(catalog_bucket, root_key).await?;
@@ -334,14 +345,10 @@ async fn apply_diff(
     // reading the catalog can tell which build wrote it.
     refresh_latest(&mut root);
     // Upload the database before the root that links to it.
-    if latest_duckdb_stale(&initial_root, &root) {
-        if let Some(latest) = root.get("latest").and_then(|v| v.as_str()) {
-            publish_latest_duckdb(catalog_bucket, data_bucket, data_uri, latest)
-                .await
-                .context("publishing latest.ddb")?;
-            println!("Published latest.ddb for {latest}.");
-        }
-    }
+    let data = generate_latest_ddb.then_some((data_bucket, data_uri));
+    sync_latest_duckdb(catalog_bucket, data, &initial_root, &mut root)
+        .await
+        .context("syncing latest.ddb")?;
     let manifest = registry::create_manifest(data_bucket)
         .await
         .context("refreshing registry manifest")?;
