@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [4.1.0](https://github.com/OvertureMaps/stac/compare/v4.0.3...v4.1.0) - 2026-10-27
+
+### Added
+
+- serve latest.ddb from the STAC catalog ([#213](https://github.com/OvertureMaps/stac/pull/213))
+
 ## [4.0.3](https://github.com/OvertureMaps/stac/compare/v4.0.2...v4.0.3) - 2026-10-27
 
 ### Other
