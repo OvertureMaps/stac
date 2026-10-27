@@ -1,6 +1,6 @@
 [package]
 name = "overture-stac"
-version = "4.0.2"
+version = "4.0.3"
 edition = "2021"
 rust-version = "1.88"
 authors = ["Francisco Jiménez <jjcfrank@gmail.com>"]
@@ -54,7 +54,7 @@ url = "2"
 arrow-array = "60"
 arrow-schema = "60"
 assert_cmd = "2"
-jsonschema = "0.58"
+jsonschema = "0.59"
 predicates = "3"
 
 # Fixture generator for the offline stac-validate CI job. Writes a minimal
