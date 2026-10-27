@@ -57,6 +57,8 @@ jobs:
         with:
           cache-key: reconcile
 
+      - uses: $/.github/actions/setup-duckdb
+
       - name: Build overture-stac
         run: cargo build --release --bin overture-stac
 

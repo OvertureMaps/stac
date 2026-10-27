@@ -6,8 +6,9 @@ use std::path::PathBuf;
 use regex::Regex;
 
 use overture_stac::stac::{
-    build_single_release, build_top_catalog, link_neighbor_releases, list_release_ids, registry,
-    save_root_catalog, save_sub_catalog, stamp_vcs, validate_release_id,
+    build_single_release, build_top_catalog, check_duckdb_cli, link_neighbor_releases,
+    list_release_ids, publish_latest_duckdb_to_dir, registry, save_root_catalog, save_sub_catalog,
+    stamp_vcs, validate_release_id,
 };
 use overture_stac::storage::Bucket;
 use overture_stac::{Error, Result, ResultExt};
@@ -55,9 +56,17 @@ pub struct BuildArgs {
     /// Validate the catalog after writing. Fails the run on any failure.
     #[arg(long, default_value_t = false)]
     validate: bool,
+
+    /// Also build `latest.ddb` into the output dir and link it from the root catalog
+    /// (needs the DuckDB CLI, checked before anything is built).
+    #[arg(long = "generate-latest-ddb", default_value_t = false)]
+    generate_latest_ddb: bool,
 }
 
 pub async fn run(args: BuildArgs) -> Result<()> {
+    if args.generate_latest_ddb {
+        check_duckdb_cli()?;
+    }
     let root_href = args.root_href.trim_end_matches('/').to_string();
     let concurrency = args.concurrency.unwrap_or_else(default_concurrency);
 
@@ -109,6 +118,9 @@ pub async fn run(args: BuildArgs) -> Result<()> {
             run_validation(&dest, false).await?;
         }
         write_root(&args.output, &root_href, &bucket).await?;
+        if args.generate_latest_ddb {
+            publish_latest_duckdb_to_dir(&args.output, &bucket, &args.data_uri).await?;
+        }
         return Ok(());
     }
 
@@ -135,6 +147,9 @@ pub async fn run(args: BuildArgs) -> Result<()> {
     save_root_catalog(&top, &root_href, &args.output)?;
     if args.validate {
         run_validation(&args.output, false).await?;
+    }
+    if args.generate_latest_ddb {
+        publish_latest_duckdb_to_dir(&args.output, &bucket, &args.data_uri).await?;
     }
     Ok(())
 }

@@ -99,7 +99,9 @@ pub fn add_child_link(root: &mut Value, release: &str, root_href: &str) -> Resul
 }
 
 /// Recompute derived state on the root: top-level `"latest": "<id>"`, per-child-link
-/// `"latest": true` on the newest release only, and normalized `"title"` on every child link.
+/// `"latest": true` on the newest release only, normalized `"title"` on every child link,
+/// A root with no child releases is invalid: it logs a warning and clears `latest`.
+/// The `latest.ddb` link is managed separately by `sync_latest_duckdb`.
 pub fn refresh_latest(root: &mut Value) {
     let mut children = children_from_root(root);
     children.sort_by(|a, b| b.cmp(a));
@@ -111,6 +113,7 @@ pub fn refresh_latest(root: &mut Value) {
                 obj.insert("latest".into(), json!(id));
             }
             None => {
+                tracing::warn!("root catalog has no releases, so there is no `latest`");
                 obj.remove("latest");
             }
         }

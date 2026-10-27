@@ -90,6 +90,9 @@ pub enum Error {
     #[error("--url must be an http(s) URL (got: {0})")]
     InvalidValidateUrl(String),
 
+    #[error("building latest.ddb: {0}")]
+    LatestDuckdb(String),
+
     #[error("malformed catalog JSON: {0}")]
     MalformedCatalog(String),
 
@@ -130,7 +133,7 @@ impl Error {
 
             Error::ValidationFailed(_) | Error::StacValidate(_) => 4,
 
-            Error::ObjectStore(_) | Error::Http(_) | Error::Io(_) => 5,
+            Error::ObjectStore(_) | Error::Http(_) | Error::Io(_) | Error::LatestDuckdb(_) => 5,
         }
     }
 }

@@ -44,6 +44,8 @@ jobs:
         with:
           cache-key: refresh-root
 
+      - uses: $/.github/actions/setup-duckdb
+
       - name: Build overture-stac
         run: cargo build --release --bin overture-stac
 
@@ -61,7 +63,7 @@ jobs:
         run: |
           set -euo pipefail
           : > refresh.log
-          ./target/release/overture-stac refresh-root --catalog-uri "$CATALOG_URI" 2>&1 | tee refresh.log
+          ./target/release/overture-stac refresh-root --generate-latest-ddb --catalog-uri "$CATALOG_URI" 2>&1 | tee refresh.log
           if grep -qE "^Refreshed root" refresh.log; then
             echo "changed=true" >> "$GITHUB_OUTPUT"
           else
@@ -77,6 +79,6 @@ jobs:
           role-skip-session-tagging: true
           aws-region: ${{ env.AWS_REGION }}
 
-      - name: Invalidate /catalog.json
+      - name: Invalidate /catalog.json and /latest.ddb
         if: steps.refresh.outputs.changed == 'true'
-        run: aws cloudfront create-invalidation --distribution-id "$CLOUDFRONT_DISTRIBUTION_ID" --paths "/catalog.json"
+        run: aws cloudfront create-invalidation --distribution-id "$CLOUDFRONT_DISTRIBUTION_ID" --paths "/catalog.json" "/latest.ddb"

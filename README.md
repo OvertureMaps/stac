@@ -17,11 +17,12 @@ cargo build --release
 
 ## Usage
 
-Four subcommands (`overture-stac --help` for full listings):
+Five subcommands (`overture-stac --help` for full listings):
 
-- `build` — walk the data bucket and write a full STAC catalog to disk. Defaults to all current releases.
+- `build` — walk the data bucket and write a full STAC catalog to disk. Defaults to all current releases. `--generate-latest-ddb` also writes and links `latest.ddb` (needs the DuckDB CLI); PR staging previews use it.
 - `list-releases` — print release IDs the data bucket currently exposes, newest first.
-- `reconcile` — compare the live catalog against the data bucket and report drift. `--apply` writes the fix.
+- `reconcile` — compare the live catalog against the data bucket and report drift. `--apply` writes the fix; add `--generate-latest-ddb` to also publish `latest.ddb` (needs the DuckDB CLI).
+- `refresh-root` — recompute derived root state (the `latest` flag). With `--generate-latest-ddb`, also republish `latest.ddb` and its root link when `latest` changes; this needs the DuckDB CLI on `PATH` (or `DUCKDB_BIN`) and is checked up front. Without the flag, a changed `latest` removes the `latest.ddb` link.
 - `validate` — run JSON-schema + link-integrity + Overture-specific checks against a built catalog (local dir, remote URL, or object-store URI).
 
 Typical single-release build:
