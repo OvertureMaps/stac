@@ -55,8 +55,11 @@ jobs:
     with:
       all_features: true
       test_matrix: msrv
+      cache: true
       setup_script: .github/scripts/setup-duckdb.sh
-      harden_runner_egress: block
+      # latest_duckdb tests INSTALL httpfs/spatial from extensions.duckdb.org,
+      # which the shared block list omits and the lane can't extend.
+      harden_runner_egress: audit
       grype_remediation_window_start: '2026-10-30'
       # zstd 0.13 / zstd-safe 7 arrive via parquet 58 from the stac crates;
       # the fix needs parquet 60 there (stac-utils/rustac#1130). Drop once

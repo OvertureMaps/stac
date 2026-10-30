@@ -37,7 +37,7 @@ num_cpus = "1"
 object_store = { version = "0.14.1", features = ["aws", "gcp", "azure", "http"] }
 parquet = { version = "60", features = ["async", "object_store"] }
 regex = "1"
-reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json"] }
+reqwest = { version = "0.13", default-features = false, features = ["rustls", "json"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["float_roundtrip"] }
 stac = { version = "0.17.4", features = ["geoparquet"] }
