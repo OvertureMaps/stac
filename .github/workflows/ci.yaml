@@ -61,9 +61,9 @@ jobs:
       # which the shared block list omits and the lane can't extend.
       harden_runner_egress: audit
       grype_remediation_window_start: '2026-10-30'
-      # zstd 0.13 / zstd-safe 7 arrive via parquet 58 from the stac crates;
-      # the fix needs parquet 60 there (stac-utils/rustac#1130). Drop once
-      # a stac release ships it.
+      # zstd 0.13 / zstd-safe 7 come with parquet 58, held there to match the
+      # stac crates; the fix needs parquet 60 (stac-utils/rustac#1130). Drop
+      # once a stac release ships it and parquet moves with it.
       audit_ignore_vulns: >-
         RUSTSEC-2026-0391
         RUSTSEC-2026-0398
