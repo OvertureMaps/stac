@@ -64,10 +64,14 @@ jobs:
       # zstd 0.13 / zstd-safe 7 come with parquet 58, held there to match the
       # stac crates; the fix needs parquet 60 (stac-utils/rustac#1130). Drop
       # once a stac release ships it and parquet moves with it.
+      # quick-xml 0.39 comes with object_store 0.13 (parquet 58's); both are
+      # DoS on XML from the storage endpoint itself. Same lift as above.
       audit_ignore_vulns: >-
         RUSTSEC-2026-0391
         RUSTSEC-2026-0398
         RUSTSEC-2026-0403
+        RUSTSEC-2026-0194
+        RUSTSEC-2026-0195
 
   stac-validate:
     name: STAC validation (build + validate against public bucket)
