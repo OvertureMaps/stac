@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [5.0.0](https://github.com/OvertureMaps/stac/compare/v4.1.0...v5.0.0) - 2026-10-30
+
+### Other
+
+- [**breaking**] adopt LF rust-workflows lane, align deps with rustac ([#219](https://github.com/OvertureMaps/stac/pull/219))
+
 ## [4.1.0](https://github.com/OvertureMaps/stac/compare/v4.0.3...v4.1.0) - 2026-10-27
 
 ### Added
