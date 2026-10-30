@@ -21,7 +21,7 @@ env:
 
 jobs:
   rust:
-    name: Rust (fmt, clippy, test, build)
+    name: Rust (fmt, clippy, doc)
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -40,44 +40,38 @@ jobs:
       - name: clippy
         run: cargo clippy --all-targets --all-features
 
-      - uses: $/.github/actions/setup-duckdb
-
-      - name: test
-        run: cargo test --all-features
-
       - name: doc
         run: cargo doc --no-deps --all-features
 
-      - name: build (release)
-        run: cargo build --release
-
-  msrv:
-    name: MSRV (build on declared rust-version)
-    runs-on: ubuntu-latest
+  # Build, test (project toolchain + rust-version MSRV leg), cargo-audit,
+  # SBOM and Grype. Workflow-level env (RUSTFLAGS) doesn't reach it.
+  build-test:
+    name: Build/Test
     permissions:
       contents: read
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-
-      - name: Read MSRV from Cargo.toml
-        id: msrv
-        run: echo "version=$(grep -oE '^rust-version = "[^"]+"' Cargo.toml | cut -d'"' -f2)" >> "$GITHUB_OUTPUT"
-
-      - name: Install MSRV toolchain
-        env:
-          MSRV: ${{ steps.msrv.outputs.version }}
-        run: rustup toolchain install "$MSRV" --profile minimal --no-self-update
-
-      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
-        with:
-          key: msrv-${{ steps.msrv.outputs.version }}
-
-      - name: Build on MSRV
-        env:
-          MSRV: ${{ steps.msrv.outputs.version }}
-        run: cargo "+$MSRV" build --locked
+      pull-requests: read # repository-metadata-action queries PR data
+      issues: read # grype-scan-action reads cve-bypass issues
+    uses: lfreleng-actions/rust-workflows/.github/workflows/build-test.yaml@b7905deb2c3a5d8acd802db3769af51b1100fb50 # v0.1.0
+    with:
+      all_features: true
+      test_matrix: msrv
+      cache: true
+      setup_script: .github/scripts/setup-duckdb.sh
+      # latest_duckdb tests INSTALL httpfs/spatial from extensions.duckdb.org,
+      # which the shared block list omits and the lane can't extend.
+      harden_runner_egress: audit
+      grype_remediation_window_start: '2026-10-30'
+      # zstd 0.13 / zstd-safe 7 come with parquet 58, held there to match the
+      # stac crates; the fix needs parquet 60 (stac-utils/rustac#1130). Drop
+      # once a stac release ships it and parquet moves with it.
+      # quick-xml 0.39 comes with object_store 0.13 (parquet 58's); both are
+      # DoS from XML a --data-uri endpoint returns. Same lift as above.
+      audit_ignore_vulns: >-
+        RUSTSEC-2026-0391
+        RUSTSEC-2026-0398
+        RUSTSEC-2026-0403
+        RUSTSEC-2026-0194
+        RUSTSEC-2026-0195
 
   stac-validate:
     name: STAC validation (build + validate against public bucket)
@@ -136,7 +130,7 @@ jobs:
 
   all-checks-pass:
     name: All Checks Pass
-    needs: [rust, msrv, stac-validate, stac-validate-offline]
+    needs: [rust, build-test, stac-validate, stac-validate-offline]
     runs-on: ubuntu-latest
     if: always()
     permissions:

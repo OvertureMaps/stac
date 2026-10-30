@@ -34,10 +34,13 @@ chrono = "0.4"
 clap = { version = "4", features = ["derive"] }
 futures = "0.3"
 num_cpus = "1"
-object_store = { version = "0.14.1", features = ["aws", "gcp", "azure", "http"] }
-parquet = { version = "60", features = ["async", "object_store"] }
+# parquet, object_store and the arrow dev-deps track the majors the stac crates
+# use (parquet 58), so one arrow stack builds. Move them together once
+# stac-utils/rustac#1130 ships; .github/dependabot.yml ignores newer majors.
+object_store = { version = "0.13", features = ["aws", "gcp", "azure", "http"] }
+parquet = { version = "58", features = ["async", "object_store"] }
 regex = "1"
-reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json"] }
+reqwest = { version = "0.13", default-features = false, features = ["rustls", "json"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["float_roundtrip"] }
 stac = { version = "0.17.4", features = ["geoparquet"] }
@@ -51,8 +54,8 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 url = "2"
 
 [dev-dependencies]
-arrow-array = "60"
-arrow-schema = "60"
+arrow-array = "58"
+arrow-schema = "58"
 assert_cmd = "2"
 jsonschema = "0.59"
 predicates = "3"
