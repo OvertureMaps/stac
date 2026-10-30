@@ -49,7 +49,7 @@ jobs:
     name: Build/Test
     permissions:
       contents: read
-      pull-requests: read
+      pull-requests: read # repository-metadata-action queries PR data
       issues: read # grype-scan-action reads cve-bypass issues
     uses: lfreleng-actions/rust-workflows/.github/workflows/build-test.yaml@b7905deb2c3a5d8acd802db3769af51b1100fb50 # v0.1.0
     with:
@@ -58,6 +58,13 @@ jobs:
       setup_script: .github/scripts/setup-duckdb.sh
       harden_runner_egress: block
       grype_remediation_window_start: '2026-10-30'
+      # zstd 0.13 / zstd-safe 7 arrive via parquet 58 from the stac crates;
+      # the fix needs parquet 60 there (stac-utils/rustac#1130). Drop once
+      # a stac release ships it.
+      audit_ignore_vulns: >-
+        RUSTSEC-2026-0391
+        RUSTSEC-2026-0398
+        RUSTSEC-2026-0403
 
   stac-validate:
     name: STAC validation (build + validate against public bucket)
