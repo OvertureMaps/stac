@@ -57,7 +57,7 @@ url = "2"
 arrow-array = "58"
 arrow-schema = "58"
 assert_cmd = "2"
-jsonschema = "0.59"
+jsonschema = "0.60"
 predicates = "3"
 
 # Fixture generator for the offline stac-validate CI job. Writes a minimal
