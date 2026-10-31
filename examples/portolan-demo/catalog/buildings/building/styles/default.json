@@ -1,0 +1,23 @@
+{
+  "version": 8,
+  "name": "Buildings",
+  "sources": {
+    "overture": {
+      "type": "vector",
+      "url": "pmtiles://https://tiles.overturemaps.org/2026-08-19.0/buildings.pmtiles"
+    }
+  },
+  "layers": [
+    {
+      "id": "buildings",
+      "type": "fill",
+      "source": "overture",
+      "source-layer": "building",
+      "paint": {
+        "fill-color": "#8d6e63",
+        "fill-opacity": 0.85,
+        "fill-outline-color": "#5d4037"
+      }
+    }
+  ]
+}

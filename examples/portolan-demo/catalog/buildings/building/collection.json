@@ -1,0 +1,282 @@
+{
+  "type": "Collection",
+  "id": "building",
+  "stac_version": "1.1.0",
+  "stac_extensions": [
+    "https://schemas.portolan-sdi.org/portolan/v0.2.0/schema.json",
+    "https://stac-extensions.github.io/table/v1.2.0/schema.json"
+  ],
+  "title": "Buildings",
+  "description": "2.53 billion building footprints worldwide, conflated by Overture from OpenStreetMap, Esri Community Maps, Google Open Buildings, Microsoft ML Building Footprints, and other sources.\n\n**The geometry is the product; the attributes are sparse.** This is the single most important thing to know before querying or styling this collection. Measured across 8 of 512 partitions (39,680,766 rows \u2014 see the [agent guide](AGENTS.md) for the query):\n\n| Column | Populated |\n|---|---|\n| `subtype` | 1.62% |\n| `class` | 1.56% |\n| `names` | 0.26% |\n| `height` | 0.11% |\n| `roof_shape` | 0.027% |\n\nA choropleth on `subtype` therefore paints about 98% of the world in a single \"unclassified\" colour. The styles shipped here say so rather than hiding it: the default renders footprints as one colour, and the attribute styles carry an explicit unclassified class in the legend. Where `subtype` *is* present it is dominated by `residential`.\n\nBuilding parts that refine a footprint's shape or height live in [Building Parts](../building_part/collection.json), joined on `building_id`.\n\nField definitions come from the [Overture buildings schema reference](https://docs.overturemaps.org/schema/reference/buildings/building/).\n",
+  "license": "ODbL-1.0",
+  "keywords": [
+    "buildings",
+    "building footprints",
+    "3d",
+    "gers",
+    "overture"
+  ],
+  "providers": [
+    {
+      "name": "Overture Maps Foundation",
+      "description": "Overture Maps Foundation is a collaborative effort of its members to build open, interoperable map data. It assembles, conflates, and quality-checks the source datasets behind this collection and publishes them on a monthly cadence.",
+      "roles": [
+        "producer",
+        "licensor",
+        "processor",
+        "host"
+      ],
+      "url": "https://overturemaps.org/"
+    }
+  ],
+  "extent": {
+    "spatial": {
+      "bbox": [
+        [
+          -180.0,
+          -84.29460906982422,
+          -86.84698486328125,
+          17.07219696044922
+        ],
+        [
+          -180.0,
+          -84.29460906982422,
+          -86.84698486328125,
+          14.345832824707031
+        ],
+        [
+          -92.68286895751953,
+          14.345375061035156,
+          -86.8475112915039,
+          14.98723316192627
+        ],
+        [
+          -169.54232788085938,
+          14.986928939819336,
+          -92.1268081665039,
+          17.07219696044922
+        ]
+      ]
+    },
+    "temporal": {
+      "interval": [
+        [
+          null,
+          null
+        ]
+      ]
+    }
+  },
+  "links": [
+    {
+      "rel": "root",
+      "href": "../../catalog.json",
+      "type": "application/json",
+      "title": "Overture Places and Buildings"
+    },
+    {
+      "rel": "parent",
+      "href": "../catalog.json",
+      "type": "application/json",
+      "title": "Buildings"
+    },
+    {
+      "rel": "describedby",
+      "href": "./README.md",
+      "type": "text/markdown",
+      "title": "README"
+    },
+    {
+      "rel": "agents",
+      "href": "./AGENTS.md",
+      "type": "text/markdown",
+      "title": "Agent guide"
+    },
+    {
+      "rel": "item",
+      "href": "./00000/00000.json",
+      "type": "application/geo+json",
+      "title": "Buildings partition 00000"
+    },
+    {
+      "rel": "item",
+      "href": "./00001/00001.json",
+      "type": "application/geo+json",
+      "title": "Buildings partition 00001"
+    },
+    {
+      "rel": "item",
+      "href": "./00002/00002.json",
+      "type": "application/geo+json",
+      "title": "Buildings partition 00002"
+    }
+  ],
+  "assets": {
+    "style": {
+      "href": "./styles/default.json",
+      "type": "application/json",
+      "title": "Default style",
+      "roles": [
+        "style",
+        "default"
+      ],
+      "file:size": 465,
+      "file:checksum": "12201956c29ce96c1d276e68a1817fe5bd9a20aae90787d82fd5780fac44f4cc632e"
+    },
+    "style-by-subtype": {
+      "href": "./styles/by-subtype.json",
+      "type": "application/json",
+      "title": "Coloured by building subtype",
+      "roles": [
+        "style"
+      ],
+      "file:size": 1131,
+      "file:checksum": "1220f1a5c54cfef305e59e1ad841d9d153868bfc8e903aefb06f5a4d12c2d9368c85"
+    },
+    "style-by-height": {
+      "href": "./styles/by-height.json",
+      "type": "application/json",
+      "title": "Coloured by height, where known",
+      "roles": [
+        "style"
+      ],
+      "file:size": 757,
+      "file:checksum": "12208214c544adb4d0e24ba9160573bc9e67bf834ec399f1837f6785b8cf87bb1001"
+    }
+  },
+  "summaries": {
+    "num_rows": {
+      "minimum": 4778001,
+      "maximum": 5103996
+    },
+    "num_row_groups": {
+      "minimum": 128,
+      "maximum": 256
+    }
+  },
+  "table:primary_geometry": "geometry",
+  "table:row_count": 2529582613,
+  "table:columns": [
+    {
+      "name": "id",
+      "type": "string",
+      "description": "Stable feature identifier. Where the feature is part of the Global Entity Reference System (GERS), this is its GERS ID and can be used to join Overture releases to each other and to external datasets."
+    },
+    {
+      "name": "names",
+      "type": "struct<primary: string, common: map<string, string>, rules: list<struct<variant: string, language: string, perspectives: struct<mode: string, countries: list<string>>, value: string, between: list<double>, side: string>>>",
+      "description": "All known names for the feature. `primary` is the main name; `common` maps language codes to translations; `rules` carries variants that apply only in a given language, along a linear range, or from a given geopolitical perspective."
+    },
+    {
+      "name": "sources",
+      "type": "list<struct<property: string, dataset: string, license: string, record_id: string, update_time: string, confidence: double, between: list<double>, provider: string, resource: string, version: string>>",
+      "description": "Provenance for the feature: which upstream dataset each property came from, the record id in that dataset, its license, and when it was last updated. `property` is a JSON pointer to the field the entry explains; an empty pointer covers the whole feature."
+    },
+    {
+      "name": "level",
+      "type": "int32",
+      "description": "Z-order of the feature, where 0 is ground level. Used to resolve draw order where features overlap, such as a bridge over a road."
+    },
+    {
+      "name": "height",
+      "type": "double",
+      "description": "Height of the building or part in metres, measured from its lowest point to its highest point."
+    },
+    {
+      "name": "min_height",
+      "type": "double",
+      "description": "Altitude above ground in metres where the bottom of the building or part starts. Non-zero for features such as a skywalk or an overhanging upper storey."
+    },
+    {
+      "name": "is_underground",
+      "type": "boolean",
+      "description": "Whether the entire building or part sits completely below ground."
+    },
+    {
+      "name": "num_floors",
+      "type": "int32",
+      "description": "Number of above-ground floors of the building or part."
+    },
+    {
+      "name": "num_floors_underground",
+      "type": "int32",
+      "description": "Number of below-ground floors of the building or part."
+    },
+    {
+      "name": "min_floor",
+      "type": "int32",
+      "description": "Start floor of this building or part."
+    },
+    {
+      "name": "subtype",
+      "type": "string",
+      "description": "Broad classification of the building's current use and purpose, such as `residential`, `commercial`, or `education`."
+    },
+    {
+      "name": "class",
+      "type": "string",
+      "description": "More specific classification of the building's current use and purpose, nested under `subtype` \u2014 for example `house` or `apartments` within `residential`."
+    },
+    {
+      "name": "facade_color",
+      "type": "string",
+      "description": "Facade colour in `#rgb` or `#rrggbb` hex notation."
+    },
+    {
+      "name": "facade_material",
+      "type": "string",
+      "description": "Outer surface material of the facade."
+    },
+    {
+      "name": "roof_material",
+      "type": "string",
+      "description": "Outer surface material of the roof."
+    },
+    {
+      "name": "roof_shape",
+      "type": "string",
+      "description": "Shape of the roof, such as `flat`, `gabled`, or `hipped`."
+    },
+    {
+      "name": "roof_direction",
+      "type": "double",
+      "description": "Bearing of the roof ridge line in degrees clockwise from north."
+    },
+    {
+      "name": "roof_orientation",
+      "type": "string",
+      "description": "Orientation of the roof shape relative to the footprint \u2014 `along` or `across`."
+    },
+    {
+      "name": "roof_color",
+      "type": "string",
+      "description": "Roof colour in `#rgb` or `#rrggbb` hex notation."
+    },
+    {
+      "name": "roof_height",
+      "type": "double",
+      "description": "Height of the roof in metres, from the base of the roof to its highest point."
+    },
+    {
+      "name": "geometry",
+      "type": "binary",
+      "description": "Feature geometry as WKB, in EPSG:4326 (longitude, latitude). This is the GeoParquet primary geometry column."
+    },
+    {
+      "name": "has_parts",
+      "type": "boolean",
+      "description": "Whether this building has associated `building_part` features. Join on `building_part.building_id` to retrieve them."
+    },
+    {
+      "name": "version",
+      "type": "int32",
+      "description": "Version of this feature. Incremented by Overture whenever the feature changes between releases."
+    },
+    {
+      "name": "bbox",
+      "type": "struct<xmin: double, xmax: double, ymin: double, ymax: double>",
+      "description": "Bounding box of the feature geometry, stored as a struct so that readers can filter on it with Parquet row-group statistics before decoding any geometry."
+    }
+  ],
+  "geoparquet:version": "1.1.0"
+}
