@@ -38,6 +38,15 @@ updates:
     cooldown:
       default-days: 7
     open-pull-requests-limit: 5
+    # Held to the parquet/arrow/object_store majors the stac crates use, so
+    # one arrow stack builds. Lift with stac-utils/rustac#1130.
+    ignore:
+      - dependency-name: "parquet"
+        versions: [">=59"]
+      - dependency-name: "arrow-*"
+        versions: [">=59"]
+      - dependency-name: "object_store"
+        versions: [">=0.14"]
     groups:
       minor-patch:
         applies-to: version-updates

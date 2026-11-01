@@ -9,6 +9,8 @@
 use std::fs;
 use std::path::Path;
 
+mod common;
+
 use assert_cmd::Command;
 use predicates::prelude::*;
 use serde_json::{json, Value};
@@ -122,6 +124,193 @@ fn apply_removes_stale_release() {
 }
 
 #[test]
+fn apply_republishes_latest_duckdb_when_latest_changes() {
+    // Removing the newest release promotes the older one, so latest.ddb must follow.
+    let tmp = tempfile::tempdir().unwrap();
+    let catalog_dir = tmp.path().join("catalog");
+    let data_dir = tmp.path().join("data");
+    let root_href = "https://stac.example.com";
+    let child = |id: &str| {
+        json!({
+            "rel": "child",
+            "href": format!("{root_href}/{id}/catalog.json"),
+            "type": "application/json",
+        })
+    };
+
+    write_json(
+        &catalog_dir.join("catalog.json"),
+        &json!({
+            "type": "Catalog",
+            "id": "Overture Releases",
+            "description": "All Overture Releases",
+            "stac_version": "1.0.0",
+            "latest": "2026-02-01.0",
+            "links": [child("2026-01-01.0"), child("2026-02-01.0")],
+        }),
+    );
+    for id in ["2026-01-01.0", "2026-02-01.0"] {
+        write_json(
+            &catalog_dir.join(id).join("catalog.json"),
+            &json!({"type": "Catalog", "id": id}),
+        );
+    }
+    common::write_release_fixture(&data_dir, "2026-01-01.0", &[("base", "water")]);
+
+    Command::cargo_bin("overture-stac")
+        .unwrap()
+        .args([
+            "reconcile",
+            "--apply",
+            "--generate-latest-ddb",
+            "--catalog-uri",
+            &format!("file://{}/", catalog_dir.display()),
+            "--data-uri",
+            &format!("file://{}", data_dir.display()),
+            "--extras-uri",
+            "",
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(
+            "Published latest.ddb for 2026-01-01.0",
+        ));
+
+    assert!(catalog_dir.join("latest.ddb").is_file());
+    let root = read_json(&catalog_dir.join("catalog.json"));
+    assert_eq!(root["latest"], "2026-01-01.0");
+    assert!(root["links"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|l| l["href"] == "./latest.ddb"));
+}
+
+#[test]
+fn apply_drops_latest_duckdb_link_when_flag_off() {
+    // Without --generate-latest-ddb a changed `latest` must not leave a link to the old release.
+    let tmp = tempfile::tempdir().unwrap();
+    let catalog_dir = tmp.path().join("catalog");
+    let data_dir = tmp.path().join("data");
+    let root_href = "https://stac.example.com";
+    let child = |id: &str| {
+        json!({
+            "rel": "child",
+            "href": format!("{root_href}/{id}/catalog.json"),
+            "type": "application/json",
+        })
+    };
+
+    write_json(
+        &catalog_dir.join("catalog.json"),
+        &json!({
+            "type": "Catalog",
+            "id": "Overture Releases",
+            "description": "All Overture Releases",
+            "stac_version": "1.0.0",
+            "latest": "2026-02-01.0",
+            "links": [
+                child("2026-01-01.0"),
+                child("2026-02-01.0"),
+                {"rel": "alternate", "href": "./latest.ddb", "type": "application/vnd.duckdb"},
+            ],
+        }),
+    );
+    for id in ["2026-01-01.0", "2026-02-01.0"] {
+        write_json(
+            &catalog_dir.join(id).join("catalog.json"),
+            &json!({"type": "Catalog", "id": id}),
+        );
+    }
+    common::write_release_fixture(&data_dir, "2026-01-01.0", &[("base", "water")]);
+
+    Command::cargo_bin("overture-stac")
+        .unwrap()
+        .env("DUCKDB_BIN", "/nonexistent/duckdb")
+        .args([
+            "reconcile",
+            "--apply",
+            "--catalog-uri",
+            &format!("file://{}/", catalog_dir.display()),
+            "--data-uri",
+            &format!("file://{}", data_dir.display()),
+            "--extras-uri",
+            "",
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Removed latest.ddb link"));
+
+    let root = read_json(&catalog_dir.join("catalog.json"));
+    assert_eq!(root["latest"], "2026-01-01.0");
+    assert!(!root["links"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|l| l["href"] == "./latest.ddb"));
+    assert!(!catalog_dir.join("latest.ddb").exists());
+}
+
+#[test]
+fn generate_flag_fails_before_writing_when_duckdb_is_missing() {
+    let tmp = tempfile::tempdir().unwrap();
+    let catalog_dir = tmp.path().join("catalog");
+    let data_dir = tmp.path().join("data");
+    let root_path = catalog_dir.join("catalog.json");
+    let id = "2026-01-01.0";
+
+    write_json(
+        &root_path,
+        &json!({
+            "type": "Catalog",
+            "id": "Overture Releases",
+            "description": "All Overture Releases",
+            "stac_version": "1.0.0",
+            "links": [],
+        }),
+    );
+    common::write_release_fixture(&data_dir, id, &[("base", "water")]);
+    let before = std::fs::read(&root_path).unwrap();
+    let catalog_uri = format!("file://{}/", catalog_dir.display());
+    let data_uri = format!("file://{}", data_dir.display());
+
+    Command::cargo_bin("overture-stac")
+        .unwrap()
+        .env("DUCKDB_BIN", "/nonexistent/duckdb")
+        .args([
+            "reconcile",
+            "--apply",
+            "--generate-latest-ddb",
+            "--catalog-uri",
+            &catalog_uri,
+            "--data-uri",
+            &data_uri,
+            "--extras-uri",
+            "",
+        ])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("could not run"));
+
+    Command::cargo_bin("overture-stac")
+        .unwrap()
+        .env("DUCKDB_BIN", "/nonexistent/duckdb")
+        .args([
+            "refresh-root",
+            "--generate-latest-ddb",
+            "--catalog-uri",
+            &catalog_uri,
+        ])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("could not run"));
+
+    assert_eq!(std::fs::read(&root_path).unwrap(), before);
+    assert!(!catalog_dir.join(id).exists());
+    assert!(!catalog_dir.join("latest.ddb").exists());
+}
+
+#[test]
 fn apply_is_noop_when_in_sync() {
     // Both sides empty. Apply should succeed and change nothing.
     let tmp = tempfile::tempdir().unwrap();
@@ -162,6 +351,57 @@ fn apply_is_noop_when_in_sync() {
 }
 
 #[test]
+fn apply_repairs_missing_latest_duckdb_when_in_sync() {
+    let tmp = tempfile::tempdir().unwrap();
+    let catalog_dir = tmp.path().join("catalog");
+    let data_dir = tmp.path().join("data");
+    let id = "2026-01-01.0";
+
+    write_json(
+        &catalog_dir.join("catalog.json"),
+        &json!({
+            "type": "Catalog",
+            "id": "Overture Releases",
+            "description": "All Overture Releases",
+            "stac_version": "1.0.0",
+            "latest": id,
+            "links": [{
+                "rel": "child",
+                "href": format!("https://stac.example.com/{id}/catalog.json"),
+                "type": "application/json",
+                "latest": true,
+            }],
+        }),
+    );
+    write_json(
+        &catalog_dir.join(id).join("catalog.json"),
+        &json!({"type": "Catalog", "id": id}),
+    );
+    common::write_release_fixture(&data_dir, id, &[("base", "water")]);
+
+    Command::cargo_bin("overture-stac")
+        .unwrap()
+        .args([
+            "reconcile",
+            "--apply",
+            "--generate-latest-ddb",
+            "--catalog-uri",
+            &format!("file://{}/", catalog_dir.display()),
+            "--data-uri",
+            &format!("file://{}", data_dir.display()),
+            "--extras-uri",
+            "",
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(
+            "Published latest.ddb for 2026-01-01.0",
+        ));
+
+    assert!(catalog_dir.join("latest.ddb").is_file());
+}
+
+#[test]
 fn refresh_root_heals_stale_latest_and_is_idempotent() {
     // Stale flag on the older child, none on the newer. First run heals, second is a no-op.
     let tmp = tempfile::tempdir().unwrap();
@@ -196,14 +436,28 @@ fn refresh_root_heals_stale_latest_and_is_idempotent() {
     );
 
     let catalog_uri = format!("file://{}/", catalog_dir.display());
+    let data_dir = tmp.path().join("data");
+    common::write_release_fixture(&data_dir, "2026-02-01.0", &[("base", "water")]);
+    let data_uri = format!("file://{}", data_dir.display());
+    let refresh = || {
+        let mut cmd = Command::cargo_bin("overture-stac").unwrap();
+        cmd.args([
+            "refresh-root",
+            "--generate-latest-ddb",
+            "--catalog-uri",
+            &catalog_uri,
+            "--data-uri",
+            &data_uri,
+        ]);
+        cmd
+    };
 
-    // First run: writes the fixed root.
-    Command::cargo_bin("overture-stac")
-        .unwrap()
-        .args(["refresh-root", "--catalog-uri", &catalog_uri])
+    // First run: writes the fixed root and publishes latest.ddb.
+    refresh()
         .assert()
         .success()
         .stdout(predicate::str::contains("Refreshed root"));
+    assert!(catalog_dir.join("latest.ddb").is_file());
 
     let root_after = read_json(&root_path);
     let flags: Vec<(String, Option<bool>)> = root_after
@@ -233,9 +487,7 @@ fn refresh_root_heals_stale_latest_and_is_idempotent() {
     );
 
     // Second run: no-op.
-    Command::cargo_bin("overture-stac")
-        .unwrap()
-        .args(["refresh-root", "--catalog-uri", &catalog_uri])
+    refresh()
         .assert()
         .success()
         .stdout(predicate::str::contains("already consistent"));

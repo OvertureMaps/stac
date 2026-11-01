@@ -1,44 +1,35 @@
 # Publishing architecture
 
-`publish-catalog.yaml` builds the production STAC catalog with this repo's own `overture-stac` CLI, validates it, and publishes it to `stac.overturemaps.org`, all without leaving GitHub Actions.
+`reconcile.yaml` keeps the production STAC catalog in sync with the release bucket using this repo's own `overture-stac` CLI, validates it, and publishes it to `stac.overturemaps.org`, all without leaving GitHub Actions. `refresh-root.yaml` recomputes derived root state on demand.
 
 ## Overall architecture
 
 ```mermaid
 flowchart LR
-    A[overture-stac CLI] --> B[stac-check-action]
-    B --> C[(S3: distribution account)]
+    A[overture-stac CLI] --> C[(S3: distribution account)]
     C --> D[CloudFront: core-data account]
     D --> E[stac.overturemaps.org]
 ```
 
 ## Data flow
 
-A run has three stages, always in this order:
+A `reconcile --apply --validate` run has these stages, always in this order:
 
-1. `overture-stac build --output public_releases` walks every release currently in the public registry bucket and writes the catalog to a working directory.
-2. `stac-check-action` validates the result against the STAC spec before anything gets published, using `fast-linting` for speed since this runs on the schedule.
-3. The validated catalog is synced to S3 and the CDN cache in front of it is invalidated.
+1. Diff the release IDs in the catalog against those in the public data bucket.
+2. Build each added release locally and validate it before upload; removed releases are dropped from the root first.
+3. Upload to S3 under the `stac/` prefix, then rewrite the root `catalog.json` last, so it only ever points at complete releases.
+4. Refresh `latest` on the root. With `--generate-latest-ddb` (always passed by the workflows), the CLI first checks that DuckDB runs, before anything is written. When the `latest` release changes, it builds `latest.ddb` (DuckDB views over that release's parquet files) with the DuckDB CLI and uploads it next to `catalog.json`. The root links to it with `rel: alternate`. Without the flag, a changed `latest` removes that link so it never points at an older release. The CLI is found on `PATH` or via `DUCKDB_BIN`; the workflows install a pinned version with `.github/actions/setup-duckdb`.
+5. Invalidate the CDN cache in front of the bucket, only if something changed.
 
-The build stage runs unauthenticated: it only reads public data and needs no AWS credentials. Publishing is where the workflow needs to touch two separate AWS accounts, which is the part worth understanding before changing anything here.
+Reading the data bucket needs no AWS credentials. Publishing is where the workflow needs to touch two separate AWS accounts, which is the part worth understanding before changing anything here.
 
 ## Why two AWS accounts
 
 The bucket that serves `stac.overturemaps.org` and the CloudFront distribution in front of it live in different AWS accounts, split along Overture's existing account boundaries rather than anything specific to this workflow:
 
-- The distribution account owns `overturemaps-extras-us-west-2`, the S3 bucket the catalog is synced into under the `stac/` prefix.
+- The distribution account owns `overturemaps-extras-us-west-2`, the S3 bucket the catalog is written into under the `stac/` prefix.
 - The core-data account owns the CloudFront distribution that fronts `stac.overturemaps.org` and caches what's in that bucket.
 
 ## Triggers and gating
 
-`publish-catalog.yaml` runs on a `schedule` (every 6 hours) and on `workflow_dispatch`. Both triggers share one `publish` job; what differs is the job's `environment`, set via `${{ github.event_name == 'workflow_dispatch' && 'manual-publish' || '' }}`.
-
-## Slack notifications
-
-To get a Slack channel notified of publish runs, use GitHub's [Slack app](https://slack.github.com/) from that channel:
-
-```
-/github subscribe OvertureMaps/stac workflows:{"name":"Publish STAC Catalog"}
-```
-
-This is a one-time, per-channel setup step; it isn't configured by the workflow itself.
+`reconcile.yaml` runs hourly on a `schedule` and on `workflow_dispatch`. `refresh-root.yaml` runs on `workflow_dispatch` only. Both refuse to run from any ref other than `main`, and share a `catalog-writer` concurrency group so only one writes `catalog.json` at a time.

@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [5.0.0](https://github.com/OvertureMaps/stac/compare/v4.1.0...v5.0.0) - 2026-10-30
+
+### Other
+
+- [**breaking**] adopt LF rust-workflows lane, align deps with rustac ([#219](https://github.com/OvertureMaps/stac/pull/219))
+
+## [4.1.0](https://github.com/OvertureMaps/stac/compare/v4.0.3...v4.1.0) - 2026-10-27
+
+### Added
+
+- serve latest.ddb from the STAC catalog ([#213](https://github.com/OvertureMaps/stac/pull/213))
+
+## [4.0.3](https://github.com/OvertureMaps/stac/compare/v4.0.2...v4.0.3) - 2026-10-27
+
+### Other
+
+- [CHORE](cargo-deps)(deps): bump jsonschema from 0.58.6 to 0.59.0
+
 ## [4.0.2](https://github.com/OvertureMaps/stac/compare/v4.0.1...v4.0.2) - 2026-10-22
 
 ### Other
