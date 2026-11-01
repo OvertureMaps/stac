@@ -7,7 +7,9 @@
 use std::fs;
 use std::path::Path;
 
-use overture_stac::stac::{validate_catalog, FailureKind, ValidateOptions};
+use overture_stac::stac::{
+    validate_catalog, validate_catalog_uri, validate_url, FailureKind, ValidateOptions,
+};
 use serde_json::{json, Value};
 
 const BASE_URL: &str = "https://test.example/";
@@ -55,6 +57,133 @@ async fn clean_minimal_catalog_passes() {
         report.failures
     );
     assert_eq!(report.files_checked, 1);
+}
+
+#[tokio::test]
+async fn parquet_index_link_is_checked_locally_and_in_bucket_mode() {
+    let tmp = tempfile::tempdir().unwrap();
+    write_root(
+        tmp.path(),
+        vec![json!({
+            "rel": "index",
+            "href": format!("{BASE_URL}collections.parquet"),
+            "type": "application/vnd.apache.parquet",
+        })],
+    );
+    let uri = url::Url::from_directory_path(tmp.path()).unwrap();
+    let index = tmp.path().join("collections.parquet");
+    fs::write(&index, b"PAR1").unwrap();
+
+    for report in [
+        validate_catalog(tmp.path(), 2, no_schema()).await.unwrap(),
+        validate_catalog_uri(uri.as_str(), 2, no_schema())
+            .await
+            .unwrap(),
+    ] {
+        assert!(report.is_ok(), "{:?}", report.failures);
+        assert_eq!(report.files_checked, 1, "index is not a JSON document");
+    }
+
+    fs::remove_file(index).unwrap();
+    for report in [
+        validate_catalog(tmp.path(), 2, no_schema()).await.unwrap(),
+        validate_catalog_uri(uri.as_str(), 2, no_schema())
+            .await
+            .unwrap(),
+    ] {
+        assert!(report.failures.iter().any(|failure| {
+            matches!(failure.kind, FailureKind::Link)
+                && (failure.location.contains("collections.parquet")
+                    || failure.message.contains("collections.parquet"))
+        }));
+    }
+
+    let options = ValidateOptions {
+        check_links: false,
+        ..no_schema()
+    };
+    assert!(validate_catalog_uri(uri.as_str(), 2, options)
+        .await
+        .unwrap()
+        .is_ok());
+}
+
+#[tokio::test]
+async fn remote_parquet_index_uses_head_and_reports_missing_files() {
+    use std::io::{BufRead, BufReader, Write};
+    use std::net::TcpListener;
+    use std::time::{Duration, Instant};
+
+    for index_exists in [true, false] {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        listener.set_nonblocking(true).unwrap();
+        let root_url = format!("http://{}/catalog.json", listener.local_addr().unwrap());
+        let base = root_url.trim_end_matches("catalog.json");
+        let catalog = json!({
+            "type": "Catalog",
+            "id": "test",
+            "description": "test",
+            "stac_version": "1.1.0",
+            "links": [
+                {"rel": "self", "href": root_url, "type": "application/json"},
+                {"rel": "index", "href": format!("{base}collections.parquet"), "type": "application/vnd.apache.parquet"},
+            ],
+        })
+        .to_string();
+        let server = std::thread::spawn(move || {
+            let deadline = Instant::now() + Duration::from_secs(10);
+            let mut requests = Vec::new();
+            while requests.len() < 2 {
+                let (mut stream, _) = match listener.accept() {
+                    Ok(connection) => connection,
+                    Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => {
+                        assert!(Instant::now() < deadline, "timed out waiting for request");
+                        std::thread::sleep(Duration::from_millis(5));
+                        continue;
+                    }
+                    Err(err) => panic!("accept failed: {err}"),
+                };
+                stream
+                    .set_read_timeout(Some(Duration::from_secs(5)))
+                    .unwrap();
+                let mut reader = BufReader::new(&mut stream);
+                let mut request = String::new();
+                reader.read_line(&mut request).unwrap();
+                loop {
+                    let mut line = String::new();
+                    if reader.read_line(&mut line).unwrap() == 0 || line == "\r\n" {
+                        break;
+                    }
+                }
+                let (status, body) = if request.starts_with("GET /catalog.json ") {
+                    ("200 OK", catalog.as_str())
+                } else if request.starts_with("HEAD /collections.parquet ") && index_exists {
+                    ("200 OK", "")
+                } else {
+                    ("404 Not Found", "")
+                };
+                write!(
+                    stream,
+                    "HTTP/1.1 {status}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                    body.len()
+                )
+                .unwrap();
+                requests.push(request);
+            }
+            requests
+        });
+
+        let report = validate_url(&root_url, 2, no_schema()).await.unwrap();
+        let requests = server.join().unwrap();
+        assert!(requests[0].starts_with("GET /catalog.json "));
+        assert!(requests[1].starts_with("HEAD /collections.parquet "));
+        assert_eq!(report.files_checked, 1);
+        assert_eq!(report.is_ok(), index_exists, "{:?}", report.failures);
+        assert!(report
+            .failures
+            .iter()
+            .all(|failure| matches!(failure.kind, FailureKind::Link)));
+    }
 }
 
 #[tokio::test]

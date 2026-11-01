@@ -296,6 +296,20 @@ fn write_release(
         Some(root_title),
     ));
 
+    if release.bundles.iter().any(|theme| {
+        theme
+            .type_collections
+            .iter()
+            .any(|(_, _, items, _)| !items.is_empty())
+    }) {
+        catalog.links.push(mk_link(
+            "index",
+            &format!("{}/collections.parquet", strip_last(self_href)),
+            Some("application/vnd.apache.parquet"),
+            Some("STAC Item index (GeoParquet)"),
+        ));
+    }
+
     // children (themes for a release catalog; nested release catalogs for the top-level catalog)
     for r in &release.bundles {
         let href = format!("{}/{}/catalog.json", strip_last(self_href), r.theme_name);
@@ -616,8 +630,7 @@ pub async fn build_top_catalog(
 
 fn write_collections_parquet(path: &Path, items: Vec<Item>) -> Result<()> {
     if items.is_empty() {
-        // Skip: a zero-byte placeholder isn't valid Parquet, and the file is
-        // not referenced as a STAC asset so its absence is safe.
+        // Empty releases have neither an Item index nor an index link.
         return Ok(());
     }
     let coll: ItemCollection = items.into();
@@ -695,7 +708,15 @@ mod tests {
         theme_catalog.title = Some(theme_name.to_string());
         let mut collection = Collection::new(type_name, format!("{type_name} collection"));
         collection.title = Some(type_name.to_string());
-        let item = Item::new(item_id);
+        let mut item = Item::new(item_id);
+        item.collection = Some(type_name.to_string());
+        item.geometry = Some(
+            serde_json::from_value(json!({
+                "type": "Polygon",
+                "coordinates": [[[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0], [0.0, 0.0]]],
+            }))
+            .unwrap(),
+        );
         ThemeResult {
             theme_name: theme_name.to_string(),
             theme_catalog,
@@ -703,6 +724,73 @@ mod tests {
             manifest_items: Vec::new(),
             type_collections: vec![(type_name.to_string(), collection, vec![item], Vec::new())],
         }
+    }
+
+    #[test]
+    fn sub_catalog_advertises_item_index() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut sub = minimal_release("2026-09-23.0");
+        sub.bundles = vec![theme_with_one_item("addresses", "address", "00000")];
+        write_collections_parquet(
+            &tmp.path().join("collections.parquet"),
+            sub.bundles[0].type_collections[0].2.clone(),
+        )
+        .unwrap();
+
+        for _ in 0..2 {
+            save_sub_catalog(&sub, "https://stac.example.com/nested/stac/", tmp.path()).unwrap();
+        }
+        let doc = read_catalog_json(tmp.path());
+        let indices: Vec<_> = doc["links"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|link| link["rel"] == "index")
+            .collect();
+        assert_eq!(
+            indices,
+            vec![&json!({
+                "rel": "index",
+                "href": "https://stac.example.com/nested/stac/2026-09-23.0/collections.parquet",
+                "type": "application/vnd.apache.parquet",
+                "title": "STAC Item index (GeoParquet)",
+            })],
+        );
+        assert!(tmp.path().join("collections.parquet").is_file());
+        assert!(find_link(&doc, "child").is_some());
+    }
+
+    #[test]
+    fn multi_release_catalog_advertises_only_nonempty_release_indices() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut populated = minimal_release("2026-09-23.0");
+        populated.bundles = vec![theme_with_one_item("addresses", "address", "00000")];
+        let release_dir = tmp.path().join(&populated.catalog.id);
+        std::fs::create_dir_all(&release_dir).unwrap();
+        write_collections_parquet(
+            &release_dir.join("collections.parquet"),
+            populated.bundles[0].type_collections[0].2.clone(),
+        )
+        .unwrap();
+
+        let mut empty = minimal_release("2026-10-21.0");
+        empty.bundles = vec![theme_with_one_item("addresses", "address", "00000")];
+        empty.bundles[0].type_collections[0].2.clear();
+        let mut root = minimal_release("Overture Releases");
+        root.sub_children = vec![populated, empty];
+        save_root_catalog(&root, "https://stac.example.com", tmp.path()).unwrap();
+
+        assert!(find_link(&read_catalog_json(tmp.path()), "index").is_none());
+        let populated_doc = read_catalog_json(&release_dir);
+        assert_eq!(
+            find_link(&populated_doc, "index").unwrap()["href"],
+            "https://stac.example.com/2026-09-23.0/collections.parquet",
+        );
+        assert!(find_link(
+            &read_catalog_json(&tmp.path().join("2026-10-21.0")),
+            "index"
+        )
+        .is_none());
     }
 
     #[test]

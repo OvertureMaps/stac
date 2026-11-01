@@ -5,7 +5,8 @@
 //!      caches STAC core + declared extension schemas).
 //!   2. Link integrity — every href pointing inside the catalog's own base URL
 //!      must resolve: locally it must exist on disk; in the crawl modes it
-//!      must have been reachable. External hrefs (data-bucket asset URLs,
+//!      must have been reachable. Parquet index links are checked with HEAD
+//!      rather than crawled as JSON. External hrefs (data-bucket asset URLs,
 //!      extension schemas, etc.) are skipped by design in all modes.
 //!   3. Overture-specific rules — `schema:version` null (bug #115), required
 //!      `aws`/`azure` assets on items, license enum, PMTiles media type, valid
@@ -49,7 +50,7 @@ pub struct ValidateOptions {
     pub check_schema: bool,
     /// In local mode: every in-base href must resolve to a file on disk.
     /// In url/catalog-uri modes: every in-base href must have been reachable
-    /// via crawl.
+    /// via crawl, or HEAD for Parquet index links.
     pub check_links: bool,
     /// Apply Overture-specific assertions (schema:version non-null, required
     /// assets, license enum, PMTiles media type, valid bbox).
@@ -283,7 +284,26 @@ pub async fn validate_url(
 
     let capped = concurrency.clamp(1, REMOTE_MAX_CONCURRENCY);
     let (fetched, fetch_failures) = crawl_http(&client, &normalized, capped).await?;
-    finalize_report(fetched, fetch_failures, &normalized, capped, options).await
+    finalize_report(
+        fetched,
+        fetch_failures,
+        &normalized,
+        capped,
+        options,
+        |href| {
+            let client = &client;
+            async move {
+                client
+                    .head(href)
+                    .send()
+                    .await
+                    .and_then(reqwest::Response::error_for_status)
+                    .map(|_| ())
+                    .map_err(|err| err.to_string())
+            }
+        },
+    )
+    .await
 }
 
 /// Accept the convenient forms users type — `https://host`, `https://host/`,
@@ -343,18 +363,50 @@ pub async fn validate_catalog_uri(
     let capped = concurrency.clamp(1, REMOTE_MAX_CONCURRENCY);
     let (fetched, fetch_failures) =
         crawl_bucket(&bucket, &url_base, root_url.clone(), root_value, capped).await?;
-    finalize_report(fetched, fetch_failures, &root_url, capped, options).await
+    finalize_report(
+        fetched,
+        fetch_failures,
+        &root_url,
+        capped,
+        options,
+        |href| {
+            let bucket = &bucket;
+            let url_base = &url_base;
+            async move {
+                let key = href
+                    .strip_prefix(url_base.as_str())
+                    .ok_or_else(|| format!("index URL outside catalog base: {href}"))?;
+                bucket
+                    .get_opts(
+                        &object_store::path::Path::from(key),
+                        object_store::GetOptions {
+                            head: true,
+                            ..Default::default()
+                        },
+                    )
+                    .await
+                    .map(|_| ())
+                    .map_err(|err| err.to_string())
+            }
+        },
+    )
+    .await
 }
 
 /// Shared post-crawl work: derive base URL, build validator, run the three
 /// checks concurrently against every fetched document, prepend fetch failures.
-async fn finalize_report(
+async fn finalize_report<F, Fut>(
     fetched: HashMap<String, Value>,
     mut fetch_failures: Vec<Failure>,
     root_url: &str,
     concurrency: usize,
     options: ValidateOptions,
-) -> Result<ValidationReport> {
+    check_index: F,
+) -> Result<ValidationReport>
+where
+    F: Fn(String) -> Fut,
+    Fut: std::future::Future<Output = std::result::Result<(), String>>,
+{
     let base_url = fetched
         .get(root_url)
         .and_then(derive_base_url_from_self_link)
@@ -363,8 +415,36 @@ async fn finalize_report(
     let validator = build_validator(options).await?;
 
     use futures::stream::{StreamExt, TryStreamExt};
+    let mut seen: HashSet<String> = fetched.keys().cloned().collect();
+    if options.check_links {
+        let indices: HashSet<String> = fetched
+            .values()
+            .flat_map(parquet_index_hrefs)
+            .filter(|href| href.starts_with(&base_url))
+            .collect();
+        let results: Vec<_> = futures::stream::iter(indices)
+            .map(|href| {
+                let check = check_index(href.clone());
+                async move { (href, check.await) }
+            })
+            .buffer_unordered(concurrency)
+            .collect()
+            .await;
+        for (href, result) in results {
+            match result {
+                Ok(()) => {
+                    seen.insert(href);
+                }
+                Err(message) => fetch_failures.push(Failure {
+                    location: href,
+                    kind: FailureKind::Link,
+                    message: format!("index HEAD failed: {message}"),
+                }),
+            }
+        }
+    }
     let base_arc = Arc::new(base_url);
-    let seen_arc: Arc<HashSet<String>> = Arc::new(fetched.keys().cloned().collect());
+    let seen_arc = Arc::new(seen);
 
     let per_doc: Vec<Vec<Failure>> =
         futures::stream::iter(fetched.into_iter().map(|(url, value)| {
@@ -689,6 +769,17 @@ fn all_hrefs(value: &Value) -> Vec<String> {
     out
 }
 
+fn parquet_index_hrefs(value: &Value) -> Vec<String> {
+    value
+        .get("links")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter(|link| link["rel"] == "index" && link["type"] == "application/vnd.apache.parquet")
+        .filter_map(|link| link.get("href").and_then(Value::as_str).map(str::to_string))
+        .collect()
+}
+
 /// Discover child + item link targets for the recursive crawl. `pub` so
 /// integration tests can exercise the discovery rule directly.
 pub fn crawlable_hrefs(value: &Value) -> Vec<String> {
@@ -891,10 +982,26 @@ mod tests {
                 {"rel": "next", "href": "https://x/n"},
                 {"rel": "prev", "href": "https://x/p2"},
                 {"rel": "license", "href": "https://x/l"},
+                {"rel": "index", "href": "https://x/collections.parquet", "type": "application/vnd.apache.parquet"},
             ]
         });
         let got = crawlable_hrefs(&v);
         assert_eq!(got, vec!["https://x/a", "https://x/b", "https://x/c"]);
+    }
+
+    #[test]
+    fn parquet_index_hrefs_selects_only_parquet_indices() {
+        let value = json!({
+            "links": [
+                {"rel": "index", "href": "https://x/collections.parquet", "type": "application/vnd.apache.parquet"},
+                {"rel": "index", "href": "https://x/index.html", "type": "text/html"},
+                {"rel": "child", "href": "https://x/catalog.json", "type": "application/json"},
+            ]
+        });
+        assert_eq!(
+            parquet_index_hrefs(&value),
+            vec!["https://x/collections.parquet"],
+        );
     }
 
     #[test]

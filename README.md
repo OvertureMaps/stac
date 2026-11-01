@@ -36,6 +36,35 @@ cargo run --release -- build \
 
 Pass `--debug` for a fast run (a few fragments per type). The `build` subcommand reads from the Overture public bucket over `object_store`, which supports `s3://`, `gs://`, `az://`, and `http(s)://` URIs. The CLI defaults to Overture's S3 location, but the underlying core is cloud-agnostic.
 
+### Item index
+
+Each non-empty release catalog advertises its existing `collections.parquet` through a `rel: "index"` link:
+
+```json
+{
+  "rel": "index",
+  "href": "https://stac.overturemaps.org/2026-10-21.0/collections.parquet",
+  "type": "application/vnd.apache.parquet",
+  "title": "STAC Item index (GeoParquet)"
+}
+```
+
+The index contains one row per STAC Item, not per Overture feature. Clients can discover it by its relation and media type, then query fragment bounds and asset URLs without fetching every Item JSON. Existing child and Item links remain unchanged. Empty releases do not advertise an index; debug builds index only their sampled Items.
+
+For example, find candidate building files around San Francisco with DuckDB. Replace the URL with the index `href` from the chosen release:
+
+```sql
+SELECT assets.aws.href AS data_href
+FROM read_parquet(
+  'https://stac.overturemaps.org/2026-10-21.0/collections.parquet'
+)
+WHERE collection = 'building'
+  AND bbox.xmin <= -122.35 AND bbox.xmax >= -122.55
+  AND bbox.ymin <= 37.85 AND bbox.ymax >= 37.70;
+```
+
+Read the returned data files and apply feature-level filters to obtain the actual buildings. The index only identifies files whose bounds overlap the requested area.
+
 ## Migrating from [1.4.0](https://pypi.org/project/overture-stac/1.4.0/)
 
 `overture-stac` 2.x replaced the pure-Python [1.4.0](https://pypi.org/project/overture-stac/1.4.0/) release with a Rust core plus thin Python bindings; those bindings have since been retired in favor of the Rust CLI/crate only. The [1.4.0](https://pypi.org/project/overture-stac/1.4.0/) API is not preserved. The old entry points map as follows:
