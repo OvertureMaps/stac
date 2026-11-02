@@ -58,7 +58,7 @@ jobs:
       cache: true
       setup_script: .github/scripts/setup-duckdb.sh
       harden_runner_egress: block
-      harden_runner_extra_endpoints: extensions.duckdb.org:443
+      harden_runner_extra_endpoints: extensions.duckdb.org:80 extensions.duckdb.org:443
       grype_remediation_window_start: '2026-10-30'
       # zstd 0.13 / zstd-safe 7 come with parquet 58, held there to match the
       # stac crates; the fix needs parquet 60 (stac-utils/rustac#1130). Drop
