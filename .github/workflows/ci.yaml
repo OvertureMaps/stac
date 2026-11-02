@@ -51,15 +51,14 @@ jobs:
       contents: read
       pull-requests: read # repository-metadata-action queries PR data
       issues: read # grype-scan-action reads cve-bypass issues
-    uses: lfreleng-actions/rust-workflows/.github/workflows/build-test.yaml@b7905deb2c3a5d8acd802db3769af51b1100fb50 # v0.1.0
+    uses: lfreleng-actions/rust-workflows/.github/workflows/build-test.yaml@a729f000aa0cf325bb77badaf6420274a028845b # v0.3.0
     with:
       all_features: true
       test_matrix: msrv
       cache: true
       setup_script: .github/scripts/setup-duckdb.sh
-      # latest_duckdb tests INSTALL httpfs/spatial from extensions.duckdb.org,
-      # which the shared block list omits and the lane can't extend.
-      harden_runner_egress: audit
+      harden_runner_egress: block
+      harden_runner_extra_endpoints: extensions.duckdb.org:443
       grype_remediation_window_start: '2026-10-30'
       # zstd 0.13 / zstd-safe 7 come with parquet 58, held there to match the
       # stac crates; the fix needs parquet 60 (stac-utils/rustac#1130). Drop
