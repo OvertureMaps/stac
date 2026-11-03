@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [5.1.1](https://github.com/OvertureMaps/stac/compare/v5.1.0...v5.1.1) - 2026-11-03
+
+### Other
+
+- *(msrv)* raise minimum Rust version to 1.89
+
 ## [5.1.0](https://github.com/OvertureMaps/stac/compare/v5.0.0...v5.1.0) - 2026-11-01
 
 ### Added
