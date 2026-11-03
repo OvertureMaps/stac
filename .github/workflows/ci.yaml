@@ -65,9 +65,7 @@ jobs:
       # once a stac release ships it and parquet moves with it.
       # quick-xml 0.39 comes with object_store 0.13 (parquet 58's); both are
       # DoS from XML a --data-uri endpoint returns. Same lift as above.
-      # thrift 0.17 (RUSTSEC-2026-0435) also comes with parquet 58; same lift.
       audit_ignore_vulns: >-
-        RUSTSEC-2026-0435
         RUSTSEC-2026-0391
         RUSTSEC-2026-0398
         RUSTSEC-2026-0403
