@@ -27,8 +27,7 @@ updates:
     labels:
       - "bot"
     commit-message:
-      prefix: "[CHORE](gha-deps)"
-      include: "scope"
+      prefix: "chore(gha-deps)"
 
   # Maintain Rust crate dependencies
   - package-ecosystem: "cargo"
@@ -58,5 +57,4 @@ updates:
     labels:
       - "bot"
     commit-message:
-      prefix: "[CHORE](cargo-deps)"
-      include: "scope"
+      prefix: "chore(cargo-deps)"
