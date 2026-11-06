@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [5.1.2](https://github.com/OvertureMaps/stac/compare/v5.1.1...v5.1.2) - 2026-11-06
+
+### Fixed
+
+- *(reconcile)* backfill missing schema:version from the release calendar ([#237](https://github.com/OvertureMaps/stac/pull/237))
+
 ## [5.1.1](https://github.com/OvertureMaps/stac/compare/v5.1.0...v5.1.1) - 2026-11-03
 
 ### Other
