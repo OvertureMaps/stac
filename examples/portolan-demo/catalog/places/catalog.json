@@ -1,0 +1,42 @@
+{
+  "type": "Catalog",
+  "id": "places",
+  "stac_version": "1.1.0",
+  "stac_extensions": [
+    "https://schemas.portolan-sdi.org/portolan/v0.2.0/schema.json"
+  ],
+  "title": "Places",
+  "description": "Points of interest \u2014 businesses, services, landmarks, and other named places. The places theme carries a single collection, [Places](place/collection.json), with 73.6 million points worldwide.\n\nRead the [Overture places schema reference](https://docs.overturemaps.org/schema/reference/places/place/) for the authoritative field definitions.",
+  "links": [
+    {
+      "rel": "root",
+      "href": "../catalog.json",
+      "type": "application/json",
+      "title": "Overture Places and Buildings"
+    },
+    {
+      "rel": "parent",
+      "href": "../catalog.json",
+      "type": "application/json",
+      "title": "Overture Places and Buildings"
+    },
+    {
+      "rel": "describedby",
+      "href": "./README.md",
+      "type": "text/markdown",
+      "title": "README"
+    },
+    {
+      "rel": "agents",
+      "href": "./AGENTS.md",
+      "type": "text/markdown",
+      "title": "Agent guide"
+    },
+    {
+      "rel": "child",
+      "href": "./place/collection.json",
+      "type": "application/json",
+      "title": "Places"
+    }
+  ]
+}

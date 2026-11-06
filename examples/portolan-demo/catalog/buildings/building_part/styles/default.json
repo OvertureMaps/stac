@@ -1,0 +1,23 @@
+{
+  "version": 8,
+  "name": "Building Parts",
+  "sources": {
+    "overture": {
+      "type": "vector",
+      "url": "pmtiles://https://tiles.overturemaps.org/2026-08-19.0/buildings.pmtiles"
+    }
+  },
+  "layers": [
+    {
+      "id": "building-parts",
+      "type": "fill",
+      "source": "overture",
+      "source-layer": "building_part",
+      "paint": {
+        "fill-color": "#5c6bc0",
+        "fill-opacity": 0.85,
+        "fill-outline-color": "#303f9f"
+      }
+    }
+  ]
+}
