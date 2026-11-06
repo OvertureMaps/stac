@@ -152,7 +152,8 @@ fn apply_republishes_latest_duckdb_when_latest_changes() {
     for id in ["2026-01-01.0", "2026-02-01.0"] {
         write_json(
             &catalog_dir.join(id).join("catalog.json"),
-            &json!({"type": "Catalog", "id": id}),
+            // `schema:version` set so the schema backfill doesn't fetch the release calendar.
+            &json!({"type": "Catalog", "id": id, "schema:version": "1.0.0"}),
         );
     }
     common::write_release_fixture(&data_dir, "2026-01-01.0", &[("base", "water")]);
@@ -219,7 +220,8 @@ fn apply_drops_latest_duckdb_link_when_flag_off() {
     for id in ["2026-01-01.0", "2026-02-01.0"] {
         write_json(
             &catalog_dir.join(id).join("catalog.json"),
-            &json!({"type": "Catalog", "id": id}),
+            // `schema:version` set so the schema backfill doesn't fetch the release calendar.
+            &json!({"type": "Catalog", "id": id, "schema:version": "1.0.0"}),
         );
     }
     common::write_release_fixture(&data_dir, "2026-01-01.0", &[("base", "water")]);
@@ -375,7 +377,8 @@ fn apply_repairs_missing_latest_duckdb_when_in_sync() {
     );
     write_json(
         &catalog_dir.join(id).join("catalog.json"),
-        &json!({"type": "Catalog", "id": id}),
+        // `schema:version` set so the schema backfill doesn't fetch the release calendar.
+        &json!({"type": "Catalog", "id": id, "schema:version": "1.0.0"}),
     );
     common::write_release_fixture(&data_dir, id, &[("base", "water")]);
 
