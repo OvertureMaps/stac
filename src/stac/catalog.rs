@@ -154,12 +154,9 @@ pub async fn build_single_release(
         catalog
             .additional_fields
             .insert("schema:version".into(), json!(schema));
-        catalog.additional_fields.insert(
-            "schema:tag".into(),
-            json!(format!(
-                "https://github.com/OvertureMaps/schema/releases/tag/v{schema}"
-            )),
-        );
+        catalog
+            .additional_fields
+            .insert("schema:tag".into(), json!(schema_tag_url(schema)));
     }
 
     Ok(ReleaseCatalog {
@@ -221,6 +218,11 @@ async fn spawn_theme(
     pmtiles: Arc<BTreeMap<String, String>>,
 ) -> Result<ThemeResult> {
     process_theme(&bucket, &theme_path, &release, debug, release_dt, &pmtiles).await
+}
+
+/// GitHub release URL written to `schema:tag` for a bare `X.Y.Z` schema version.
+pub fn schema_tag_url(schema: &str) -> String {
+    format!("https://github.com/OvertureMaps/schema/releases/tag/v{schema}")
 }
 
 /// `all_ids` must be newest-first (per `list_release_ids`).

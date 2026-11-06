@@ -41,7 +41,7 @@ runs:
         for attempt in 1 2 3; do
           "$OVERTURE_STAC_BIN" reconcile --apply --validate --generate-latest-ddb --catalog-uri "$OVERTURE_STAC_CATALOG_URI" 2>&1 | tee -a reconcile.log
           code=${PIPESTATUS[0]}
-          if grep -qE -e "^Applied [0-9]+ change" -e "^Published latest.ddb" -e "^Removed latest.ddb link" reconcile.log; then
+          if grep -qE -e "^Applied [0-9]+ change" -e "^Published latest.ddb" -e "^Removed latest.ddb link" -e "^Patched stale neighbour links" -e "^Backfilled schema:version" reconcile.log; then
             applied=true
           fi
           if [ "$code" = 5 ] && [ "$applied" = true ]; then
