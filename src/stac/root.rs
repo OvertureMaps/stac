@@ -11,6 +11,9 @@ const VCS_EXTENSION_URL: &str = "https://stac-extensions.github.io/vcs/v0.1.0/sc
 
 /// Title of the root catalog, used for `rel: root` / `rel: parent` link titles on sub-catalogs.
 pub const ROOT_CATALOG_TITLE: &str = "Overture Releases";
+pub const ROOT_CATALOG_ICON_HREF: &str =
+    "https://docs.overturemaps.org/img/omf_logo_transparent.png";
+pub const ROOT_CATALOG_ICON_MEDIA_TYPE: &str = "image/png";
 
 /// Read the root `catalog.json` from a catalog bucket and extract release IDs
 /// from its `rel: child` links. Assumes the bucket handle is rooted at the
@@ -48,13 +51,36 @@ pub fn release_id_from_href(href: &str) -> Option<String> {
 }
 
 pub fn build_empty_root() -> Value {
-    json!({
+    let mut root = json!({
         "type": "Catalog",
         "id": "Overture Releases",
         "description": "All Overture Releases",
         "stac_version": "1.0.0",
         "links": [],
-    })
+    });
+    ensure_root_icon_link(&mut root);
+    root
+}
+
+pub fn ensure_root_icon_link(root: &mut Value) {
+    let Some(links) = root.get_mut("links").and_then(|v| v.as_array_mut()) else {
+        tracing::warn!("root catalog links are missing or invalid; cannot add icon link");
+        return;
+    };
+
+    links.retain(|link| link.get("rel").and_then(|v| v.as_str()) != Some("icon"));
+    let insert_at = links
+        .iter()
+        .position(|link| link.get("rel").and_then(|v| v.as_str()) == Some("root"))
+        .map_or(0, |index| index + 1);
+    links.insert(
+        insert_at,
+        json!({
+            "rel": "icon",
+            "href": ROOT_CATALOG_ICON_HREF,
+            "type": ROOT_CATALOG_ICON_MEDIA_TYPE,
+        }),
+    );
 }
 
 pub fn remove_child_link(root: &mut Value, release: &str) {
@@ -100,9 +126,11 @@ pub fn add_child_link(root: &mut Value, release: &str, root_href: &str) -> Resul
 
 /// Recompute derived state on the root: top-level `"latest": "<id>"`, per-child-link
 /// `"latest": true` on the newest release only, normalized `"title"` on every child link,
-/// A root with no child releases is invalid: it logs a warning and clears `latest`.
-/// The `latest.ddb` link is managed separately by `sync_latest_duckdb`.
+/// and the canonical root icon link. A root with no child releases is invalid: it logs a
+/// warning and clears `latest`. The `latest.ddb` link is managed separately by `sync_latest_duckdb`.
 pub fn refresh_latest(root: &mut Value) {
+    ensure_root_icon_link(root);
+
     let mut children = children_from_root(root);
     children.sort_by(|a, b| b.cmp(a));
     let latest = children.into_iter().next();
@@ -270,6 +298,27 @@ mod tests {
     }
 
     #[test]
+    fn refresh_latest_adds_icon_to_existing_root() {
+        let mut root = json!({
+            "links": [{
+                "rel": "child",
+                "href": "https://example.com/2026-09-23.0/catalog.json",
+            }],
+        });
+
+        refresh_latest(&mut root);
+
+        let icon = root["links"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|link| link["rel"] == "icon")
+            .unwrap();
+        assert_eq!(icon["href"], ROOT_CATALOG_ICON_HREF);
+        assert_eq!(icon["type"], ROOT_CATALOG_ICON_MEDIA_TYPE);
+    }
+
+    #[test]
     fn removing_latest_promotes_predecessor() {
         let mut root = root_with(&[("2026-08-19.0", false)], Some("2026-09-23.0"));
         refresh_latest(&mut root);
@@ -354,6 +403,32 @@ mod tests {
                 ),
             ]
         );
+    }
+
+    #[test]
+    fn ensures_canonical_root_icon_link_once() {
+        let mut root = json!({
+            "links": [
+                {"rel": "root", "href": "https://example.com/catalog.json"},
+                {"rel": "icon", "href": "https://old.example.com/logo.svg", "type": "image/svg+xml"},
+                {"rel": "icon", "href": "https://duplicate.example.com/logo.png"},
+            ],
+        });
+
+        ensure_root_icon_link(&mut root);
+        let expected = json!({
+            "rel": "icon",
+            "href": ROOT_CATALOG_ICON_HREF,
+            "type": ROOT_CATALOG_ICON_MEDIA_TYPE,
+        });
+        let links = root["links"].as_array().unwrap();
+        let icons: Vec<_> = links.iter().filter(|link| link["rel"] == "icon").collect();
+        assert_eq!(icons, vec![&expected]);
+        assert_eq!(links[1], expected);
+
+        let first = root.clone();
+        ensure_root_icon_link(&mut root);
+        assert_eq!(root, first);
     }
 
     #[test]
