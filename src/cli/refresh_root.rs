@@ -50,6 +50,6 @@ pub async fn run(args: RefreshRootArgs) -> Result<()> {
         return Ok(());
     }
     put_json(&bucket, root_key, &root).await?;
-    println!("Refreshed root `latest` flag.");
+    println!("Refreshed root catalog.");
     Ok(())
 }
