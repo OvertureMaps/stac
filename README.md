@@ -75,6 +75,8 @@ curl -s https://stac.overturemaps.org/catalog.json | jq -r .duckdb | duckdb over
 duckdb overture.db -c "LOAD spatial; SELECT count(*) FROM place"
 ```
 
+`just duckdb` runs the first command for you.
+
 ## Migrating from [1.4.0](https://pypi.org/project/overture-stac/1.4.0/)
 
 `overture-stac` 2.x replaced the pure-Python [1.4.0](https://pypi.org/project/overture-stac/1.4.0/) release with a Rust core plus thin Python bindings; those bindings have since been retired in favor of the Rust CLI/crate only. The [1.4.0](https://pypi.org/project/overture-stac/1.4.0/) API is not preserved. The old entry points map as follows:
