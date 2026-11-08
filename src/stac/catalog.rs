@@ -17,7 +17,7 @@ use std::collections::{BTreeMap, HashMap};
 use std::path::Path;
 use std::sync::{Arc, OnceLock};
 
-use crate::stac::root::ROOT_CATALOG_TITLE;
+use crate::stac::root::{ROOT_CATALOG_ICON_HREF, ROOT_CATALOG_ICON_MEDIA_TYPE, ROOT_CATALOG_TITLE};
 use crate::stac::theme::{process_theme, ThemeResult};
 use crate::stac::{pmtiles, registry};
 use crate::storage::{list_top_level, Bucket};
@@ -297,6 +297,14 @@ fn write_release(
         Some("application/json"),
         Some(root_title),
     ));
+    if parent.is_none() {
+        catalog.links.push(mk_link(
+            "icon",
+            ROOT_CATALOG_ICON_HREF,
+            Some(ROOT_CATALOG_ICON_MEDIA_TYPE),
+            None,
+        ));
+    }
 
     if release.bundles.iter().any(|theme| {
         theme
@@ -833,9 +841,18 @@ mod tests {
 
         let doc = read_catalog_json(tmp.path());
         let root = find_link(&doc, "root").unwrap();
+        let icon = find_link(&doc, "icon").unwrap();
         assert_eq!(
             root.get("href").and_then(|v| v.as_str()),
             Some("https://stac.example.com/catalog.json"),
+        );
+        assert_eq!(
+            icon.get("href").and_then(|v| v.as_str()),
+            Some(ROOT_CATALOG_ICON_HREF),
+        );
+        assert_eq!(
+            icon.get("type").and_then(|v| v.as_str()),
+            Some(ROOT_CATALOG_ICON_MEDIA_TYPE),
         );
         assert!(
             find_link(&doc, "parent").is_none(),

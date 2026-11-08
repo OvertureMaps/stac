@@ -6,9 +6,9 @@ use std::path::PathBuf;
 use regex::Regex;
 
 use overture_stac::stac::{
-    build_single_release, build_top_catalog, check_duckdb_cli, link_neighbor_releases,
-    list_release_ids, publish_latest_duckdb_to_dir, registry, save_root_catalog, save_sub_catalog,
-    stamp_vcs, validate_release_id,
+    build_single_release, build_top_catalog, check_duckdb_cli, ensure_root_icon_link,
+    link_neighbor_releases, list_release_ids, publish_latest_duckdb_to_dir, registry,
+    save_root_catalog, save_sub_catalog, stamp_vcs, validate_release_id,
 };
 use overture_stac::storage::Bucket;
 use overture_stac::{Error, Result, ResultExt};
@@ -202,6 +202,7 @@ async fn write_root(output: &std::path::Path, root_href: &str, bucket: &Bucket) 
         "stac_version": "1.1.0",
         "links": links,
     });
+    ensure_root_icon_link(&mut root);
     if let Some(latest) = releases.first() {
         root.as_object_mut()
             .expect("json literal")
