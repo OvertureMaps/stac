@@ -184,6 +184,9 @@ fn apply_republishes_latest_duckdb_when_latest_changes() {
         .unwrap()
         .iter()
         .any(|l| l["href"] == "./latest.ddb"));
+    let sql = root["duckdb"].as_str().expect("root `duckdb` SQL");
+    assert!(sql.contains("CREATE OR REPLACE VIEW \"water\""), "{sql}");
+    assert!(sql.contains("release/2026-01-01.0/"), "{sql}");
 }
 
 #[test]
@@ -209,6 +212,7 @@ fn apply_drops_latest_duckdb_link_when_flag_off() {
             "description": "All Overture Releases",
             "stac_version": "1.0.0",
             "latest": "2026-02-01.0",
+            "duckdb": "CREATE OR REPLACE VIEW water AS SELECT 1;",
             "links": [
                 child("2026-01-01.0"),
                 child("2026-02-01.0"),
@@ -248,6 +252,7 @@ fn apply_drops_latest_duckdb_link_when_flag_off() {
         .unwrap()
         .iter()
         .any(|l| l["href"] == "./latest.ddb"));
+    assert!(root.get("duckdb").is_none(), "stale `duckdb` SQL kept");
     assert!(!catalog_dir.join("latest.ddb").exists());
 }
 

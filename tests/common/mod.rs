@@ -32,9 +32,22 @@ pub fn write_release_fixture(data_dir: &Path, release: &str, types: &[(&str, &st
 /// Run `sql` against `db` with the DuckDB CLI (`$DUCKDB_BIN`, default `duckdb`) and return
 /// stdout as headerless CSV. CI installs the CLI via `.github/actions/setup-duckdb`.
 pub fn duckdb_query(db: &Path, sql: &str) -> String {
+    duckdb_run(db, sql, true)
+}
+
+/// Like `duckdb_query` but opens `db` read-write, so `sql` may create objects.
+pub fn duckdb_exec(db: &Path, sql: &str) -> String {
+    duckdb_run(db, sql, false)
+}
+
+fn duckdb_run(db: &Path, sql: &str, readonly: bool) -> String {
     let bin = std::env::var("DUCKDB_BIN").unwrap_or_else(|_| "duckdb".to_string());
-    let out = Command::new(&bin)
-        .args(["-readonly", "-csv", "-noheader"])
+    let mut cmd = Command::new(&bin);
+    if readonly {
+        cmd.arg("-readonly");
+    }
+    let out = cmd
+        .args(["-bail", "-csv", "-noheader"])
         .arg(db)
         .arg("-c")
         .arg(sql)
