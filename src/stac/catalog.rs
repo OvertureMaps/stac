@@ -17,7 +17,7 @@ use std::collections::{BTreeMap, HashMap};
 use std::path::Path;
 use std::sync::{Arc, OnceLock};
 
-use crate::stac::root::ROOT_CATALOG_TITLE;
+use crate::stac::root::{ROOT_CATALOG_ICON_HREF, ROOT_CATALOG_ICON_MEDIA_TYPE, ROOT_CATALOG_TITLE};
 use crate::stac::theme::{process_theme, ThemeResult};
 use crate::stac::{pmtiles, registry};
 use crate::storage::{list_top_level, Bucket};
@@ -154,12 +154,9 @@ pub async fn build_single_release(
         catalog
             .additional_fields
             .insert("schema:version".into(), json!(schema));
-        catalog.additional_fields.insert(
-            "schema:tag".into(),
-            json!(format!(
-                "https://github.com/OvertureMaps/schema/releases/tag/v{schema}"
-            )),
-        );
+        catalog
+            .additional_fields
+            .insert("schema:tag".into(), json!(schema_tag_url(schema)));
     }
 
     Ok(ReleaseCatalog {
@@ -221,6 +218,11 @@ async fn spawn_theme(
     pmtiles: Arc<BTreeMap<String, String>>,
 ) -> Result<ThemeResult> {
     process_theme(&bucket, &theme_path, &release, debug, release_dt, &pmtiles).await
+}
+
+/// GitHub release URL written to `schema:tag` for a bare `X.Y.Z` schema version.
+pub fn schema_tag_url(schema: &str) -> String {
+    format!("https://github.com/OvertureMaps/schema/releases/tag/v{schema}")
 }
 
 /// `all_ids` must be newest-first (per `list_release_ids`).
@@ -295,6 +297,14 @@ fn write_release(
         Some("application/json"),
         Some(root_title),
     ));
+    if parent.is_none() {
+        catalog.links.push(mk_link(
+            "icon",
+            ROOT_CATALOG_ICON_HREF,
+            Some(ROOT_CATALOG_ICON_MEDIA_TYPE),
+            None,
+        ));
+    }
 
     if release.bundles.iter().any(|theme| {
         theme
@@ -831,9 +841,18 @@ mod tests {
 
         let doc = read_catalog_json(tmp.path());
         let root = find_link(&doc, "root").unwrap();
+        let icon = find_link(&doc, "icon").unwrap();
         assert_eq!(
             root.get("href").and_then(|v| v.as_str()),
             Some("https://stac.example.com/catalog.json"),
+        );
+        assert_eq!(
+            icon.get("href").and_then(|v| v.as_str()),
+            Some(ROOT_CATALOG_ICON_HREF),
+        );
+        assert_eq!(
+            icon.get("type").and_then(|v| v.as_str()),
+            Some(ROOT_CATALOG_ICON_MEDIA_TYPE),
         );
         assert!(
             find_link(&doc, "parent").is_none(),

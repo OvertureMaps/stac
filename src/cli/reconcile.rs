@@ -11,8 +11,8 @@ use overture_stac::stac::registry;
 use overture_stac::stac::{add_child_link, build_empty_root, remove_child_link};
 use overture_stac::stac::{
     build_single_release, check_duckdb_cli, children_from_root, compute_neighbor_links,
-    list_release_ids, read_catalog_children, refresh_latest, save_sub_catalog, stamp_vcs,
-    sync_latest_duckdb, validate_catalog_uri, ValidateOptions,
+    list_release_ids, read_catalog_children, refresh_latest, save_sub_catalog, schema_tag_url,
+    stamp_vcs, sync_latest_duckdb, validate_catalog_uri, ValidateOptions,
 };
 use overture_stac::storage::{
     delete_prefix, get_json, get_json_optional, put_json, upload_directory, Bucket,
@@ -125,12 +125,21 @@ pub async fn run(args: ReconcileArgs) -> Result<()> {
         for s in &stale {
             println!("~ {} has stale prev/next links", s.release_id);
         }
+        let missing =
+            find_missing_schema_versions(&catalog_bucket, &scan_ids, calendar_schema_version)
+                .await?;
+        for m in &missing {
+            println!(
+                "~ {} missing schema:version (release calendar has {})",
+                m.release_id, m.schema
+            );
+        }
 
-        if diff.is_empty() && stale.is_empty() {
+        if diff.is_empty() && stale.is_empty() && missing.is_empty() {
             println!("Catalog is in sync with the bucket.");
             Ok(())
         } else {
-            let total = diff.to_add.len() + diff.to_remove.len() + stale.len();
+            let total = diff.to_add.len() + diff.to_remove.len() + stale.len() + missing.len();
             println!("Catalog drift: {total} item(s) differ. Re-run with --apply to fix.");
             std::process::exit(10);
         }
@@ -143,6 +152,13 @@ pub async fn run(args: ReconcileArgs) -> Result<()> {
         if mutated {
             apply_stale_neighbors(&catalog_bucket, stale).await?;
             println!("Patched stale neighbour links.");
+        }
+        // Runs after the neighbour patch so it reads the patched docs back.
+        let missing =
+            find_missing_schema_versions(&catalog_bucket, &sorted, calendar_schema_version).await?;
+        if !missing.is_empty() {
+            apply_missing_schema_versions(&catalog_bucket, missing).await?;
+            mutated = true;
         }
         // A missing `latest.ddb` link (e.g. first run after this feature ships) is repaired here.
         if let Some(root) = get_json_optional(&catalog_bucket, "catalog.json").await? {
@@ -338,6 +354,9 @@ async fn apply_diff(
 
     // Any add/remove shifts the surviving releases' prev/next.
     reconcile_neighbor_links(catalog_bucket, &sorted, root_href).await?;
+    let missing =
+        find_missing_schema_versions(catalog_bucket, &sorted, calendar_schema_version).await?;
+    apply_missing_schema_versions(catalog_bucket, missing).await?;
 
     // Post-pass: refresh `latest`, recompute the registry manifest (registry
     // parquet files get rewritten on release day, so this belongs on the same
@@ -434,6 +453,73 @@ async fn reconcile_neighbor_links(
     apply_stale_neighbors(catalog_bucket, stale).await
 }
 
+struct MissingSchema {
+    release_id: String,
+    doc: serde_json::Value,
+    schema: String,
+}
+
+async fn calendar_schema_version(release: String) -> String {
+    resolve_release_schema_version(&release).await
+}
+
+/// Release catalogs without `schema:version` that `resolve` can now fill, e.g. when the
+/// release calendar was updated after the release was first published.
+async fn find_missing_schema_versions<F, Fut>(
+    catalog_bucket: &Bucket,
+    ids: &[String],
+    resolve: F,
+) -> Result<Vec<MissingSchema>>
+where
+    F: Fn(String) -> Fut,
+    Fut: std::future::Future<Output = String>,
+{
+    let mut out = Vec::new();
+    for id in ids {
+        let key = format!("{id}/catalog.json");
+        let doc = get_json(catalog_bucket, &key)
+            .await
+            .with_context(|| format!("reading {key} for schema:version check"))?;
+        if doc.get("schema:version").and_then(|v| v.as_str()).is_some() {
+            continue;
+        }
+        let schema = resolve(id.clone()).await;
+        if schema.is_empty() {
+            continue;
+        }
+        out.push(MissingSchema {
+            release_id: id.clone(),
+            doc,
+            schema,
+        });
+    }
+    Ok(out)
+}
+
+async fn apply_missing_schema_versions(
+    catalog_bucket: &Bucket,
+    missing: Vec<MissingSchema>,
+) -> Result<()> {
+    for mut m in missing {
+        stamp_schema_version(&mut m.doc, &m.schema)?;
+        let key = format!("{}/catalog.json", m.release_id);
+        put_json(catalog_bucket, &key, &m.doc)
+            .await
+            .with_context(|| format!("writing {key} with schema:version"))?;
+        println!("Backfilled schema:version {} on {}", m.schema, m.release_id);
+    }
+    Ok(())
+}
+
+fn stamp_schema_version(doc: &mut serde_json::Value, schema: &str) -> Result<()> {
+    let obj = doc
+        .as_object_mut()
+        .ok_or_else(|| Error::MalformedCatalog("release catalog is not a JSON object".into()))?;
+    obj.insert("schema:version".into(), json!(schema));
+    obj.insert("schema:tag".into(), json!(schema_tag_url(schema)));
+    Ok(())
+}
+
 /// `None` if any prev/next entry fails to deserialize (forces a rewrite).
 fn extract_neighbor_links(doc: &serde_json::Value) -> Option<Vec<stac::Link>> {
     let Some(links) = doc.get("links").and_then(|v| v.as_array()) else {
@@ -478,4 +564,107 @@ fn replace_neighbor_links(doc: &mut serde_json::Value, new_links: &[stac::Link])
         arr.push(serde_json::to_value(l).map_err(Error::from)?);
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn write_catalog(dir: &std::path::Path, id: &str, doc: serde_json::Value) {
+        let path = dir.join(id).join("catalog.json");
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(path, serde_json::to_vec(&doc).unwrap()).unwrap();
+    }
+
+    fn read_catalog(dir: &std::path::Path, id: &str) -> serde_json::Value {
+        let bytes = std::fs::read(dir.join(id).join("catalog.json")).unwrap();
+        serde_json::from_slice(&bytes).unwrap()
+    }
+
+    async fn stub_resolver(release: String) -> String {
+        match release.as_str() {
+            "2026-02-01.0" | "2026-03-01.0" => "2.0.0".into(),
+            _ => String::new(),
+        }
+    }
+
+    #[tokio::test]
+    async fn backfills_only_missing_schema_versions_the_resolver_knows() {
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = tmp.path();
+        // Already stamped: left alone even though the resolver has a value.
+        write_catalog(
+            dir,
+            "2026-03-01.0",
+            json!({"id": "2026-03-01.0", "schema:version": "1.9.0"}),
+        );
+        // Missing: filled.
+        write_catalog(dir, "2026-02-01.0", json!({"id": "2026-02-01.0"}));
+        // Missing but unknown to the resolver: left without the field.
+        write_catalog(dir, "2026-01-01.0", json!({"id": "2026-01-01.0"}));
+
+        let bucket = Bucket::from_url(&format!("file://{}/", dir.display())).unwrap();
+        let ids: Vec<String> = ["2026-03-01.0", "2026-02-01.0", "2026-01-01.0"]
+            .map(String::from)
+            .to_vec();
+
+        let missing = find_missing_schema_versions(&bucket, &ids, stub_resolver)
+            .await
+            .unwrap();
+        let found: Vec<&str> = missing.iter().map(|m| m.release_id.as_str()).collect();
+        assert_eq!(found, vec!["2026-02-01.0"]);
+
+        apply_missing_schema_versions(&bucket, missing)
+            .await
+            .unwrap();
+
+        let filled = read_catalog(dir, "2026-02-01.0");
+        assert_eq!(filled["schema:version"], "2.0.0");
+        assert_eq!(
+            filled["schema:tag"],
+            "https://github.com/OvertureMaps/schema/releases/tag/v2.0.0"
+        );
+        assert_eq!(filled["id"], "2026-02-01.0");
+        assert_eq!(read_catalog(dir, "2026-03-01.0")["schema:version"], "1.9.0");
+        assert!(read_catalog(dir, "2026-01-01.0")
+            .get("schema:version")
+            .is_none());
+
+        // Second pass finds nothing left to fill.
+        let again = find_missing_schema_versions(&bucket, &ids, stub_resolver)
+            .await
+            .unwrap();
+        assert!(again.is_empty());
+    }
+
+    #[tokio::test]
+    async fn null_schema_version_is_treated_as_missing() {
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = tmp.path();
+        write_catalog(
+            dir,
+            "2026-02-01.0",
+            json!({
+                "id": "2026-02-01.0",
+                "schema:version": null,
+                "schema:tag": "https://github.com/OvertureMaps/schema/releases/tag/vNone",
+            }),
+        );
+        let bucket = Bucket::from_url(&format!("file://{}/", dir.display())).unwrap();
+        let ids = vec!["2026-02-01.0".to_string()];
+
+        let missing = find_missing_schema_versions(&bucket, &ids, stub_resolver)
+            .await
+            .unwrap();
+        apply_missing_schema_versions(&bucket, missing)
+            .await
+            .unwrap();
+
+        let doc = read_catalog(dir, "2026-02-01.0");
+        assert_eq!(doc["schema:version"], "2.0.0");
+        assert_eq!(
+            doc["schema:tag"],
+            "https://github.com/OvertureMaps/schema/releases/tag/v2.0.0"
+        );
+    }
 }

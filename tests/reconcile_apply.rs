@@ -12,6 +12,7 @@ use std::path::Path;
 mod common;
 
 use assert_cmd::Command;
+use overture_stac::stac::{ROOT_CATALOG_ICON_HREF, ROOT_CATALOG_ICON_MEDIA_TYPE};
 use predicates::prelude::*;
 use serde_json::{json, Value};
 
@@ -112,6 +113,14 @@ fn apply_removes_stale_release() {
         children.is_empty(),
         "expected no child links after apply, got: {children:?}"
     );
+    let icon = root_after["links"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|link| link["rel"] == "icon")
+        .unwrap();
+    assert_eq!(icon["href"], ROOT_CATALOG_ICON_HREF);
+    assert_eq!(icon["type"], ROOT_CATALOG_ICON_MEDIA_TYPE);
 
     assert!(
         !stale_file.exists(),
@@ -152,7 +161,8 @@ fn apply_republishes_latest_duckdb_when_latest_changes() {
     for id in ["2026-01-01.0", "2026-02-01.0"] {
         write_json(
             &catalog_dir.join(id).join("catalog.json"),
-            &json!({"type": "Catalog", "id": id}),
+            // `schema:version` set so the schema backfill doesn't fetch the release calendar.
+            &json!({"type": "Catalog", "id": id, "schema:version": "1.0.0"}),
         );
     }
     common::write_release_fixture(&data_dir, "2026-01-01.0", &[("base", "water")]);
@@ -223,7 +233,8 @@ fn apply_drops_latest_duckdb_link_when_flag_off() {
     for id in ["2026-01-01.0", "2026-02-01.0"] {
         write_json(
             &catalog_dir.join(id).join("catalog.json"),
-            &json!({"type": "Catalog", "id": id}),
+            // `schema:version` set so the schema backfill doesn't fetch the release calendar.
+            &json!({"type": "Catalog", "id": id, "schema:version": "1.0.0"}),
         );
     }
     common::write_release_fixture(&data_dir, "2026-01-01.0", &[("base", "water")]);
@@ -317,22 +328,24 @@ fn generate_flag_fails_before_writing_when_duckdb_is_missing() {
 
 #[test]
 fn apply_is_noop_when_in_sync() {
-    // Both sides empty. Apply should succeed and change nothing.
+    // Both sides empty, with the canonical root icon already present. Apply should change nothing.
     let tmp = tempfile::tempdir().unwrap();
     let catalog_dir = tmp.path().join("catalog");
     let data_dir = tmp.path().join("data");
     let root_path = catalog_dir.join("catalog.json");
 
-    write_json(
-        &root_path,
-        &json!({
-            "type": "Catalog",
-            "id": "Overture Releases",
-            "description": "All Overture Releases",
-            "stac_version": "1.0.0",
-            "links": [],
-        }),
-    );
+    let root = json!({
+        "type": "Catalog",
+        "id": "Overture Releases",
+        "description": "All Overture Releases",
+        "stac_version": "1.0.0",
+        "links": [{
+            "rel": "icon",
+            "href": ROOT_CATALOG_ICON_HREF,
+            "type": ROOT_CATALOG_ICON_MEDIA_TYPE,
+        }],
+    });
+    write_json(&root_path, &root);
     fs::create_dir_all(&data_dir).unwrap();
 
     let catalog_uri = format!("file://{}/", catalog_dir.display());
@@ -353,6 +366,8 @@ fn apply_is_noop_when_in_sync() {
         .assert()
         .success()
         .stdout(predicate::str::contains("Nothing to apply"));
+
+    assert_eq!(read_json(&root_path), root);
 }
 
 #[test]
@@ -380,7 +395,8 @@ fn apply_repairs_missing_latest_duckdb_when_in_sync() {
     );
     write_json(
         &catalog_dir.join(id).join("catalog.json"),
-        &json!({"type": "Catalog", "id": id}),
+        // `schema:version` set so the schema backfill doesn't fetch the release calendar.
+        &json!({"type": "Catalog", "id": id, "schema:version": "1.0.0"}),
     );
     common::write_release_fixture(&data_dir, id, &[("base", "water")]);
 
