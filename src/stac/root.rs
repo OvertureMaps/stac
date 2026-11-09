@@ -14,6 +14,9 @@ pub const ROOT_CATALOG_TITLE: &str = "Overture Releases";
 pub const ROOT_CATALOG_ICON_HREF: &str =
     "https://docs.overturemaps.org/img/omf_logo_transparent.png";
 pub const ROOT_CATALOG_ICON_MEDIA_TYPE: &str = "image/png";
+/// jsDelivr mirror of the icon (`rel: alternate`). `docs` has no tags to pin, so this tracks `main`.
+pub const ROOT_CATALOG_ICON_CDN_HREF: &str =
+    "https://cdn.jsdelivr.net/gh/OvertureMaps/docs@main/static/img/omf_logo_transparent.png";
 
 /// Read the root `catalog.json` from a catalog bucket and extract release IDs
 /// from its `rel: child` links. Assumes the bucket handle is rooted at the
@@ -68,18 +71,29 @@ pub fn ensure_root_icon_link(root: &mut Value) {
         return;
     };
 
-    links.retain(|link| link.get("rel").and_then(|v| v.as_str()) != Some("icon"));
+    links.retain(|link| {
+        link.get("rel").and_then(|v| v.as_str()) != Some("icon")
+            && link.get("href").and_then(|v| v.as_str()) != Some(ROOT_CATALOG_ICON_CDN_HREF)
+    });
     let insert_at = links
         .iter()
         .position(|link| link.get("rel").and_then(|v| v.as_str()) == Some("root"))
         .map_or(0, |index| index + 1);
-    links.insert(
-        insert_at,
-        json!({
-            "rel": "icon",
-            "href": ROOT_CATALOG_ICON_HREF,
-            "type": ROOT_CATALOG_ICON_MEDIA_TYPE,
-        }),
+    links.splice(
+        insert_at..insert_at,
+        [
+            json!({
+                "rel": "icon",
+                "href": ROOT_CATALOG_ICON_HREF,
+                "type": ROOT_CATALOG_ICON_MEDIA_TYPE,
+            }),
+            json!({
+                "rel": "alternate",
+                "href": ROOT_CATALOG_ICON_CDN_HREF,
+                "type": ROOT_CATALOG_ICON_MEDIA_TYPE,
+                "title": "jsDelivr mirror of the catalog icon",
+            }),
+        ],
     );
 }
 
@@ -425,6 +439,14 @@ mod tests {
         let icons: Vec<_> = links.iter().filter(|link| link["rel"] == "icon").collect();
         assert_eq!(icons, vec![&expected]);
         assert_eq!(links[1], expected);
+        assert_eq!(links[2]["rel"], "alternate");
+        assert_eq!(links[2]["href"], ROOT_CATALOG_ICON_CDN_HREF);
+        assert_eq!(links[2]["type"], ROOT_CATALOG_ICON_MEDIA_TYPE);
+        let cdn_links = links
+            .iter()
+            .filter(|link| link["href"] == ROOT_CATALOG_ICON_CDN_HREF)
+            .count();
+        assert_eq!(cdn_links, 1);
 
         let first = root.clone();
         ensure_root_icon_link(&mut root);

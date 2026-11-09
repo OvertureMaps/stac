@@ -17,7 +17,10 @@ use std::collections::{BTreeMap, HashMap};
 use std::path::Path;
 use std::sync::{Arc, OnceLock};
 
-use crate::stac::root::{ROOT_CATALOG_ICON_HREF, ROOT_CATALOG_ICON_MEDIA_TYPE, ROOT_CATALOG_TITLE};
+use crate::stac::root::{
+    ROOT_CATALOG_ICON_CDN_HREF, ROOT_CATALOG_ICON_HREF, ROOT_CATALOG_ICON_MEDIA_TYPE,
+    ROOT_CATALOG_TITLE,
+};
 use crate::stac::theme::{process_theme, ThemeResult};
 use crate::stac::{pmtiles, registry};
 use crate::storage::{list_top_level, Bucket};
@@ -303,6 +306,12 @@ fn write_release(
             ROOT_CATALOG_ICON_HREF,
             Some(ROOT_CATALOG_ICON_MEDIA_TYPE),
             None,
+        ));
+        catalog.links.push(mk_link(
+            "alternate",
+            ROOT_CATALOG_ICON_CDN_HREF,
+            Some(ROOT_CATALOG_ICON_MEDIA_TYPE),
+            Some("jsDelivr mirror of the catalog icon"),
         ));
     }
 
@@ -852,6 +861,15 @@ mod tests {
         );
         assert_eq!(
             icon.get("type").and_then(|v| v.as_str()),
+            Some(ROOT_CATALOG_ICON_MEDIA_TYPE),
+        );
+        let mirror = find_link(&doc, "alternate").unwrap();
+        assert_eq!(
+            mirror.get("href").and_then(|v| v.as_str()),
+            Some(ROOT_CATALOG_ICON_CDN_HREF),
+        );
+        assert_eq!(
+            mirror.get("type").and_then(|v| v.as_str()),
             Some(ROOT_CATALOG_ICON_MEDIA_TYPE),
         );
         assert!(

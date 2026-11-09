@@ -28,7 +28,8 @@ pub use latest_duckdb::{
 pub use root::{
     add_child_link, build_empty_root, children_from_root, ensure_root_icon_link,
     read_catalog_children, refresh_latest, release_id_from_href, remove_child_link, stamp_vcs,
-    ROOT_CATALOG_ICON_HREF, ROOT_CATALOG_ICON_MEDIA_TYPE, ROOT_CATALOG_TITLE,
+    ROOT_CATALOG_ICON_CDN_HREF, ROOT_CATALOG_ICON_HREF, ROOT_CATALOG_ICON_MEDIA_TYPE,
+    ROOT_CATALOG_TITLE,
 };
 pub use validate::{
     validate_catalog, validate_catalog_uri, validate_url, Failure, FailureKind, ValidateOptions,
