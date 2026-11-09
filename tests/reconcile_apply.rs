@@ -12,7 +12,9 @@ use std::path::Path;
 mod common;
 
 use assert_cmd::Command;
-use overture_stac::stac::{ROOT_CATALOG_ICON_HREF, ROOT_CATALOG_ICON_MEDIA_TYPE};
+use overture_stac::stac::{
+    ROOT_CATALOG_ICON_CDN_HREF, ROOT_CATALOG_ICON_HREF, ROOT_CATALOG_ICON_MEDIA_TYPE,
+};
 use predicates::prelude::*;
 use serde_json::{json, Value};
 
@@ -339,11 +341,19 @@ fn apply_is_noop_when_in_sync() {
         "id": "Overture Releases",
         "description": "All Overture Releases",
         "stac_version": "1.0.0",
-        "links": [{
-            "rel": "icon",
-            "href": ROOT_CATALOG_ICON_HREF,
-            "type": ROOT_CATALOG_ICON_MEDIA_TYPE,
-        }],
+        "links": [
+            {
+                "rel": "icon",
+                "href": ROOT_CATALOG_ICON_HREF,
+                "type": ROOT_CATALOG_ICON_MEDIA_TYPE,
+            },
+            {
+                "rel": "alternate",
+                "href": ROOT_CATALOG_ICON_CDN_HREF,
+                "type": ROOT_CATALOG_ICON_MEDIA_TYPE,
+                "title": "jsDelivr mirror of the catalog icon",
+            },
+        ],
     });
     write_json(&root_path, &root);
     fs::create_dir_all(&data_dir).unwrap();
