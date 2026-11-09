@@ -22,6 +22,10 @@ pub const LATEST_DUCKDB_HREF: &str = "./latest.ddb";
 const LATEST_DUCKDB_REL: &str = "alternate";
 const LATEST_DUCKDB_MEDIA_TYPE: &str = "application/vnd.duckdb";
 
+/// Root field holding the SQL that `latest.ddb` was built from, so clients can recreate the
+/// views themselves: `curl .../catalog.json | jq -r .duckdb | duckdb overture.db`.
+pub const DUCKDB_SQL_KEY: &str = "duckdb";
+
 /// Stored on every view so readers see the requirement in `duckdb_views()`.
 const VIEW_COMMENT: &str = "Requires the spatial extension: run LOAD spatial before querying.";
 
@@ -110,18 +114,22 @@ fn has_latest_duckdb_link(root: &Value) -> bool {
         .is_some_and(|l| l.iter().any(|l| l["href"] == LATEST_DUCKDB_HREF))
 }
 
-/// True when `latest.ddb` must be rebuilt: the `latest` release changed or the root had no link.
+/// True when `latest.ddb` must be rebuilt: the `latest` release changed, or the root had no
+/// link or no `duckdb` SQL.
 pub fn latest_duckdb_stale(before: &Value, after: &Value) -> bool {
-    before.get("latest") != after.get("latest") || !has_latest_duckdb_link(before)
+    before.get("latest") != after.get("latest")
+        || !has_latest_duckdb_link(before)
+        || before.get(DUCKDB_SQL_KEY).is_none()
 }
 
-/// Bring `latest.ddb` and its root link in line with `root`, whose `latest` is already
-/// refreshed. `before` is the root as read. Call before writing the root, so it never links
-/// to a file that is not uploaded yet.
+/// Bring `latest.ddb`, its root link and the root `duckdb` SQL in line with `root`, whose
+/// `latest` is already refreshed. `before` is the root as read. Call before writing the root,
+/// so it never links to a file that is not uploaded yet.
 ///
 /// - `data` is `Some((data_bucket, data_uri))`: rebuild and upload when stale, then link it.
-///   With no `latest`, drop the link.
-/// - `None`: drop the link when `latest` changed, so it never points at the previous release.
+///   With no `latest`, drop the link and SQL.
+/// - `None`: drop the link and SQL when `latest` changed, so they never point at the
+///   previous release.
 pub async fn sync_latest_duckdb(
     catalog_bucket: &Bucket,
     data: Option<(&Bucket, &str)>,
@@ -135,7 +143,9 @@ pub async fn sync_latest_duckdb(
     match (data, latest) {
         (Some((data_bucket, data_uri)), Some(latest)) => {
             if latest_duckdb_stale(before, root) {
-                publish_latest_duckdb(catalog_bucket, data_bucket, data_uri, &latest).await?;
+                let sql =
+                    publish_latest_duckdb(catalog_bucket, data_bucket, data_uri, &latest).await?;
+                set_duckdb_sql(root, sql);
                 println!("Published latest.ddb for {latest}.");
             }
             ensure_latest_duckdb_link(root);
@@ -153,8 +163,8 @@ pub async fn sync_latest_duckdb(
     Ok(())
 }
 
-/// Build `latest.ddb` into a catalog directory written by `build` and link it from that
-/// directory's root `catalog.json`.
+/// Build `latest.ddb` into a catalog directory written by `build`, link it from that
+/// directory's root `catalog.json` and embed its SQL there.
 pub async fn publish_latest_duckdb_to_dir(
     dir: &Path,
     data_bucket: &Bucket,
@@ -170,7 +180,8 @@ pub async fn publish_latest_duckdb_to_dir(
     let uri = url::Url::from_directory_path(std::path::absolute(dir)?)
         .map_err(|()| Error::LatestDuckdb(format!("invalid output dir {}", dir.display())))?;
     let catalog_bucket = Bucket::from_url(uri.as_str())?;
-    publish_latest_duckdb(&catalog_bucket, data_bucket, data_uri, &latest).await?;
+    let sql = publish_latest_duckdb(&catalog_bucket, data_bucket, data_uri, &latest).await?;
+    set_duckdb_sql(&mut root, sql);
     ensure_latest_duckdb_link(&mut root);
     std::fs::write(&root_path, serde_json::to_vec_pretty(&root)?)?;
     println!("Published latest.ddb for {latest}.");
@@ -205,14 +216,14 @@ fn spawn_error(bin: &str, e: &std::io::Error) -> Error {
     ))
 }
 
-/// Build `latest.ddb` over `latest` under `data_uri` (including any path prefix) and upload
-/// it to the catalog root.
+/// Build `latest.ddb` over `latest` under `data_uri` (including any path prefix), upload it
+/// to the catalog root and return the SQL it was built from.
 pub async fn publish_latest_duckdb(
     catalog_bucket: &Bucket,
     data_bucket: &Bucket,
     data_uri: &str,
     latest: &str,
-) -> Result<()> {
+) -> Result<String> {
     let views = discover_views(data_bucket, latest).await?;
     if views.is_empty() {
         return Err(Error::LatestDuckdb(format!(
@@ -220,15 +231,17 @@ pub async fn publish_latest_duckdb(
         )));
     }
     let sql = build_views_sql(latest, data_uri, &views);
+    let script = sql.clone();
     let bytes = tokio::task::spawn_blocking(move || -> Result<Vec<u8>> {
         let dir = tempfile::tempdir().context("creating temp dir for latest.ddb")?;
         let path = dir.path().join(LATEST_DUCKDB_KEY);
-        run_duckdb_cli(&path, &sql)?;
+        run_duckdb_cli(&path, &script)?;
         Ok(std::fs::read(&path)?)
     })
     .await
     .map_err(|e| Error::LatestDuckdb(e.to_string()))??;
-    put_bytes(catalog_bucket, LATEST_DUCKDB_KEY, bytes).await
+    put_bytes(catalog_bucket, LATEST_DUCKDB_KEY, bytes).await?;
+    Ok(sql)
 }
 
 /// Run `sql` against the database at `path` with the DuckDB CLI (`$DUCKDB_BIN`, default
@@ -274,10 +287,21 @@ pub fn ensure_latest_duckdb_link(root: &mut Value) {
     }));
 }
 
-/// Drop the root link to `latest.ddb`. The uploaded file is left in place, unlinked.
+/// Drop the root link to `latest.ddb` and the `duckdb` SQL. The uploaded file is left in
+/// place, unlinked.
 pub fn remove_latest_duckdb_link(root: &mut Value) {
     if let Some(links) = root.get_mut("links").and_then(|v| v.as_array_mut()) {
         links.retain(|l| l.get("href").and_then(|v| v.as_str()) != Some(LATEST_DUCKDB_HREF));
+    }
+    if let Some(obj) = root.as_object_mut() {
+        obj.remove(DUCKDB_SQL_KEY);
+    }
+}
+
+/// Store the SQL that `latest.ddb` was built from on the root.
+pub fn set_duckdb_sql(root: &mut Value, sql: String) {
+    if let Some(obj) = root.as_object_mut() {
+        obj.insert(DUCKDB_SQL_KEY.to_string(), Value::String(sql));
     }
 }
 
@@ -298,18 +322,24 @@ mod tests {
         let mut root = json!({"links": [{"rel": "self", "href": "x"}]});
         ensure_latest_duckdb_link(&mut root);
         ensure_latest_duckdb_link(&mut root);
+        set_duckdb_sql(&mut root, "SELECT 1;".into());
         assert_eq!(count(&root), 1);
+        assert_eq!(root[DUCKDB_SQL_KEY], "SELECT 1;");
         remove_latest_duckdb_link(&mut root);
         assert_eq!(count(&root), 0);
+        assert!(root.get(DUCKDB_SQL_KEY).is_none());
         assert_eq!(root["links"].as_array().unwrap().len(), 1);
     }
 
     #[test]
-    fn stale_when_latest_changes_or_link_missing() {
-        let linked = json!({"latest": "r1", "links": [{"href": LATEST_DUCKDB_HREF}]});
-        let unlinked = json!({"latest": "r1", "links": []});
+    fn stale_when_latest_changes_or_link_or_sql_missing() {
+        let linked =
+            json!({"latest": "r1", "links": [{"href": LATEST_DUCKDB_HREF}], "duckdb": "x"});
+        let no_sql = json!({"latest": "r1", "links": [{"href": LATEST_DUCKDB_HREF}]});
+        let unlinked = json!({"latest": "r1", "links": [], "duckdb": "x"});
         let moved = json!({"latest": "r2", "links": []});
         assert!(!latest_duckdb_stale(&linked, &linked));
+        assert!(latest_duckdb_stale(&no_sql, &no_sql));
         assert!(latest_duckdb_stale(&unlinked, &unlinked));
         assert!(latest_duckdb_stale(&linked, &moved));
     }

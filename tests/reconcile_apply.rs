@@ -194,6 +194,9 @@ fn apply_republishes_latest_duckdb_when_latest_changes() {
         .unwrap()
         .iter()
         .any(|l| l["href"] == "./latest.ddb"));
+    let sql = root["duckdb"].as_str().expect("root `duckdb` SQL");
+    assert!(sql.contains("CREATE OR REPLACE VIEW \"water\""), "{sql}");
+    assert!(sql.contains("release/2026-01-01.0/"), "{sql}");
 }
 
 #[test]
@@ -219,6 +222,7 @@ fn apply_drops_latest_duckdb_link_when_flag_off() {
             "description": "All Overture Releases",
             "stac_version": "1.0.0",
             "latest": "2026-02-01.0",
+            "duckdb": "CREATE OR REPLACE VIEW water AS SELECT 1;",
             "links": [
                 child("2026-01-01.0"),
                 child("2026-02-01.0"),
@@ -259,6 +263,7 @@ fn apply_drops_latest_duckdb_link_when_flag_off() {
         .unwrap()
         .iter()
         .any(|l| l["href"] == "./latest.ddb"));
+    assert!(root.get("duckdb").is_none(), "stale `duckdb` SQL kept");
     assert!(!catalog_dir.join("latest.ddb").exists());
 }
 
@@ -415,6 +420,75 @@ fn apply_repairs_missing_latest_duckdb_when_in_sync() {
         ));
 
     assert!(catalog_dir.join("latest.ddb").is_file());
+}
+
+#[test]
+fn apply_backfills_duckdb_sql_when_only_link_exists() {
+    // Rollout case: the live root already links latest.ddb but predates the `duckdb` field.
+    // An in-sync apply must rebuild and embed the SQL, printing the line the reconcile
+    // action greps to trigger the CDN invalidation.
+    let tmp = tempfile::tempdir().unwrap();
+    let catalog_dir = tmp.path().join("catalog");
+    let data_dir = tmp.path().join("data");
+    let id = "2026-01-01.0";
+
+    write_json(
+        &catalog_dir.join("catalog.json"),
+        &json!({
+            "type": "Catalog",
+            "id": "Overture Releases",
+            "description": "All Overture Releases",
+            "stac_version": "1.0.0",
+            "latest": id,
+            "links": [
+                {
+                    "rel": "child",
+                    "href": format!("https://stac.example.com/{id}/catalog.json"),
+                    "type": "application/json",
+                    "latest": true,
+                },
+                {"rel": "alternate", "href": "./latest.ddb", "type": "application/vnd.duckdb"},
+            ],
+        }),
+    );
+    write_json(
+        &catalog_dir.join(id).join("catalog.json"),
+        &json!({"type": "Catalog", "id": id, "schema:version": "1.0.0"}),
+    );
+    common::write_release_fixture(&data_dir, id, &[("base", "water")]);
+
+    Command::cargo_bin("overture-stac")
+        .unwrap()
+        .args([
+            "reconcile",
+            "--apply",
+            "--generate-latest-ddb",
+            "--catalog-uri",
+            &format!("file://{}/", catalog_dir.display()),
+            "--data-uri",
+            &format!("file://{}", data_dir.display()),
+            "--extras-uri",
+            "",
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(
+            "Published latest.ddb for 2026-01-01.0",
+        ));
+
+    assert!(catalog_dir.join("latest.ddb").is_file());
+    let root = read_json(&catalog_dir.join("catalog.json"));
+    let sql = root["duckdb"].as_str().expect("root `duckdb` SQL");
+    assert!(sql.contains("CREATE OR REPLACE VIEW \"water\""), "{sql}");
+    assert_eq!(
+        root["links"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|l| l["href"] == "./latest.ddb")
+            .count(),
+        1
+    );
 }
 
 #[test]

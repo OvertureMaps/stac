@@ -22,7 +22,7 @@ Five subcommands (`overture-stac --help` for full listings):
 - `build` — walk the data bucket and write a full STAC catalog to disk. Defaults to all current releases. `--generate-latest-ddb` also writes and links `latest.ddb` (needs the DuckDB CLI); PR staging previews use it.
 - `list-releases` — print release IDs the data bucket currently exposes, newest first.
 - `reconcile` — compare the live catalog against the data bucket and report drift. `--apply` writes the fix; add `--generate-latest-ddb` to also publish `latest.ddb` (needs the DuckDB CLI).
-- `refresh-root` — recompute derived root state (the `latest` flag). With `--generate-latest-ddb`, also republish `latest.ddb` and its root link when `latest` changes; this needs the DuckDB CLI on `PATH` (or `DUCKDB_BIN`) and is checked up front. Without the flag, a changed `latest` removes the `latest.ddb` link.
+- `refresh-root` — recompute derived root state (the `latest` flag). With `--generate-latest-ddb`, also republish `latest.ddb`, its root link and the root `duckdb` SQL when `latest` changes; this needs the DuckDB CLI on `PATH` (or `DUCKDB_BIN`) and is checked up front. Without the flag, a changed `latest` removes the `latest.ddb` link and the `duckdb` SQL.
 - `validate` — run JSON-schema + link-integrity + Overture-specific checks against a built catalog (local dir, remote URL, or object-store URI).
 
 Typical single-release build:
@@ -65,6 +65,17 @@ WHERE collection = 'building'
 ```
 
 Read the returned data files and apply feature-level filters to obtain the actual buildings. The index only identifies files whose bounds overlap the requested area.
+
+### Query the latest release with DuckDB
+
+The root `catalog.json` links to `latest.ddb`, a DuckDB database with one view per feature type over the latest release, and embeds the SQL that built it in its `duckdb` field. Either attach the prebuilt file or recreate the views locally:
+
+```bash
+curl -s https://stac.overturemaps.org/catalog.json | jq -r .duckdb | duckdb overture.db
+duckdb overture.db -c "LOAD spatial; SELECT count(*) FROM place"
+```
+
+`just duckdb` runs the first command for you.
 
 ## Migrating from [1.4.0](https://pypi.org/project/overture-stac/1.4.0/)
 

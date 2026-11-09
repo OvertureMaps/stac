@@ -25,7 +25,7 @@ async fn publishes_views_for_every_discovered_type() {
     let data_uri = dir_uri(&data_dir);
     let data = Bucket::from_url(&data_uri).unwrap();
     let catalog = Bucket::from_url(&dir_uri(&catalog_dir)).unwrap();
-    publish_latest_duckdb(&catalog, &data, &data_uri, "2026-09-23.0")
+    let sql = publish_latest_duckdb(&catalog, &data, &data_uri, "2026-09-23.0")
         .await
         .unwrap();
 
@@ -43,6 +43,17 @@ async fn publishes_views_for_every_discovered_type() {
     assert_eq!(comments.trim(), "2");
 
     let rows = common::duckdb_query(&db, "LOAD spatial; SELECT count(*) FROM water");
+    assert_eq!(rows.trim(), "1");
+
+    // The returned SQL is what the root `duckdb` field embeds; piping it into a fresh
+    // database must recreate the same views.
+    let from_sql = catalog_dir.join("from_sql.ddb");
+    let names = common::duckdb_exec(
+        &from_sql,
+        &format!("{sql}\nSELECT view_name FROM duckdb_views() WHERE NOT internal ORDER BY 1"),
+    );
+    assert_eq!(names.lines().collect::<Vec<_>>(), ["place", "water"]);
+    let rows = common::duckdb_query(&from_sql, "LOAD spatial; SELECT count(*) FROM place");
     assert_eq!(rows.trim(), "1");
 }
 

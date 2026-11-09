@@ -60,6 +60,10 @@ run schema release='' mode='debug': build
     fi
     {{BIN}} build $debug_flag --output {{OUTPUT}} --concurrency 6 --release-version "$release" --schema-version {{schema}}
 
+# Build a local DuckDB database over the latest release from the SQL in the live root catalog (needs curl, jq, duckdb). Pass db=path to change the output.
+duckdb db='overture.db':
+    set -o pipefail;     set -o pipefail; curl -sf https://stac.overturemaps.org/catalog.json | jq -er .duckdb | duckdb {{db}}
+
 # Remove all generated catalog outputs.
 clean:
     rm -rf {{OUTPUT}} target
