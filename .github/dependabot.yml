@@ -11,6 +11,13 @@ updates:
       default-days: 7
     open-pull-requests-limit: 5
     groups:
+      overture-workflows:
+        applies-to: version-updates
+        patterns:
+          - "OvertureMaps/workflows*"
+        update-types:
+          - "minor"
+          - "patch"
       actions:
         applies-to: version-updates
         patterns:

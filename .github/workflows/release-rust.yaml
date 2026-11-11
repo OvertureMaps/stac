@@ -13,7 +13,6 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  AWS_REGION: us-west-2
   PULL_REQUESTER_ROLE_ARN: arn:aws:iam::816069134238:role/gha-pull-requester-secrets-reader
 
 jobs:
@@ -32,43 +31,22 @@ jobs:
 
       - uses: $/.github/actions/setup-rust
 
-      - name: Configure AWS credentials (app PEM read)
-        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
-        with:
-          role-to-assume: ${{ env.PULL_REQUESTER_ROLE_ARN }}
-          aws-region: ${{ env.AWS_REGION }}
-
-      - name: Fetch overture-pull-requester PEM from Secrets Manager
-        # Exports the PEM as env.PULL_REQUESTER_APP_PEM, masked (incl. multi-line).
-        uses: aws-actions/aws-secretsmanager-get-secrets@2297f9a879480a9e3af9b293ed15c70caf8e1c88 # v3.0.2
-        with:
-          secret-ids: |
-            PULL_REQUESTER_APP_PEM, omf-github-terraform/pull-requester/pem
-
       # release-plz acts as overture-pull-requester[bot] rather than via
       # GITHUB_TOKEN: events created with GITHUB_TOKEN start no workflow, so the
       # release PR would never report the required checks, and the DCO check
       # skips bot commits (release-plz can't write a Signed-off-by trailer).
+      # The action also drops the PEM and AWS credentials, which release-plz
+      # (and its nested actions) must not hold.
       - name: Generate app token
         id: app-token
-        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        uses: OvertureMaps/workflows/.github/actions/releaser-token@9ddbb7ea0b8d5b08d0cee86823605c4b1202864c # v1.0.0
         with:
           client-id: Iv23liiN80WEARreTV7m # https://github.com/apps/overture-pull-requester
-          private-key: ${{ env.PULL_REQUESTER_APP_PEM }}
-          owner: OvertureMaps
-          repositories: stac
+          role-to-assume: ${{ env.PULL_REQUESTER_ROLE_ARN }}
+          secret-id: omf-github-terraform/pull-requester/pem
+          clear-aws-credentials: "true"
           permission-contents: write # push the release-plz release branch
           permission-pull-requests: write # open/update the release PR
-
-      # Nothing below needs either, and release-plz pulls in nested actions.
-      - name: Drop the PEM and AWS credentials
-        run: |
-          {
-            echo "PULL_REQUESTER_APP_PEM="
-            echo "AWS_ACCESS_KEY_ID="
-            echo "AWS_SECRET_ACCESS_KEY="
-            echo "AWS_SESSION_TOKEN="
-          } >> "$GITHUB_ENV"
 
       - name: release-plz release-pr
         uses: release-plz/action@66b324fd6c72d05d2a08568492ecdd62bfb8a62b # v0.5.148
@@ -96,41 +74,18 @@ jobs:
 
       - uses: $/.github/actions/setup-rust
 
-      - name: Configure AWS credentials (app PEM read)
-        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
-        with:
-          role-to-assume: ${{ env.PULL_REQUESTER_ROLE_ARN }}
-          aws-region: ${{ env.AWS_REGION }}
-
-      - name: Fetch overture-pull-requester PEM from Secrets Manager
-        # Exports the PEM as env.PULL_REQUESTER_APP_PEM, masked (incl. multi-line).
-        uses: aws-actions/aws-secretsmanager-get-secrets@2297f9a879480a9e3af9b293ed15c70caf8e1c88 # v3.0.2
-        with:
-          secret-ids: |
-            PULL_REQUESTER_APP_PEM, omf-github-terraform/pull-requester/pem
-
       # Same reasoning as release-pr: a GITHUB_TOKEN-created release fires no
       # `release: published` event downstream.
       - name: Generate app token
         id: app-token
-        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        uses: OvertureMaps/workflows/.github/actions/releaser-token@9ddbb7ea0b8d5b08d0cee86823605c4b1202864c # v1.0.0
         with:
           client-id: Iv23liiN80WEARreTV7m # https://github.com/apps/overture-pull-requester
-          private-key: ${{ env.PULL_REQUESTER_APP_PEM }}
-          owner: OvertureMaps
-          repositories: stac
+          role-to-assume: ${{ env.PULL_REQUESTER_ROLE_ARN }}
+          secret-id: omf-github-terraform/pull-requester/pem
+          clear-aws-credentials: "true"
           permission-contents: write # push the v* tag, create the GitHub Release
           permission-pull-requests: write # comment the release back on the PR
-
-      # Nothing below needs either, and release-plz pulls in nested actions.
-      - name: Drop the PEM and AWS credentials
-        run: |
-          {
-            echo "PULL_REQUESTER_APP_PEM="
-            echo "AWS_ACCESS_KEY_ID="
-            echo "AWS_SECRET_ACCESS_KEY="
-            echo "AWS_SESSION_TOKEN="
-          } >> "$GITHUB_ENV"
 
       - name: Authenticate with crates.io
         id: auth
