@@ -1,0 +1,62 @@
+{
+  "version": 8,
+  "name": "Places by category",
+  "sources": {
+    "overture": {
+      "type": "vector",
+      "url": "pmtiles://https://tiles.overturemaps.org/2026-08-19.0/places.pmtiles"
+    }
+  },
+  "layers": [
+    {
+      "id": "places-category",
+      "type": "circle",
+      "source": "overture",
+      "source-layer": "place",
+      "paint": {
+        "circle-radius": [
+          "interpolate",
+          [
+            "linear"
+          ],
+          [
+            "zoom"
+          ],
+          4,
+          1.2,
+          12,
+          4
+        ],
+        "circle-color": [
+          "match",
+          [
+            "get",
+            "basic_category"
+          ],
+          "restaurant",
+          "#e6550d",
+          "personal_or_beauty_service",
+          "#fd8d3c",
+          "fashion_and_apparel_store",
+          "#756bb1",
+          "food_and_beverage_store",
+          "#31a354",
+          "automotive_service",
+          "#636363",
+          "professional_service",
+          "#3182bd",
+          "hardware_home_and_garden_store",
+          "#8c6d31",
+          "home_service",
+          "#9ecae1",
+          "real_estate_service",
+          "#bcbddc",
+          "casual_eatery",
+          "#fdae6b",
+          "#cccccc"
+        ],
+        "circle-opacity": 0.8
+      }
+    }
+  ]
+}
