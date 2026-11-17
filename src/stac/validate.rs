@@ -899,7 +899,11 @@ fn expected_release_schema_versions(
     let mut expected = HashMap::new();
     for (href, context) in documents.iter().filter(|(_, c)| c.is_collection) {
         let mut parent = context.parent.as_deref();
+        let mut visited = HashSet::new();
         while let Some(parent_href) = parent {
+            if !visited.insert(parent_href) {
+                break;
+            }
             let Some(parent_context) = documents.get(parent_href) else {
                 break;
             };
@@ -1032,8 +1036,19 @@ fn check_collection(
                 }
             }
         }
-        None if value.get("schema:version").is_none() => {
-            tracing::warn!(location, "collection schema:version is unresolved");
+        None if value.get("schema:version").is_none() => match expected_schema_version {
+            Some(Some(expected)) => push_rule(
+                out,
+                location,
+                &format!(
+                    "collection is missing schema:version for release schema:version '{expected}'"
+                ),
+            ),
+            Some(None) => tracing::warn!(
+                location,
+                "collection schema:version is unresolved because the parent release version is unresolved"
+            ),
+            None => tracing::warn!(location, "collection schema:version is unresolved"),
         }
         None => push_rule(
             out,
@@ -1275,6 +1290,52 @@ mod tests {
                 .message
                 .contains("differs from release schema:version '2.0.0'")
         }));
+    }
+
+    #[test]
+    fn collection_missing_schema_version_is_invalid_when_release_version_is_resolved() {
+        let failures = check_overture_rules(
+            "collection.json",
+            &json!({"type": "Collection"}),
+            Some(&Some("2.0.0".to_string())),
+        );
+        assert!(failures.iter().any(|failure| {
+            failure
+                .message
+                .contains("collection is missing schema:version")
+        }));
+    }
+
+    #[test]
+    fn collection_parent_cycle_does_not_hang_schema_lookup() {
+        let collection_href = "https://x/release/theme/collection.json";
+        let first_catalog = "https://x/release/theme/catalog.json";
+        let second_catalog = "https://x/release/catalog.json";
+        let docs = HashMap::from([
+            (
+                collection_href.to_string(),
+                schema_context(&json!({
+                    "type": "Collection",
+                    "links": [{"rel": "parent", "href": first_catalog}],
+                })),
+            ),
+            (
+                first_catalog.to_string(),
+                schema_context(&json!({
+                    "type": "Catalog",
+                    "links": [{"rel": "parent", "href": second_catalog}],
+                })),
+            ),
+            (
+                second_catalog.to_string(),
+                schema_context(&json!({
+                    "type": "Catalog",
+                    "links": [{"rel": "parent", "href": first_catalog}],
+                })),
+            ),
+        ]);
+
+        assert!(expected_release_schema_versions(&docs).is_empty());
     }
 
     #[test]
