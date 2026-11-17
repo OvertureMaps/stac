@@ -147,7 +147,14 @@ fn parse_release_calendar(body: serde_json::Value) -> Result<ReleaseCalendar> {
         let schema_version = match entry.schema_version {
             None => return Err(bad(format!("{data_version}: missing schemaVersion"))),
             Some(None) => None,
-            Some(Some(v)) if SCHEMA_VERSION_RE.is_match(&v) => Some(v[1..].to_string()),
+            Some(Some(v)) if SCHEMA_VERSION_RE.is_match(&v) => {
+                // Prereleases cannot be published as plain schema versions.
+                if v.ends_with("-alpha") || v.ends_with("-beta") {
+                    None
+                } else {
+                    Some(v[1..].to_string())
+                }
+            }
             Some(Some(v)) => {
                 return Err(bad(format!("{data_version}: invalid schemaVersion {v:?}")))
             }
@@ -185,14 +192,16 @@ mod tests {
             "$schema": "https://docs.overturemaps.org/release-calendar.schema.json",
             "releases": [
                 entry("2024-04-16-beta.0", json!("v0.10.0-beta")),
+                entry("2026-04-16.0", json!("v2.1.0-alpha")),
                 entry("2026-08-19.0", json!("v1.18.0")),
                 {"date": "2026-10-21", "dataVersion": "2026-10-21.0", "schemaVersion": null, "majorChangeMonth": false},
             ]
         });
         let cal = parse_release_calendar(body).unwrap();
-        assert_eq!(cal.len(), 3);
+        assert_eq!(cal.len(), 4);
         assert_eq!(cal["2026-08-19.0"].as_deref(), Some("1.18.0"));
-        assert_eq!(cal["2024-04-16-beta.0"].as_deref(), Some("0.10.0-beta"));
+        assert_eq!(cal["2024-04-16-beta.0"], None);
+        assert_eq!(cal["2026-04-16.0"], None);
         assert_eq!(cal["2026-10-21.0"], None);
         assert!(!cal.contains_key("2026-12-16.0"));
     }

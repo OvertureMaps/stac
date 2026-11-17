@@ -34,6 +34,7 @@ use serde_json::Value;
 use stac_validate::Validator;
 use tokio::sync::Mutex;
 
+use crate::stac::schema_tag_url;
 use crate::storage::{get_json, Bucket};
 use crate::{Error, Result, ResultExt};
 
@@ -184,6 +185,20 @@ pub async fn validate_catalog(
 
     let files = collect_json_files(dir)?;
     let files_checked = files.len();
+    let mut schema_contexts = HashMap::new();
+    for file in &files {
+        let value: Value = serde_json::from_slice(
+            &std::fs::read(file).with_context(|| format!("reading {}", file.display()))?,
+        )
+        .with_context(|| format!("parsing {}", file.display()))?;
+        let relative = file
+            .strip_prefix(dir)
+            .map_err(std::io::Error::other)?
+            .to_string_lossy()
+            .replace(std::path::MAIN_SEPARATOR, "/");
+        schema_contexts.insert(format!("{base_url}{relative}"), schema_context(&value));
+    }
+    let expected_schema_versions = expected_release_schema_versions(&schema_contexts);
 
     let validator = build_validator(options).await?;
 
@@ -191,19 +206,28 @@ pub async fn validate_catalog(
     let dir_owned = dir.to_path_buf();
     let base_arc = Arc::new(base_url);
 
-    let per_file: Vec<Vec<Failure>> =
-        futures::stream::iter(files.into_iter().map(|file| {
-            let validator = validator.clone();
-            let dir = dir_owned.clone();
-            let base = Arc::clone(&base_arc);
-            let is_root = file == root_path;
-            async move {
-                check_local_file(&file, validator.as_deref(), &dir, &base, is_root, options).await
-            }
-        }))
-        .buffer_unordered(concurrency.max(1))
-        .try_collect()
-        .await?;
+    let per_file: Vec<Vec<Failure>> = futures::stream::iter(files.into_iter().map(|file| {
+        let validator = validator.clone();
+        let dir = dir_owned.clone();
+        let base = Arc::clone(&base_arc);
+        let is_root = file == root_path;
+        let expected_schema_versions = &expected_schema_versions;
+        async move {
+            check_local_file(
+                &file,
+                validator.as_deref(),
+                &dir,
+                &base,
+                expected_schema_versions,
+                is_root,
+                options,
+            )
+            .await
+        }
+    }))
+    .buffer_unordered(concurrency.max(1))
+    .try_collect()
+    .await?;
 
     let failures: Vec<Failure> = per_file.into_iter().flatten().collect();
     Ok(ValidationReport {
@@ -217,6 +241,7 @@ async fn check_local_file(
     validator: Option<&Mutex<Validator>>,
     root_dir: &Path,
     base_url: &str,
+    expected_schema_versions: &HashMap<String, Option<String>>,
     is_root: bool,
     options: ValidateOptions,
 ) -> Result<Vec<Failure>> {
@@ -225,8 +250,20 @@ async fn check_local_file(
         serde_json::from_slice(&bytes).with_context(|| format!("parsing {}", file.display()))?;
 
     let location = file.display().to_string();
-    Ok(
-        check_document(&location, &value, validator, is_root, options, |href| {
+    let relative = file
+        .strip_prefix(root_dir)
+        .map_err(std::io::Error::other)?
+        .to_string_lossy()
+        .replace(std::path::MAIN_SEPARATOR, "/");
+    let href = format!("{base_url}{relative}");
+    Ok(check_document(
+        &location,
+        &value,
+        validator,
+        is_root,
+        options,
+        expected_schema_versions.get(&href),
+        |href| {
             let rel = href.strip_prefix(base_url)?;
             let candidate = root_dir.join(rel);
             if candidate.exists() {
@@ -237,9 +274,9 @@ async fn check_local_file(
                     candidate.display()
                 ))
             }
-        })
-        .await,
+        },
     )
+    .await)
 }
 
 fn collect_json_files(dir: &Path) -> Result<Vec<std::path::PathBuf>> {
@@ -284,12 +321,18 @@ pub async fn validate_url(
 
     let capped = concurrency.clamp(1, REMOTE_MAX_CONCURRENCY);
     let (fetched, fetch_failures) = crawl_http(&client, &normalized, capped).await?;
+    let schema_contexts = fetched
+        .iter()
+        .map(|(href, value)| (href.clone(), schema_context(value)))
+        .collect();
+    let expected_schema_versions = expected_release_schema_versions(&schema_contexts);
     finalize_report(
         fetched,
         fetch_failures,
         &normalized,
         capped,
         options,
+        expected_schema_versions,
         |href| {
             let client = &client;
             async move {
@@ -363,12 +406,18 @@ pub async fn validate_catalog_uri(
     let capped = concurrency.clamp(1, REMOTE_MAX_CONCURRENCY);
     let (fetched, fetch_failures) =
         crawl_bucket(&bucket, &url_base, root_url.clone(), root_value, capped).await?;
+    let schema_contexts = fetched
+        .iter()
+        .map(|(href, value)| (href.clone(), schema_context(value)))
+        .collect();
+    let expected_schema_versions = expected_release_schema_versions(&schema_contexts);
     finalize_report(
         fetched,
         fetch_failures,
         &root_url,
         capped,
         options,
+        expected_schema_versions,
         |href| {
             let bucket = &bucket;
             let url_base = &url_base;
@@ -401,6 +450,7 @@ async fn finalize_report<F, Fut>(
     root_url: &str,
     concurrency: usize,
     options: ValidateOptions,
+    expected_schema_versions: HashMap<String, Option<String>>,
     check_index: F,
 ) -> Result<ValidationReport>
 where
@@ -451,6 +501,7 @@ where
             let validator = validator.clone();
             let base = Arc::clone(&base_arc);
             let seen = Arc::clone(&seen_arc);
+            let expected_schema_version = expected_schema_versions.get(&url);
             let is_root = url == root_url;
             async move {
                 check_remote_doc(
@@ -461,6 +512,7 @@ where
                     &seen,
                     is_root,
                     options,
+                    expected_schema_version,
                 )
                 .await
             }
@@ -479,6 +531,7 @@ where
     })
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn check_remote_doc(
     url: String,
     value: Value,
@@ -487,9 +540,16 @@ async fn check_remote_doc(
     seen: &HashSet<String>,
     is_root: bool,
     options: ValidateOptions,
+    expected_schema_version: Option<&Option<String>>,
 ) -> Result<Vec<Failure>> {
-    Ok(
-        check_document(&url, &value, validator, is_root, options, |href| {
+    Ok(check_document(
+        &url,
+        &value,
+        validator,
+        is_root,
+        options,
+        expected_schema_version,
+        |href| {
             if href.starts_with(base_url) && !seen.contains(href) {
                 Some(format!(
                     "href {href} points inside catalog base but wasn't reachable"
@@ -497,9 +557,9 @@ async fn check_remote_doc(
             } else {
                 None
             }
-        })
-        .await,
+        },
     )
+    .await)
 }
 
 /// Runs the three-axis validation on one doc; caller supplies the in-base
@@ -510,6 +570,7 @@ async fn check_document(
     validator: Option<&Mutex<Validator>>,
     is_root: bool,
     options: ValidateOptions,
+    expected_schema_version: Option<&Option<String>>,
     broken_link_message: impl Fn(&str) -> Option<String>,
 ) -> Vec<Failure> {
     let mut out = Vec::new();
@@ -531,7 +592,11 @@ async fn check_document(
         }
     }
     if options.check_overture_rules {
-        out.extend(check_overture_rules(location, value));
+        out.extend(check_overture_rules(
+            location,
+            value,
+            expected_schema_version,
+        ));
     }
 
     out
@@ -799,12 +864,65 @@ pub fn crawlable_hrefs(value: &Value) -> Vec<String> {
 
 // ─── OVERTURE RULES ──────────────────────────────────────────────────────────
 
-fn check_overture_rules(location: &str, value: &Value) -> Vec<Failure> {
+#[derive(Default)]
+struct SchemaContext {
+    is_release_catalog: bool,
+    is_collection: bool,
+    schema_version: Option<String>,
+    parent: Option<String>,
+}
+
+fn schema_context(value: &Value) -> SchemaContext {
+    let ty = value.get("type").and_then(Value::as_str).unwrap_or("");
+    let parent = value
+        .get("links")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .find(|link| link.get("rel").and_then(Value::as_str) == Some("parent"))
+        .and_then(|link| link.get("href").and_then(Value::as_str))
+        .map(str::to_owned);
+    SchemaContext {
+        is_release_catalog: ty == "Catalog" && value.get("release:version").is_some(),
+        is_collection: ty == "Collection",
+        schema_version: value
+            .get("schema:version")
+            .and_then(Value::as_str)
+            .map(str::to_owned),
+        parent,
+    }
+}
+
+fn expected_release_schema_versions(
+    documents: &HashMap<String, SchemaContext>,
+) -> HashMap<String, Option<String>> {
+    let mut expected = HashMap::new();
+    for (href, context) in documents.iter().filter(|(_, c)| c.is_collection) {
+        let mut parent = context.parent.as_deref();
+        while let Some(parent_href) = parent {
+            let Some(parent_context) = documents.get(parent_href) else {
+                break;
+            };
+            if parent_context.is_release_catalog {
+                expected.insert(href.clone(), parent_context.schema_version.clone());
+                break;
+            }
+            parent = parent_context.parent.as_deref();
+        }
+    }
+    expected
+}
+
+fn check_overture_rules(
+    location: &str,
+    value: &Value,
+    expected_schema_version: Option<&Option<String>>,
+) -> Vec<Failure> {
     let mut out = Vec::new();
     let ty = value.get("type").and_then(|v| v.as_str()).unwrap_or("");
     match ty {
         "Catalog" => check_catalog(location, value, &mut out),
-        "Collection" => check_collection(location, value, &mut out),
+        "Collection" => check_collection(location, value, expected_schema_version, &mut out),
         "Feature" => check_item(location, value, &mut out),
         _ => {}
     }
@@ -814,26 +932,55 @@ fn check_overture_rules(location: &str, value: &Value) -> Vec<Failure> {
 fn check_catalog(location: &str, value: &Value, out: &mut Vec<Failure>) {
     let is_release_catalog = value.get("release:version").is_some();
     if is_release_catalog {
-        match value.get("schema:version") {
-            None => tracing::warn!(location, "release catalog has no schema:version"),
-            Some(v) if v.is_null() => push_rule(
-                out,
-                location,
-                "schema:version is null — bug #115 marker; omit the field instead",
-            ),
-            Some(v) if !v.is_string() => {
-                push_rule(out, location, "schema:version present but not a string")
+        let schema_version = match value.get("schema:version").and_then(Value::as_str) {
+            Some(schema) if crate::stac::is_schema_version(schema) => Some(schema),
+            Some(schema) => {
+                push_rule(
+                    out,
+                    location,
+                    &format!("schema:version '{schema}' is not plain X.Y.Z"),
+                );
+                None
             }
-            _ => {}
-        }
-        if let Some(tag) = value.get("schema:tag").and_then(|v| v.as_str()) {
-            if tag.contains("/vNone") {
+            None if value.get("schema:version").is_some() => {
+                push_rule(
+                    out,
+                    location,
+                    "release catalog schema:version is null or not a string",
+                );
+                None
+            }
+            None => {
+                tracing::warn!(location, "release catalog schema:version is unresolved");
+                None
+            }
+        };
+        match value.get("schema:tag").and_then(Value::as_str) {
+            Some(tag) if tag.contains("/vNone") => {
                 push_rule(
                     out,
                     location,
                     "schema:tag contains 'vNone' — bug #115 marker",
                 );
             }
+            Some(tag) => {
+                if let Some(schema) = schema_version {
+                    let expected = schema_tag_url(schema);
+                    if tag != expected {
+                        push_rule(
+                            out,
+                            location,
+                            &format!("schema:tag '{tag}' does not match schema:version (expected '{expected}')"),
+                        );
+                    }
+                }
+            }
+            None if schema_version.is_some() => push_rule(
+                out,
+                location,
+                "release catalog is missing a schema:tag matching schema:version",
+            ),
+            None => {}
         }
     }
 
@@ -855,7 +1002,46 @@ fn check_catalog(location: &str, value: &Value, out: &mut Vec<Failure>) {
     }
 }
 
-fn check_collection(location: &str, value: &Value, out: &mut Vec<Failure>) {
+fn check_collection(
+    location: &str,
+    value: &Value,
+    expected_schema_version: Option<&Option<String>>,
+    out: &mut Vec<Failure>,
+) {
+    match value.get("schema:version").and_then(Value::as_str) {
+        Some(schema) if !crate::stac::is_schema_version(schema) => push_rule(
+            out,
+            location,
+            &format!("collection schema:version '{schema}' is not plain X.Y.Z"),
+        ),
+        Some(schema) => {
+            if let Some(expected) = expected_schema_version {
+                match expected {
+                    Some(expected) if schema != expected => push_rule(
+                        out,
+                        location,
+                        &format!(
+                            "collection schema:version '{schema}' differs from release schema:version '{expected}'"
+                        ),
+                    ),
+                    None => tracing::warn!(
+                        location,
+                        "parent release catalog schema:version is unresolved"
+                    ),
+                    _ => {}
+                }
+            }
+        }
+        None if value.get("schema:version").is_none() => {
+            tracing::warn!(location, "collection schema:version is unresolved");
+        }
+        None => push_rule(
+            out,
+            location,
+            "collection schema:version is null or not a string",
+        ),
+    }
+
     match value.get("table:columns") {
         Some(Value::Array(cols)) if cols.is_empty() => {
             push_rule(out, location, "table:columns is empty")
@@ -1040,6 +1226,73 @@ mod tests {
     fn derive_base_url_none_without_self_link() {
         let v = json!({"links": [{"rel": "root", "href": "https://x/"}]});
         assert!(derive_base_url_from_self_link(&v).is_none());
+    }
+
+    #[test]
+    fn collection_schema_version_is_checked_against_its_release() {
+        let docs = HashMap::from([
+            (
+                "https://x/2026-09-23.0/catalog.json".to_string(),
+                schema_context(&json!({
+                    "type": "Catalog",
+                    "release:version": "2026-09-23.0",
+                    "schema:version": "2.0.0",
+                })),
+            ),
+            (
+                "https://x/2026-09-23.0/addresses/catalog.json".to_string(),
+                schema_context(&json!({
+                    "type": "Catalog",
+                    "links": [{"rel": "parent", "href": "https://x/2026-09-23.0/catalog.json"}],
+                })),
+            ),
+            (
+                "https://x/2026-09-23.0/addresses/address/collection.json".to_string(),
+                schema_context(&json!({
+                    "type": "Collection",
+                    "schema:version": "1.18.0",
+                    "links": [{"rel": "parent", "href": "https://x/2026-09-23.0/addresses/catalog.json"}],
+                })),
+            ),
+        ]);
+        let expected = expected_release_schema_versions(&docs);
+        let collection_href = "https://x/2026-09-23.0/addresses/address/collection.json";
+        assert_eq!(
+            expected.get(collection_href).and_then(Option::as_deref),
+            Some("2.0.0")
+        );
+
+        let failures = check_overture_rules(
+            collection_href,
+            &json!({
+                "type": "Collection",
+                "schema:version": "1.18.0",
+            }),
+            expected.get(collection_href),
+        );
+        assert!(failures.iter().any(|failure| {
+            failure
+                .message
+                .contains("differs from release schema:version '2.0.0'")
+        }));
+    }
+
+    #[test]
+    fn release_schema_tag_must_match_schema_version() {
+        let failures = check_overture_rules(
+            "release/catalog.json",
+            &json!({
+                "type": "Catalog",
+                "release:version": "2026-09-23.0",
+                "schema:version": "2.0.0",
+                "schema:tag": "https://github.com/OvertureMaps/schema/releases/tag/v2.0.0",
+            }),
+            None,
+        );
+        assert!(failures.iter().any(|failure| {
+            failure.message.contains("schema:tag")
+                && failure.message.contains("does not match schema:version")
+        }));
     }
 
     #[test]

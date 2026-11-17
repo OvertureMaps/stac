@@ -116,6 +116,7 @@ pub async fn build_single_release(
         theme_paths,
         bucket_arc,
         release.to_string(),
+        schema.to_string(),
         debug,
         release_dt,
         pmtiles_arc,
@@ -171,10 +172,12 @@ pub async fn build_single_release(
     })
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn process_themes_parallel(
     theme_paths: Vec<String>,
     bucket: Arc<Bucket>,
     release: String,
+    schema: String,
     debug: bool,
     release_dt: chrono::DateTime<Utc>,
     pmtiles: Arc<BTreeMap<String, String>>,
@@ -190,6 +193,7 @@ async fn process_themes_parallel(
                 bucket.clone(),
                 p,
                 release.clone(),
+                schema.to_string(),
                 debug,
                 release_dt,
                 pmtiles.clone(),
@@ -203,6 +207,7 @@ async fn process_themes_parallel(
                 bucket.clone(),
                 p,
                 release.clone(),
+                schema.to_string(),
                 debug,
                 release_dt,
                 pmtiles.clone(),
@@ -216,16 +221,58 @@ async fn spawn_theme(
     bucket: Arc<Bucket>,
     theme_path: String,
     release: String,
+    schema: String,
     debug: bool,
     release_dt: chrono::DateTime<Utc>,
     pmtiles: Arc<BTreeMap<String, String>>,
 ) -> Result<ThemeResult> {
-    process_theme(&bucket, &theme_path, &release, debug, release_dt, &pmtiles).await
+    process_theme(
+        &bucket,
+        &theme_path,
+        &release,
+        &schema,
+        debug,
+        release_dt,
+        &pmtiles,
+    )
+    .await
+}
+
+/// Whether a schema version is a plain `X.Y.Z` release version.
+pub fn is_schema_version(schema: &str) -> bool {
+    static RE: OnceLock<Regex> = OnceLock::new();
+    RE.get_or_init(|| Regex::new(r"^\d+\.\d+\.\d+$").unwrap())
+        .is_match(schema)
 }
 
 /// GitHub release URL written to `schema:tag` for a bare `X.Y.Z` schema version.
 pub fn schema_tag_url(schema: &str) -> String {
-    format!("https://github.com/OvertureMaps/schema/releases/tag/v{schema}")
+    let major = schema
+        .split_once('.')
+        .and_then(|(major, _)| major.parse::<u64>().ok())
+        .unwrap_or_default();
+    if major >= 2 {
+        format!("https://github.com/OvertureMaps/schema/releases/tag/overture-schema-v{schema}")
+    } else {
+        format!("https://github.com/OvertureMaps/schema/releases/tag/v{schema}")
+    }
+}
+
+/// Download URL for the GeoJSON-form schema definition, when a release asset exists.
+pub fn schema_definition_url(schema: &str) -> Option<String> {
+    let major = schema
+        .split_once('.')
+        .and_then(|(major, _)| major.parse::<u64>().ok())?;
+    (major >= 2).then(|| format!(
+        "https://github.com/OvertureMaps/schema/releases/download/overture-schema-v{schema}/overture-schema.json"
+    ))
+}
+
+fn schema_definition_link(schema: &str) -> Option<Link> {
+    let mut link = Link::new(schema_definition_url(schema)?, "describedby");
+    link.r#type = Some("application/schema+json".into());
+    link.title = Some("GeoJSON schema definition".into());
+    Some(link)
 }
 
 /// `all_ids` must be newest-first (per `list_release_ids`).
@@ -300,6 +347,14 @@ fn write_release(
         Some("application/json"),
         Some(root_title),
     ));
+    if let Some(link) = catalog
+        .additional_fields
+        .get("schema:version")
+        .and_then(Value::as_str)
+        .and_then(schema_definition_link)
+    {
+        catalog.links.push(link);
+    }
     if parent.is_none() {
         catalog.links.push(mk_link(
             "icon",
@@ -495,6 +550,14 @@ fn write_collection(
         Some("application/json"),
         Some(root_title),
     ));
+    if let Some(link) = coll
+        .additional_fields
+        .get("schema:version")
+        .and_then(Value::as_str)
+        .and_then(schema_definition_link)
+    {
+        coll.links.push(link);
+    }
     for l in extra_links {
         coll.links.push(l.clone());
     }
@@ -910,7 +973,11 @@ mod tests {
         assert_eq!(resolved_doc["schema:version"], json!("2.0.0"));
         assert_eq!(
             resolved_doc["schema:tag"],
-            json!("https://github.com/OvertureMaps/schema/releases/tag/v2.0.0"),
+            json!("https://github.com/OvertureMaps/schema/releases/tag/overture-schema-v2.0.0"),
+        );
+        assert_eq!(
+            find_link(&resolved_doc, "describedby").unwrap()["href"],
+            "https://github.com/OvertureMaps/schema/releases/download/overture-schema-v2.0.0/overture-schema.json",
         );
 
         let unresolved_doc = read_catalog_json(&out.path().join(unresolved));
@@ -957,5 +1024,80 @@ mod tests {
         }
         assert!(rows > 0, "expected at least one row in collections.parquet");
         assert_eq!(nulls, 0, "collection column must have no null values",);
+    }
+
+    #[test]
+    fn schema_urls_use_package_tag_from_v2_and_geojson_asset_link() {
+        assert_eq!(
+            schema_tag_url("1.18.0"),
+            "https://github.com/OvertureMaps/schema/releases/tag/v1.18.0"
+        );
+        assert_eq!(
+            schema_tag_url("2.0.0"),
+            "https://github.com/OvertureMaps/schema/releases/tag/overture-schema-v2.0.0"
+        );
+        assert_eq!(
+            schema_definition_url("2.0.0").as_deref(),
+            Some("https://github.com/OvertureMaps/schema/releases/download/overture-schema-v2.0.0/overture-schema.json")
+        );
+    }
+
+    #[test]
+    fn release_and_collection_include_schema_version_and_definition_link() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut release = minimal_release("2026-09-23.0");
+        release
+            .catalog
+            .additional_fields
+            .insert("release:version".into(), json!("2026-09-23.0"));
+        release
+            .catalog
+            .additional_fields
+            .insert("schema:version".into(), json!("2.0.0"));
+        release
+            .catalog
+            .additional_fields
+            .insert("schema:tag".into(), json!(schema_tag_url("2.0.0")));
+        let mut theme = theme_with_one_item("addresses", "address", "00000");
+        theme.type_collections[0]
+            .1
+            .additional_fields
+            .insert("schema:version".into(), json!("2.0.0"));
+        release.bundles = vec![theme];
+
+        save_sub_catalog(&release, "https://stac.example.com", tmp.path()).unwrap();
+
+        let release_doc = read_catalog_json(tmp.path());
+        assert_eq!(
+            find_link(&release_doc, "describedby").unwrap()["type"],
+            "application/schema+json"
+        );
+        let collection = read_json_file(&tmp.path().join("addresses/address/collection.json"));
+        assert_eq!(collection["schema:version"], "2.0.0");
+        assert_eq!(
+            find_link(&collection, "describedby").unwrap()["href"],
+            schema_definition_url("2.0.0").unwrap()
+        );
+    }
+
+    #[test]
+    fn older_schema_versions_do_not_advertise_missing_release_assets() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut release = minimal_release("2026-08-19.0");
+        release
+            .catalog
+            .additional_fields
+            .insert("schema:version".into(), json!("1.18.0"));
+        let mut theme = theme_with_one_item("addresses", "address", "00000");
+        theme.type_collections[0]
+            .1
+            .additional_fields
+            .insert("schema:version".into(), json!("1.18.0"));
+        release.bundles = vec![theme];
+        save_sub_catalog(&release, "https://stac.example.com", tmp.path()).unwrap();
+
+        assert!(find_link(&read_catalog_json(tmp.path()), "describedby").is_none());
+        let collection = read_json_file(&tmp.path().join("addresses/address/collection.json"));
+        assert!(find_link(&collection, "describedby").is_none());
     }
 }

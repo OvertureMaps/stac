@@ -28,6 +28,109 @@ fn read_json(path: &Path) -> Value {
 }
 
 #[test]
+fn reconcile_repairs_existing_schema_metadata_and_is_idempotent() {
+    let tmp = tempfile::tempdir().unwrap();
+    let catalog_dir = tmp.path().join("catalog");
+    let data_dir = tmp.path().join("data");
+    let release = "2026-10-21.0";
+    let root_href = "https://stac.example.com";
+    write_json(
+        &catalog_dir.join("catalog.json"),
+        &json!({
+            "type": "Catalog", "id": "root", "latest": release,
+            "links": [{"rel": "child", "href": format!("{root_href}/{release}/catalog.json")}]
+        }),
+    );
+    write_json(
+        &catalog_dir.join(release).join("catalog.json"),
+        &json!({
+            "type": "Catalog", "id": release, "release:version": release,
+            "schema:version": "2.0.0",
+            "schema:tag": "https://github.com/OvertureMaps/schema/releases/tag/v2.0.0",
+            "links": [
+                {"rel": "child", "href": format!("{root_href}/{release}/addresses/catalog.json")},
+                {"rel": "describedby", "href": "https://example.com/other.json"}
+            ]
+        }),
+    );
+    write_json(
+        &catalog_dir.join(release).join("addresses/catalog.json"),
+        &json!({
+            "type": "Catalog", "id": "addresses",
+            "links": [{"rel": "child", "href": format!("{root_href}/{release}/addresses/address/collection.json")}]
+        }),
+    );
+    let collection_path = catalog_dir
+        .join(release)
+        .join("addresses/address/collection.json");
+    write_json(
+        &collection_path,
+        &json!({"type": "Collection", "id": "address", "links": []}),
+    );
+    common::write_release_fixture(&data_dir, release, &[("addresses", "address")]);
+
+    let catalog_uri = format!("file://{}/", catalog_dir.display());
+    let data_uri = format!("file://{}", data_dir.display());
+    let args = [
+        "reconcile",
+        "--catalog-uri",
+        &catalog_uri,
+        "--data-uri",
+        &data_uri,
+        "--root-href",
+        root_href,
+        "--extras-uri",
+        "",
+    ];
+    Command::cargo_bin("overture-stac")
+        .unwrap()
+        .args(args)
+        .assert()
+        .code(10);
+    Command::cargo_bin("overture-stac")
+        .unwrap()
+        .args(args)
+        .arg("--apply")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Backfilled schema:version"));
+
+    let doc = read_json(&catalog_dir.join(release).join("catalog.json"));
+    assert_eq!(
+        doc["schema:tag"],
+        "https://github.com/OvertureMaps/schema/releases/tag/overture-schema-v2.0.0"
+    );
+    assert!(doc["links"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|link| link["href"] == "https://example.com/other.json"));
+    let collection = read_json(&collection_path);
+    assert_eq!(collection["schema:version"], "2.0.0");
+    assert!(collection["links"].as_array().unwrap().iter().any(|link| link["href"] == "https://github.com/OvertureMaps/schema/releases/download/overture-schema-v2.0.0/overture-schema.json"));
+
+    Command::cargo_bin("overture-stac")
+        .unwrap()
+        .args(args)
+        .arg("--apply")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Catalog is in sync"));
+
+    let mut stale_collection = collection;
+    stale_collection["schema:version"] = json!("1.18.0");
+    write_json(&collection_path, &stale_collection);
+    Command::cargo_bin("overture-stac")
+        .unwrap()
+        .args(args)
+        .arg("--apply")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Backfilled schema:version"));
+    assert_eq!(read_json(&collection_path)["schema:version"], "2.0.0");
+}
+
+#[test]
 fn apply_removes_stale_release() {
     // Layout:
     //   <tmp>/catalog/catalog.json      — root catalog with a stale child link

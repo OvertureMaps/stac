@@ -5,7 +5,9 @@
 use clap::Subcommand;
 
 use overture_stac::stac::{validate_catalog, ValidateOptions};
-use overture_stac::storage::resolve_schema_version_from_calendar;
+use overture_stac::storage::{
+    resolve_schema_version_from_calendar, resolve_schema_version_from_parquet, Bucket,
+};
 use overture_stac::{Error, Result};
 
 pub mod build;
@@ -67,11 +69,16 @@ pub(crate) async fn run_validation(dir: &std::path::Path, json: bool) -> Result<
     Ok(())
 }
 
-/// Primary: parquet fragment metadata. Fallback: the Overture release calendar. Returns `""` if both miss.
-pub(crate) async fn resolve_release_schema_version(release: &str) -> String {
-    // TODO: prefer parquet metadata to obtain the schema:version once available.
-    // Fallback to release calendar lookup.
-    resolve_schema_version_from_calendar(release)
+/// Primary: parquet fragment metadata. Fallback: the Overture release calendar.
+/// Returns an empty string when neither source has a usable version.
+pub(crate) async fn resolve_release_schema_version(
+    bucket: &Bucket,
+    release: &str,
+) -> Result<String> {
+    if let Some(schema) = resolve_schema_version_from_parquet(bucket, release).await? {
+        return Ok(schema);
+    }
+    Ok(resolve_schema_version_from_calendar(release)
         .await
         .unwrap_or_else(|err| {
             tracing::warn!(
@@ -81,5 +88,5 @@ pub(crate) async fn resolve_release_schema_version(release: &str) -> String {
             );
             None
         })
-        .unwrap_or_default()
+        .unwrap_or_default())
 }

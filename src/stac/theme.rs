@@ -57,6 +57,7 @@ pub async fn process_theme(
     bucket: &Bucket,
     theme_key: &str,
     release: &str,
+    schema_version: &str,
     debug: bool,
     release_datetime: DateTime<Utc>,
     available_pmtiles: &BTreeMap<String, String>,
@@ -89,7 +90,15 @@ pub async fn process_theme(
     let type_keys = list_top_level(bucket, theme_key).await?;
     let mut per_type: Vec<PerType> = futures::stream::iter(type_keys)
         .map(|type_key| async move {
-            process_type(bucket, theme_key, &type_key, debug, release_datetime).await
+            process_type(
+                bucket,
+                theme_key,
+                &type_key,
+                schema_version,
+                debug,
+                release_datetime,
+            )
+            .await
         })
         .buffer_unordered(TYPES_PER_THEME)
         .try_collect()
@@ -126,6 +135,7 @@ async fn process_type(
     bucket: &Bucket,
     theme_key: &str,
     type_key: &str,
+    schema_version: &str,
     debug: bool,
     release_datetime: DateTime<Utc>,
 ) -> Result<PerType> {
@@ -354,6 +364,11 @@ async fn process_type(
     collection.title = Some(type_name.clone());
     collection.extent = extent;
     collection.extensions = vec![TABLE_EXTENSION.into()];
+    if !schema_version.is_empty() {
+        collection
+            .additional_fields
+            .insert("schema:version".into(), json!(schema_version));
+    }
 
     let s3_bucket = bucket.as_s3();
     if let Some(bucket_name) = s3_bucket {

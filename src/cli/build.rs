@@ -93,7 +93,7 @@ pub async fn run(args: BuildArgs) -> Result<()> {
     if let Some(release) = args.release_version {
         let schema = match args.schema_version {
             Some(s) => s,
-            None => resolve_release_schema_version(&release).await,
+            None => resolve_release_schema_version(&bucket, &release).await?,
         };
         let title = format!("{release} Overture Release");
 
@@ -128,7 +128,7 @@ pub async fn run(args: BuildArgs) -> Result<()> {
     let ids = list_release_ids(&bucket, "release").await?;
     let mut schema_versions = HashMap::new();
     for id in &ids {
-        let schema = resolve_release_schema_version(id).await;
+        let schema = resolve_release_schema_version(&bucket, id).await?;
         if !schema.is_empty() {
             schema_versions.insert(id.clone(), schema);
         }
