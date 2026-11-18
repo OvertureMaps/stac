@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [6.0.0](https://github.com/OvertureMaps/stac/compare/v5.1.3...v6.0.0) - 2026-11-18
+
+### Fixed
+
+- *(deps)* update quinn-udp to patched release
+- *(validate)* handle schema metadata review findings
+- *(schema)* resolve and repair release schema metadata
+
 ## [5.1.3](https://github.com/OvertureMaps/stac/compare/v5.1.2...v5.1.3) - 2026-11-18
 
 ### Other
