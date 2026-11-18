@@ -259,6 +259,38 @@ async fn schema_version_null_is_caught_on_release_catalog() {
 }
 
 #[tokio::test]
+async fn unresolved_release_and_collections_can_be_validated() {
+    let tmp = tempfile::tempdir().unwrap();
+    write_root(tmp.path(), vec![]);
+    let release = "2026-11-18.0";
+    write_json(
+        &tmp.path().join(release).join("catalog.json"),
+        &json!({
+            "type": "Catalog", "id": release, "release:version": release,
+            "links": [{"rel": "self", "href": format!("{BASE_URL}{release}/catalog.json")}],
+        }),
+    );
+    write_json(
+        &tmp.path().join(release).join("addresses/catalog.json"),
+        &json!({
+            "type": "Catalog", "id": "addresses",
+            "links": [{"rel": "parent", "href": format!("{BASE_URL}{release}/catalog.json")}],
+        }),
+    );
+    write_json(
+        &tmp.path()
+            .join(release)
+            .join("addresses/address/collection.json"),
+        &json!({
+            "type": "Collection", "id": "address",
+            "links": [{"rel": "parent", "href": format!("{BASE_URL}{release}/addresses/catalog.json")}],
+        }),
+    );
+    let report = validate_catalog(tmp.path(), 2, no_schema()).await.unwrap();
+    assert!(report.is_ok(), "{:?}", report.failures);
+}
+
+#[tokio::test]
 async fn item_missing_aws_asset_is_caught() {
     let tmp = tempfile::tempdir().unwrap();
     write_root(tmp.path(), vec![]);

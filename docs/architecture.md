@@ -21,6 +21,10 @@ A `reconcile --apply --validate` run has these stages, always in this order:
 4. Refresh `latest` on the root. With `--generate-latest-ddb` (always passed by the workflows), the CLI first checks that DuckDB runs, before anything is written. When the `latest` release changes, it builds `latest.ddb` (DuckDB views over that release's parquet files) with the DuckDB CLI and uploads it next to `catalog.json`. The root links to it with `rel: alternate` and stores the SQL it was built from in its `duckdb` field, so clients can recreate the views without the file. Without the flag, a changed `latest` removes that link and the SQL so they never point at an older release. The CLI is found on `PATH` or via `DUCKDB_BIN`; the workflows install a pinned version with `.github/actions/setup-duckdb`.
 5. Invalidate the CDN cache in front of the bucket, only if something changed.
 
+Reconcile also repairs release schema tags and collection schema metadata. Schema definition links are added for schema versions 2.0.0 and later, which have a published GeoJSON schema asset. Older releases keep their schema tag but do not advertise a missing asset.
+
+The public schema version is read from Parquet metadata, with the release calendar as a fallback. Unusable stamps and mismatched versions across types produce warnings. If neither source has a usable version, the release can still be published without schema fields and reconcile fills them when the version becomes available.
+
 Reading the data bucket needs no AWS credentials. Publishing is where the workflow needs to touch two separate AWS accounts, which is the part worth understanding before changing anything here.
 
 ## Why two AWS accounts

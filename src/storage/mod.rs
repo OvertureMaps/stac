@@ -15,4 +15,4 @@ pub use bucket::{
     put_bytes, put_json, upload_directory, Bucket, TopLevelFile,
 };
 pub use http::{fetch_schema_version, resolve_schema_version_from_calendar, RELEASE_CALENDAR_URL};
-pub use parquet::{read_fragment, FragmentInfo};
+pub use parquet::{read_fragment, resolve_schema_version_from_parquet, FragmentInfo};

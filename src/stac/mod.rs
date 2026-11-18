@@ -17,9 +17,9 @@ pub mod theme;
 pub mod validate;
 
 pub use catalog::{
-    build_single_release, build_top_catalog, compute_neighbor_links, link_neighbor_releases,
-    list_release_ids, save_root_catalog, save_sub_catalog, schema_tag_url, validate_release_id,
-    ReleaseCatalog,
+    build_single_release, build_top_catalog, compute_neighbor_links, is_schema_version,
+    link_neighbor_releases, list_release_ids, save_root_catalog, save_sub_catalog,
+    schema_definition_url, schema_tag_url, validate_release_id, ReleaseCatalog,
 };
 pub use latest_duckdb::{
     check_duckdb_cli, publish_latest_duckdb, publish_latest_duckdb_to_dir, sync_latest_duckdb,
