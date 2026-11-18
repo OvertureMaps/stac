@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [5.1.3](https://github.com/OvertureMaps/stac/compare/v5.1.2...v5.1.3) - 2026-11-18
+
+### Other
+
+- *(cargo-deps)* bump jsonschema from 0.60.2 to 0.61.0 ([#247](https://github.com/OvertureMaps/stac/pull/247))
+
 ## [5.1.2](https://github.com/OvertureMaps/stac/compare/v5.1.1...v5.1.2) - 2026-11-06
 
 ### Fixed
