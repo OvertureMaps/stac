@@ -1,0 +1,55 @@
+{
+  "version": 8,
+  "name": "Buildings by subtype",
+  "sources": {
+    "overture": {
+      "type": "vector",
+      "url": "pmtiles://https://tiles.overturemaps.org/2026-08-19.0/buildings.pmtiles"
+    }
+  },
+  "layers": [
+    {
+      "id": "buildings-subtype",
+      "type": "fill",
+      "source": "overture",
+      "source-layer": "building",
+      "paint": {
+        "fill-color": [
+          "match",
+          [
+            "get",
+            "subtype"
+          ],
+          "residential",
+          "#8c6bb1",
+          "commercial",
+          "#3182bd",
+          "education",
+          "#31a354",
+          "outbuilding",
+          "#bdbdbd",
+          "religious",
+          "#756bb1",
+          "industrial",
+          "#636363",
+          "agricultural",
+          "#a1d99b",
+          "civic",
+          "#2b8cbe",
+          "medical",
+          "#e6550d",
+          "service",
+          "#969696",
+          "transportation",
+          "#fdae6b",
+          "entertainment",
+          "#e7298a",
+          "military",
+          "#7f2704",
+          "#d9d9d9"
+        ],
+        "fill-opacity": 0.85
+      }
+    }
+  ]
+}
