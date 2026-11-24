@@ -51,7 +51,7 @@ jobs:
       contents: read
       pull-requests: read # repository-metadata-action queries PR data
       issues: read # grype-scan-action reads cve-bypass issues
-    uses: lfreleng-actions/rust-workflows/.github/workflows/build-test.yaml@d0c75ef0b8a4edeaee9b29fd8ff8ed1481c307db # v0.4.0
+    uses: lfreleng-actions/rust-workflows/.github/workflows/build-test.yaml@126c68e8daf343512a4546e5eb46abe109cb8362 # v0.4.1
     with:
       all_features: true
       test_matrix: msrv
