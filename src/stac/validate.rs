@@ -774,7 +774,7 @@ async fn run_schema_check(
     validator: &Mutex<Validator>,
 ) -> Vec<Failure> {
     let mut out = Vec::new();
-    let mut v = validator.lock().await;
+    let v = validator.lock().await;
     if let Err(e) = v.validate(value).await {
         // Explode Validation(Vec<_>) into one Failure per sub-error; the
         // aggregate Display just prints "N validation error(s)".
