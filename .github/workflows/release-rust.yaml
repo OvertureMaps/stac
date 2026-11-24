@@ -39,7 +39,7 @@ jobs:
       # (and its nested actions) must not hold.
       - name: Generate app token
         id: app-token
-        uses: OvertureMaps/workflows/.github/actions/releaser-token@9ddbb7ea0b8d5b08d0cee86823605c4b1202864c # v1.0.0
+        uses: OvertureMaps/workflows/.github/actions/releaser-token@754f4f6b2363ac487906c4551a48700f5755fd70 # v1.0.2
         with:
           client-id: Iv23liiN80WEARreTV7m # https://github.com/apps/overture-pull-requester
           role-to-assume: ${{ env.PULL_REQUESTER_ROLE_ARN }}
@@ -78,7 +78,7 @@ jobs:
       # `release: published` event downstream.
       - name: Generate app token
         id: app-token
-        uses: OvertureMaps/workflows/.github/actions/releaser-token@9ddbb7ea0b8d5b08d0cee86823605c4b1202864c # v1.0.0
+        uses: OvertureMaps/workflows/.github/actions/releaser-token@754f4f6b2363ac487906c4551a48700f5755fd70 # v1.0.2
         with:
           client-id: Iv23liiN80WEARreTV7m # https://github.com/apps/overture-pull-requester
           role-to-assume: ${{ env.PULL_REQUESTER_ROLE_ARN }}
